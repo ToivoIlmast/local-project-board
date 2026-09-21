@@ -1,0 +1,6 @@
+dist/
+coverage/
+node_modules/
+package-lock.json
+# Working design notes keep hand-aligned code samples.
+docs/PROPOSAL.ru.md
