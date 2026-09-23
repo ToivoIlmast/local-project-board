@@ -10,6 +10,7 @@ import {
 import type { BoardContext } from '../context.js';
 import { HttpError, invalidRequest } from '../errors.js';
 import { EMBEDDED_HTML_CSP } from '../security.js';
+import { createEventStreamHandler } from '../sse.js';
 import { handlers, isTextBody, type TextBody } from './handlers.js';
 
 /** Above the largest document the contract allows, so the schema reports the real reason. */
@@ -24,17 +25,34 @@ type Serve = (
  * The router is built from the route table, so a route cannot exist without a contract and
  * a contract cannot silently lose its route (ADR-0005).
  */
-export function createV1Router(context: BoardContext): Router {
+export interface RouterOptions {
+  sseHeartbeatMs?: number | undefined;
+}
+
+export function createV1Router(context: BoardContext, options: RouterOptions = {}): Router {
   const router = Router();
   router.use(express.json({ limit: JSON_BODY_LIMIT }));
 
   const methodsByPath = new Map<string, HttpMethod[]>();
+  const remember = (route: Route): void => {
+    methodsByPath.set(route.path, [...(methodsByPath.get(route.path) ?? []), route.method]);
+  };
+
   for (const route of routeList) {
+    // A stream is not a body: it is answered by the SSE serializer, not by a handler.
+    if (route.response.media === 'text/event-stream') {
+      router[verb(route.method)](
+        route.path,
+        createEventStreamHandler(context.events, { heartbeatMs: options.sseHeartbeatMs }),
+      );
+      remember(route);
+      continue;
+    }
     const handler = handlers[route.id as keyof typeof handlers];
     if (!handler) continue;
     // The handler is typed per route id; the router only knows that the contract validated it.
     router[verb(route.method)](route.path, serve(context, route, handler as unknown as Serve));
-    methodsByPath.set(route.path, [...(methodsByPath.get(route.path) ?? []), route.method]);
+    remember(route);
   }
 
   for (const [path, methods] of methodsByPath) {

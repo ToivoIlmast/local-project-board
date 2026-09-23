@@ -20,6 +20,8 @@ export interface AppOptions {
   port?: number | undefined;
   /** Directory with the built SPA (dist/web). Without it the board serves the API only. */
   webRoot?: string | undefined;
+  /** How often an idle event stream is kept alive; the default is fine outside tests. */
+  sseHeartbeatMs?: number | undefined;
   /** Where a failure the client is not told about goes; never the response. */
   onInternalError?: ((error: unknown) => void) | undefined;
 }
@@ -37,7 +39,11 @@ export function createApp(options: AppOptions): Express {
   app.use(createHostOriginGuard({ port: options.port }));
 
   app.use('/api', securityHeaders(API_CSP), noStore);
-  app.use(API_BASE_PATH, createTokenGuard(token), createV1Router(context));
+  app.use(
+    API_BASE_PATH,
+    createTokenGuard(token),
+    createV1Router(context, { sseHeartbeatMs: options.sseHeartbeatMs }),
+  );
   // There is one API, and it is /api/v1: no other version answers anything (ADR-0012).
   app.use('/api', notFound);
 

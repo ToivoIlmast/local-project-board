@@ -17,11 +17,14 @@ interface Call {
   body?: unknown;
 }
 
+/** A route this sweep does not call: it is not served yet, or it answers with a stream. */
+type NotCalled = 'pending' | 'streamed';
+
 /**
  * One real request per route in the contract. The map is keyed by RouteId, so a route
  * added to the contract does not compile until it is either served or declared pending.
  */
-const calls: Record<RouteId, Call | null> = {
+const calls: Record<RouteId, Call | NotCalled> = {
   'project.get': { path: '/project' },
   'tasks.list': { path: '/tasks' },
   'tasks.create': { path: '/tasks', body: { title: 'Created by the contract test' } },
@@ -41,10 +44,16 @@ const calls: Record<RouteId, Call | null> = {
   'reports.create': { path: '/reports', body: { title: 'Audit', format: 'md', content: '# A\n' } },
   'reports.read': { path: '/reports/R1' },
   'reports.delete': { path: '/reports/R1' },
-  // Phase 8 serves the event stream; phase 9 serves the instructions.
-  'events.stream': null,
-  'instructions.get': null,
+  // A stream has no single answer to compare; test/api/sse.test.ts reads it frame by frame.
+  'events.stream': 'streamed',
+  // Phase 9 serves the instructions.
+  'instructions.get': 'pending',
 };
+
+const notCalled = (kind: NotCalled): string[] =>
+  Object.entries(calls)
+    .filter(([, call]) => call === kind)
+    .map(([id]) => id);
 
 beforeEach(async () => {
   board = await createTestBoard();
@@ -81,15 +90,13 @@ function send(route: Route, call: Call) {
 
 describe('every route in the contract', () => {
   it('is either served or declared pending, and nothing else is pending', () => {
-    const pending = Object.entries(calls)
-      .filter(([, call]) => call === null)
-      .map(([id]) => id);
-    expect(pending.sort()).toEqual([...PENDING_ROUTE_IDS].sort());
+    expect(notCalled('pending').sort()).toEqual([...PENDING_ROUTE_IDS].sort());
+    expect(notCalled('streamed')).toEqual(['events.stream']);
   });
 
   it.each(
     Object.entries(calls)
-      .filter((entry): entry is [RouteId, Call] => entry[1] !== null)
+      .filter((entry): entry is [RouteId, Call] => typeof entry[1] !== 'string')
       .map(([id, call]) => [id, call] as const),
   )('%s answers exactly what the contract declares', async (id, call) => {
     const route: Route = routes[id];
@@ -105,7 +112,7 @@ describe('every route in the contract', () => {
 
   it('is reachable only under /api/v1', async () => {
     for (const [id, call] of Object.entries(calls)) {
-      if (call === null) continue;
+      if (typeof call === 'string') continue;
       const route: Route = routes[id as RouteId];
       if (route.method !== 'GET') continue;
       await board.get(call.path).expect(404);
@@ -120,9 +127,6 @@ describe('the pending routes', () => {
       const response = await board.get(`${API}${routes[id].path}`);
       expect(response.status).toBe(404);
     }
-    expect(z.array(z.string()).parse([...PENDING_ROUTE_IDS])).toEqual([
-      'events.stream',
-      'instructions.get',
-    ]);
+    expect(z.array(z.string()).parse([...PENDING_ROUTE_IDS])).toEqual(['instructions.get']);
   });
 });

@@ -10,7 +10,9 @@ import {
   createReportService,
   createTaskService,
 } from '../../src/core/index.js';
-import type { GitReader, Storage } from '../../src/core/ports.js';
+import type { EventSink, GitReader, Storage } from '../../src/core/ports.js';
+import { closeServer } from '../../src/server/cli/listen.js';
+import { createEventBus, type EventBus } from '../../src/server/events/index.js';
 import { nullGitReader } from '../../src/server/git/index.js';
 import type { BoardContext } from '../../src/server/http/context.js';
 import { createApp } from '../../src/server/http/createApp.js';
@@ -28,6 +30,9 @@ export interface TestBoardOptions {
   /** A stand-in provider, to make a failure inside the server observable over HTTP. */
   storage?: Storage;
   webRoot?: string;
+  /** Watch the board directory, as the CLI does; off elsewhere so events stay predictable. */
+  watch?: boolean;
+  sseHeartbeatMs?: number;
 }
 
 export interface TestBoard {
@@ -38,7 +43,10 @@ export interface TestBoard {
   token: string;
   server: Server;
   storage: Storage;
+  /** What the services published, in order. */
   events: RecordingEventSink;
+  /** The same events, on their way to the open streams. */
+  bus: EventBus;
   /** What the server logged instead of sending it to the client. */
   internalErrors: unknown[];
   agent(): request.Agent;
@@ -57,15 +65,31 @@ export interface TestBoard {
 export async function createTestBoard(options: TestBoardOptions = {}): Promise<TestBoard> {
   const root = options.root ?? (await tmpDir());
   const statuses = options.statuses ?? [...STATUSES];
-  const storage = options.storage ?? markdownStorage({ root });
+  const events = recordingEventSink();
+  const bus = createEventBus();
+  // Everything the services publish is both recorded for the test and sent to the streams.
+  const sink: EventSink = {
+    publish: (event) => {
+      events.publish(event);
+      bus.publish(event);
+    },
+  };
+
+  const storage =
+    options.storage ??
+    markdownStorage({
+      root,
+      ...(options.watch === true
+        ? { onExternalChange: () => sink.publish({ type: 'board.changed' }) }
+        : {}),
+    });
   await storage.init();
 
-  const events = recordingEventSink();
   const git = options.git ?? nullGitReader();
   const context: BoardContext = {
-    tasks: createTaskService({ storage, events, statuses }),
-    documents: createDocumentService({ storage, events }),
-    reports: createReportService({ storage, events }),
+    tasks: createTaskService({ storage, events: sink, statuses }),
+    documents: createDocumentService({ storage, events: sink }),
+    reports: createReportService({ storage, events: sink }),
     project: createProjectService({
       storage,
       git,
@@ -74,6 +98,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
       config: { name: 'test-board', statuses, idPrefix: 'T', provider: 'markdown' },
     }),
     git,
+    events: bus,
   };
 
   // The app needs the bound port, so the server starts first and gets its handler after.
@@ -93,6 +118,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     token,
     port,
     webRoot: options.webRoot,
+    ...(options.sseHeartbeatMs === undefined ? {} : { sseHeartbeatMs: options.sseHeartbeatMs }),
     onInternalError: (error) => internalErrors.push(error),
   });
 
@@ -109,6 +135,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     server,
     storage,
     events,
+    bus,
     internalErrors,
     agent,
     get: (path) => agent().get(path),
@@ -118,7 +145,8 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     del: (path) => authed(agent().delete(path)),
     async close() {
       await storage.close();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      // The same shutdown the CLI performs: an open stream must not hold the server open.
+      await closeServer(server);
     },
   };
 }

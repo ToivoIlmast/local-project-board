@@ -32,6 +32,17 @@ export async function listen(server: Server, options: ListenOptions): Promise<nu
   throw new Error('unreachable');
 }
 
+/**
+ * Stops the server and ends what is still connected: an open event stream would otherwise
+ * keep `close()` waiting for as long as the browser tab is open.
+ */
+export function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+    server.closeAllConnections();
+  });
+}
+
 function listenOnce(server: Server, host: string, port: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error) => {

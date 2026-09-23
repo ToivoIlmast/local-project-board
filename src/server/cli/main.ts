@@ -9,14 +9,14 @@ import {
   createReportService,
   createTaskService,
 } from '../../core/index.js';
-import type { EventSink } from '../../core/ports.js';
 import { defaultConfig } from '../config/schema.js';
+import { createEventBus } from '../events/index.js';
 import { gitReader } from '../git/index.js';
 import { createApp } from '../http/createApp.js';
 import { createSessionToken } from '../http/security.js';
 import { resolveBoardRoot } from '../project/boardRoot.js';
 import { createStorage } from '../storage/index.js';
-import { listen } from './listen.js';
+import { closeServer, listen } from './listen.js';
 import { openBrowser } from './openBrowser.js';
 
 const DEFAULT_PORT = 7432;
@@ -41,10 +41,14 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 // .board/runtime.json. What is here is what the HTTP layer needs to answer at all.
 const root = await resolveBoardRoot(process.cwd());
 const config = defaultConfig(basename(root));
-const storage = createStorage(config, { root });
+const events = createEventBus();
+// An agent that edits the files directly is a first-class way to use the board (§14).
+const storage = createStorage(config, {
+  root,
+  onExternalChange: () => events.publish({ type: 'board.changed' }),
+});
 await storage.init();
 
-const events: EventSink = { publish: () => undefined };
 const git = gitReader({ root });
 const context = {
   tasks: createTaskService({ storage, events, statuses: config.statuses }),
@@ -63,6 +67,7 @@ const context = {
     },
   }),
   git,
+  events,
 };
 
 const webRoot = fileURLToPath(new URL('../../../web/', import.meta.url));
@@ -90,9 +95,9 @@ try {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    server.close(() => {
-      void storage.close().then(() => process.exit(0));
-    });
+    void closeServer(server)
+      .then(() => storage.close())
+      .then(() => process.exit(0));
   });
 }
 

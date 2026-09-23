@@ -30,11 +30,12 @@ export type RouteHandler<K extends RouteId> = (
 
 export type Handlers = { [K in RouteId]?: RouteHandler<K> };
 
-/** Declared in the contract, served by a later phase: SSE (8) and the instructions (9). */
-export const PENDING_ROUTE_IDS = [
-  'events.stream',
-  'instructions.get',
-] as const satisfies readonly RouteId[];
+/**
+ * Declared in the contract, served by a later phase: the instructions endpoint (phase 9).
+ * The event stream has no handler either, but for another reason: it is a stream, not an
+ * answer, so the router hands it to the SSE serializer.
+ */
+export const PENDING_ROUTE_IDS = ['instructions.get'] as const satisfies readonly RouteId[];
 
 const deleted = { deleted: true } as const;
 
