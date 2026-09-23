@@ -1,7 +1,7 @@
 import path from 'node:path';
 import express, { type Express } from 'express';
 import { API_BASE_PATH } from '../../contract/v1/index.js';
-import type { BoardContext } from './context.js';
+import type { BoardContext, RouteContext } from './context.js';
 import { errorHandler, HttpError } from './errors.js';
 import {
   API_CSP,
@@ -32,6 +32,15 @@ export interface AppOptions {
  */
 export function createApp(options: AppOptions): Express {
   const { context, token, webRoot } = options;
+  // The board answers on the loopback address it is bound to; that is what the instructions
+  // quote and what the Host check allows, so the session knows it and the services do not.
+  const routeContext: RouteContext = {
+    ...context,
+    session: {
+      baseUrl: `http://127.0.0.1${options.port === undefined ? '' : `:${options.port}`}`,
+      token,
+    },
+  };
   const onInternalError = options.onInternalError ?? ((error: unknown) => console.error(error));
 
   const app = express();
@@ -42,7 +51,7 @@ export function createApp(options: AppOptions): Express {
   app.use(
     API_BASE_PATH,
     createTokenGuard(token),
-    createV1Router(context, { sseHeartbeatMs: options.sseHeartbeatMs }),
+    createV1Router(routeContext, { sseHeartbeatMs: options.sseHeartbeatMs }),
   );
   // There is one API, and it is /api/v1: no other version answers anything (ADR-0012).
   app.use('/api', notFound);

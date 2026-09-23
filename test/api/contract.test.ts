@@ -1,11 +1,11 @@
-import { z } from 'zod';
 import {
   API_BASE_PATH as API,
+  routeList,
   routes,
   type Route,
   type RouteId,
 } from '../../src/contract/v1/index.js';
-import { PENDING_ROUTE_IDS } from '../../src/server/http/v1/handlers.js';
+import { handlers } from '../../src/server/http/v1/handlers.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
 
@@ -17,12 +17,12 @@ interface Call {
   body?: unknown;
 }
 
-/** A route this sweep does not call: it is not served yet, or it answers with a stream. */
-type NotCalled = 'pending' | 'streamed';
+/** A route this sweep does not call, because it answers with a stream and not with a body. */
+type NotCalled = 'streamed';
 
 /**
  * One real request per route in the contract. The map is keyed by RouteId, so a route
- * added to the contract does not compile until it is either served or declared pending.
+ * added to the contract does not compile until this sweep calls it.
  */
 const calls: Record<RouteId, Call | NotCalled> = {
   'project.get': { path: '/project' },
@@ -44,10 +44,10 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'reports.create': { path: '/reports', body: { title: 'Audit', format: 'md', content: '# A\n' } },
   'reports.read': { path: '/reports/R1' },
   'reports.delete': { path: '/reports/R1' },
+  'session.get': { path: '/session' },
+  'instructions.get': { path: '/instructions' },
   // A stream has no single answer to compare; test/api/sse.test.ts reads it frame by frame.
   'events.stream': 'streamed',
-  // Phase 9 serves the instructions.
-  'instructions.get': 'pending',
 };
 
 const notCalled = (kind: NotCalled): string[] =>
@@ -89,9 +89,12 @@ function send(route: Route, call: Call) {
 }
 
 describe('every route in the contract', () => {
-  it('is either served or declared pending, and nothing else is pending', () => {
-    expect(notCalled('pending').sort()).toEqual([...PENDING_ROUTE_IDS].sort());
+  it('is served: the only route without a handler is the stream (INVARIANT)', () => {
     expect(notCalled('streamed')).toEqual(['events.stream']);
+    for (const route of routeList) {
+      const served = Object.prototype.hasOwnProperty.call(handlers, route.id);
+      expect([route.id, served]).toEqual([route.id, route.response.media !== 'text/event-stream']);
+    }
   });
 
   it.each(
@@ -117,16 +120,5 @@ describe('every route in the contract', () => {
       if (route.method !== 'GET') continue;
       await board.get(call.path).expect(404);
     }
-  });
-});
-
-describe('the pending routes', () => {
-  it('are not served yet and are hidden from the AI instructions', async () => {
-    for (const id of PENDING_ROUTE_IDS) {
-      expect(routes[id].ai.include).toBe(false);
-      const response = await board.get(`${API}${routes[id].path}`);
-      expect(response.status).toBe(404);
-    }
-    expect(z.array(z.string()).parse([...PENDING_ROUTE_IDS])).toEqual(['instructions.get']);
   });
 });

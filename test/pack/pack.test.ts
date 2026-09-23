@@ -100,6 +100,13 @@ describe('npm package', () => {
     const port = await freePort();
     const bin = path.join(install, 'node_modules', '.bin', 'local-project-board');
     child = spawn(bin, ['--port', String(port), '--no-open'], { cwd: project });
+    // Everything the real process prints, for as long as this test runs.
+    let printed = '';
+    const collect = (chunk: Buffer) => {
+      printed += chunk.toString();
+    };
+    child.stdout?.on('data', collect);
+    child.stderr?.on('data', collect);
     await waitForOutput(child, new RegExp(`http://127\\.0\\.0\\.1:${port}/`));
 
     const base = `http://127.0.0.1:${port}`;
@@ -131,5 +138,26 @@ describe('npm package', () => {
     });
     expect(refused.status).toBe(401);
     expect(await (await fetch(`${base}/api/v1/tasks`)).json()).toEqual([]);
+
+    // The agent handoff works on the package as installed: the instructions name the URL the
+    // board really answers on, carry this run's token, and that token opens the API.
+    const instructions = await (await fetch(`${base}/api/v1/instructions`)).text();
+    expect(instructions).toContain(`Base URL: ${base}/api/v1`);
+    const token = /^Authorization: Bearer (\S+)$/m.exec(instructions)?.[1] ?? '';
+    expect(token.length).toBeGreaterThanOrEqual(40);
+    expect(html).not.toContain(token);
+    expect(await (await fetch(`${base}/api/v1/session`)).json()).toEqual({ token });
+
+    const created = await fetch(`${base}/api/v1/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title: 'created with the token from the instructions' }),
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ id: 'T1' });
+
+    // The board printed its URL and, after a whole session, nothing about the token.
+    expect(printed).toContain(`http://127.0.0.1:${port}/`);
+    expect(printed).not.toContain(token);
   });
 });

@@ -7,7 +7,7 @@ import {
   type HttpMethod,
   type Route,
 } from '../../../contract/v1/index.js';
-import type { BoardContext } from '../context.js';
+import type { RouteContext } from '../context.js';
 import { HttpError, invalidRequest } from '../errors.js';
 import { EMBEDDED_HTML_CSP } from '../security.js';
 import { createEventStreamHandler } from '../sse.js';
@@ -17,7 +17,7 @@ import { handlers, isTextBody, type TextBody } from './handlers.js';
 export const JSON_BODY_LIMIT = '2mb';
 
 type Serve = (
-  context: BoardContext,
+  context: RouteContext,
   input: { params: unknown; query: unknown; body: unknown },
 ) => Promise<unknown>;
 
@@ -29,7 +29,7 @@ export interface RouterOptions {
   sseHeartbeatMs?: number | undefined;
 }
 
-export function createV1Router(context: BoardContext, options: RouterOptions = {}): Router {
+export function createV1Router(context: RouteContext, options: RouterOptions = {}): Router {
   const router = Router();
   router.use(express.json({ limit: JSON_BODY_LIMIT }));
 
@@ -48,10 +48,12 @@ export function createV1Router(context: BoardContext, options: RouterOptions = {
       remember(route);
       continue;
     }
-    const handler = handlers[route.id as keyof typeof handlers];
+    const handler: Serve | undefined = handlers[route.id as keyof typeof handlers] as
+      Serve | undefined;
+    // Handlers is keyed by RouteId, so this only skips a route that answers with a stream.
     if (!handler) continue;
     // The handler is typed per route id; the router only knows that the contract validated it.
-    router[verb(route.method)](route.path, serve(context, route, handler as unknown as Serve));
+    router[verb(route.method)](route.path, serve(context, route, handler));
     remember(route);
   }
 
@@ -68,7 +70,7 @@ export function createV1Router(context: BoardContext, options: RouterOptions = {
   return router;
 }
 
-function serve(context: BoardContext, route: Route, handler: Serve) {
+function serve(context: RouteContext, route: Route, handler: Serve) {
   return (request: Request, response: Response, next: NextFunction): void => {
     void (async () => {
       try {

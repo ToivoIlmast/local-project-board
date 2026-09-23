@@ -66,6 +66,13 @@ export const createReportRequestSchema = z.strictObject({
 export const deletedSchema = z.strictObject({ deleted: z.literal(true) });
 
 /**
+ * What the board tells its own page about this run. The token is the whole of it: the page
+ * must not learn anything about the machine it runs on, and the token must never be put in
+ * the HTML instead (ADR-0008, owner's decision of 2026-09-23).
+ */
+export const sessionSchema = z.strictObject({ token: z.string().min(1) });
+
+/**
  * Codes the transport itself produces. The domain codes come from the core, so the wire
  * format has one list of error codes and no copy of it can drift (§13).
  */
@@ -98,5 +105,6 @@ export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;
 export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
+export type Session = z.infer<typeof sessionSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

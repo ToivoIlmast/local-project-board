@@ -1,6 +1,13 @@
-import type { BodyOf, ParamsOf, QueryOf, ResponseOf, RouteId } from '../../../contract/v1/index.js';
+import {
+  generateInstructions,
+  type BodyOf,
+  type ParamsOf,
+  type QueryOf,
+  type ResponseOf,
+  type RouteId,
+} from '../../../contract/v1/index.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
-import type { BoardContext } from '../context.js';
+import type { RouteContext } from '../context.js';
 
 /** A body that is text rather than JSON; the media type depends on the file, not the route. */
 export interface TextBody {
@@ -24,23 +31,40 @@ export interface RouteInput<K extends RouteId> {
  * router's business, so a route stays "validate, call a service, answer" (§20).
  */
 export type RouteHandler<K extends RouteId> = (
-  context: BoardContext,
+  context: RouteContext,
   input: RouteInput<K>,
 ) => Promise<ResponseOf<K> | TextBody>;
 
-export type Handlers = { [K in RouteId]?: RouteHandler<K> };
-
 /**
- * Declared in the contract, served by a later phase: the instructions endpoint (phase 9).
- * The event stream has no handler either, but for another reason: it is a stream, not an
- * answer, so the router hands it to the SSE serializer.
+ * Every route but the stream has a handler, and the type says so: a route added to the
+ * contract does not compile until it is served. The stream is not an answer but a
+ * connection, so the router hands it to the SSE serializer instead (§14).
  */
-export const PENDING_ROUTE_IDS = ['instructions.get'] as const satisfies readonly RouteId[];
+export type Handlers = { [K in Exclude<RouteId, 'events.stream'>]: RouteHandler<K> };
 
 const deleted = { deleted: true } as const;
 
 export const handlers: Handlers = {
   'project.get': (context) => context.project.read(),
+  'session.get': (context) => Promise.resolve({ token: context.session.token }),
+
+  // The instructions describe this board, so they are generated per request: the statuses and
+  // the id prefix an agent must obey are the ones this board is configured with right now.
+  'instructions.get': async (context) => {
+    const project = await context.project.read();
+    return {
+      text: generateInstructions({
+        baseUrl: context.session.baseUrl,
+        token: context.session.token,
+        board: {
+          name: project.name,
+          statuses: project.statuses,
+          idPrefix: project.idPrefix,
+        },
+      }),
+      media: 'text/markdown',
+    };
+  },
 
   'tasks.list': (context) => context.tasks.list(),
   'tasks.create': (context, { body }) => context.tasks.create(body),

@@ -117,6 +117,17 @@ export const routes = {
     ai: { include: true },
   }),
 
+  'session.get': route({
+    id: 'session.get',
+    method: 'GET',
+    path: '/session',
+    summary: "Read this run's session token, the one every change must be sent with",
+    response: json(s.sessionSchema),
+    // A placeholder, not a plausible token: nothing that looks like a secret is in the contract.
+    example: { response: { token: '<session token>' } },
+    ai: { include: true },
+  }),
+
   'tasks.list': route({
     id: 'tasks.list',
     method: 'GET',
