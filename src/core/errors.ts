@@ -9,7 +9,8 @@ export type BoardErrorCode =
   | 'REPORT_NOT_FOUND'
   | 'INVALID_DOCUMENT_NAME'
   | 'NEIGHBOR_NOT_FOUND'
-  | 'INVALID_POSITION';
+  | 'INVALID_POSITION'
+  | 'INVALID_GIT_ARGUMENT';
 
 export class BoardError extends Error {
   override readonly name = 'BoardError';

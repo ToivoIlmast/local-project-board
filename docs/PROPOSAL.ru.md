@@ -1,6 +1,6 @@
 # local-project-board — архитектурный proposal (v2)
 
-Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–5 завершены, следующая — фаза 6 (git adapter).**
+Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–6 завершены, следующая — фаза 7 (HTTP `/api/v1` + security).**
 Дата: 2026-09-21
 
 - v1 (2026-09-21) — первичный анализ.
@@ -666,10 +666,22 @@ AI-friendly payloads: плоские объекты, все поля кроме 
 Read-only в MVP: status, current branch, branches, recent commits, diff.
 Не MVP: commit, push, checkout, merge, создание веток.
 
-- системный `git` через `execFile`, парсинг `status --porcelain=v2 --branch` и `log` с
+- системный `git` через `execFile`, парсинг `status --porcelain=v2 --branch -z` и `log` с
   `\x1f`-разделителями; парсеры — чистые функции, тестируются на записанном выводе;
 - без кэша и без слежения за `.git/`: UI перезапрашивает git-данные при фокусе окна и по кнопке «refresh» (§35);
-- **ИНВАРИАНТ:** нет git / пустой репо без коммитов / detached HEAD / worktree — корректный ответ, не исключение;
+- **ИНВАРИАНТ:** нет git / нет бинарника git / пустой репо без коммитов / detached HEAD /
+  worktree / сломанный `.git` — нейтральный ответ (`available: false`, пустые списки),
+  не исключение. Имя ветки никогда не придумывается;
+- **ИНВАРИАНТ:** `ref` и `path` валидируются схемами `gitRefSchema`/`gitPathSchema` в адаптере,
+  до запуска git; невалидное значение — `INVALID_GIT_ARGUMENT`, а не аргумент git;
+  пути идут после `--`, shell не используется вообще (§15);
+- нормализация вместо протечки git-деталей наружу: дата коммита приводится к UTC (`Z`),
+  индекс и рабочее дерево дают отдельные записи (`staged: true|false`), unmerged-файл
+  считается изменением в рабочем дереве, `R`/`C` — `renamed`/`added`, ignored пропускаются;
+- диффы длиннее лимита обрезаются с `truncated: true` — клиент запрашивает более узкий `path`;
+- корень доски: `server/project/boardRoot.ts` — `dirname(git rev-parse --git-common-dir)`,
+  вне репозитория — сам каталог (ADR-0001); адаптер git и поиск корня — единственные места,
+  которые знают о git CLI;
 - связь с задачей — мягкая (`branch?`); UI подсвечивает задачу текущей ветки.
 
 ---
@@ -985,7 +997,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 3. Config | precedence, strict-ошибки | `server/config` | |
 | 4. Storage | conformance suite (red) | in-memory → markdown (green); watch + дедуп | доказанный порт |
 | 5. Services | сервисы на in-memory storage + recording EventSink | `core/services` | |
-| 6. Git | парсеры; temp-репо и 4 edge-кейса | `server/git`, NullGitReader | |
+| 6. Git | парсеры; temp-репо и 5 edge-кейсов | `server/git`, NullGitReader, `server/project/boardRoot` | |
 | 7. HTTP /api/v1 + security | supertest: CRUD, move, коды, security-инварианты | `server/http` | |
 | 8. SSE | событие на каждую мутацию; поток | `server/events`, `http/sse` | |
 | 9. Instructions | тест эндпоинта | `http/v1/instructions` (генератор — в фазе 2) | |
