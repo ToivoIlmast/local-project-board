@@ -1,5 +1,7 @@
 export * from './errors.js';
 export * from './events.js';
+export * from './ports.js';
+export * from './services/snapshot.js';
 export * from './model/index.js';
 export * from './rules/documentName.js';
 export * from './rules/ids.js';
