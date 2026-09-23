@@ -8,5 +8,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["src/server/**/*.ts"]
+  "include": ["src/server/**/*.ts"],
+  "references": [{ "path": "./tsconfig.core.json" }]
 }

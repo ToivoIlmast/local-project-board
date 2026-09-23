@@ -43,7 +43,9 @@
     "start": "node bin/board.js"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "fractional-indexing": "^4.0.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint-react/eslint-plugin": "^5.20.4",
