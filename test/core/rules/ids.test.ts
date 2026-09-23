@@ -1,10 +1,13 @@
 import { BoardError } from '../../../src/core/errors.js';
 import {
   REPORT_ID_PREFIX,
+  allocateId as allocate,
+  highestIdNumber,
+  idNumber,
   isReportId,
   isTaskId,
   isTaskIdPrefix,
-  nextId,
+  nextIdAfter,
 } from '../../../src/core/rules/ids.js';
 
 describe('task ids', () => {
@@ -28,36 +31,88 @@ describe('task ids', () => {
   });
 });
 
-describe('nextId', () => {
-  it('starts at 1', () => {
-    expect(nextId('T', [])).toBe('T1');
+describe('idNumber', () => {
+  it('reads the number of an id with the given prefix', () => {
+    expect(idNumber('T', 'T42')).toBe(42);
   });
 
-  it('is max + 1, not count + 1', () => {
-    expect(nextId('T', ['T1', 'T7', 'T3'])).toBe('T8');
+  it.each(['F1', 'TA5', 'T01', 't1', 'T', ''])('returns null for %p under prefix T', (id) => {
+    expect(idNumber('T', id)).toBeNull();
+  });
+});
+
+describe('highestIdNumber', () => {
+  it('is 0 for an empty board', () => {
+    expect(highestIdNumber('T', [])).toBe(0);
   });
 
   it('compares numerically, not as strings', () => {
-    expect(nextId('T', ['T9', 'T10'])).toBe('T11');
+    expect(highestIdNumber('T', ['T9', 'T10'])).toBe(10);
   });
 
   it('ignores ids with another prefix (the prefix was changed in config)', () => {
-    expect(nextId('F', ['T1', 'T2', 'F4', 'FX9'])).toBe('F5');
-    expect(nextId('T', ['TA5'])).toBe('T1');
+    expect(highestIdNumber('F', ['T7', 'F4', 'FX9'])).toBe(4);
+  });
+});
+
+describe('nextIdAfter', () => {
+  it('starts at 1', () => {
+    expect(nextIdAfter('T', 0)).toBe('T1');
+  });
+
+  it('is the sequence + 1', () => {
+    expect(nextIdAfter('T', 7)).toBe('T8');
+    expect(isTaskId(nextIdAfter('F', 25))).toBe(true);
+  });
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('rejects sequence %p', (sequence) => {
+    expect(() => nextIdAfter('T', sequence)).toThrow(BoardError);
   });
 
   it('rejects an invalid prefix', () => {
-    expect(() => nextId('t', [])).toThrow(BoardError);
+    expect(() => nextIdAfter('t', 0)).toThrow(BoardError);
+  });
+});
+
+describe('ids are never reused (INVARIANT)', () => {
+  it('does not reuse the id of a deleted highest task (regression)', () => {
+    let state = { sequence: 0, ids: [] as string[] };
+    for (let i = 0; i < 3; i++) {
+      const { id, sequence } = allocate('T', state.sequence, state.ids);
+      state = { sequence, ids: [...state.ids, id] };
+    }
+    expect(state.ids).toEqual(['T1', 'T2', 'T3']);
+
+    state = { ...state, ids: state.ids.filter((id) => id !== 'T3') };
+    expect(allocate('T', state.sequence, state.ids).id).toBe('T4');
   });
 
-  it('produces ids that pass isTaskId', () => {
-    expect(isTaskId(nextId('F', ['F25']))).toBe(true);
+  it('survives a restart: the sequence is read back, not recomputed from the tasks', () => {
+    const afterRestart = allocate('T', 3, ['T1']);
+    expect(afterRestart.id).toBe('T4');
+  });
+
+  it('does not reissue ids after an import into a board with a lower sequence', () => {
+    expect(allocate('T', 0, ['T1', 'T9']).id).toBe('T10');
+  });
+
+  it('never repeats an id over a long run of creates and deletes', () => {
+    const seen = new Set<string>();
+    let state = { sequence: 0, ids: [] as string[] };
+    for (let i = 0; i < 100; i++) {
+      const { id, sequence } = allocate('T', state.sequence, state.ids);
+      expect(seen.has(id)).toBe(false);
+      seen.add(id);
+      const ids = [...state.ids, id];
+      state = { sequence, ids: i % 3 === 0 ? ids.slice(0, -1) : ids };
+    }
+    expect(seen.size).toBe(100);
   });
 });
 
 describe('report ids', () => {
   it('use the fixed prefix R', () => {
-    expect(nextId(REPORT_ID_PREFIX, ['R1', 'R2'])).toBe('R3');
+    expect(nextIdAfter(REPORT_ID_PREFIX, 2)).toBe('R3');
     expect(isReportId('R3')).toBe(true);
     expect(isReportId('T3')).toBe(false);
     expect(isReportId('R0')).toBe(false);

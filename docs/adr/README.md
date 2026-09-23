@@ -21,3 +21,4 @@
 | 0017 | [No OpenAPI document in the MVP](0017-no-openapi-document-in-the-mvp.md)                                                         | accepted |
 | 0018 | [Task updates are last-write-wins](0018-task-updates-are-last-write-wins.md)                                                     | accepted |
 | 0019 | [Markdown storage reads from disk on every request](0019-markdown-storage-reads-from-disk-on-every-request.md)                   | accepted |
+| 0020 | [Task ids are monotonic and never reused](0020-task-ids-are-monotonic-and-never-reused.md)                                       | accepted |
