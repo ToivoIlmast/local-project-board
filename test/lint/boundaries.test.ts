@@ -11,6 +11,9 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const fixture = (p: string) => path.join(root, 'test/lint/fixtures/src', p);
 const eslint = new ESLint({ cwd: root, ignore: false });
 
+/** Loading the whole ESLint config is slow, and slower still while the other suites run. */
+const LINT_TIMEOUT_MS = 60_000;
+
 async function ruleIds(file: string): Promise<string[]> {
   const [result] = await eslint.lintFiles([fixture(file)]);
   const fatal = result?.messages.filter((m) => m.fatal) ?? [];
@@ -59,9 +62,13 @@ describe('architecture boundaries are enforced by ESLint', () => {
       'shared must not know features',
     ],
     ['web/api/bad-imports-feature.ts', 'boundaries/dependencies', 'web/api must not know features'],
-  ])('%s → %s (%s)', async (file, rule) => {
-    expect(await ruleIds(file)).toContain(rule);
-  });
+  ])(
+    '%s → %s (%s)',
+    async (file, rule) => {
+      expect(await ruleIds(file)).toContain(rule);
+    },
+    LINT_TIMEOUT_MS,
+  );
 
   it.each([
     [
@@ -71,7 +78,11 @@ describe('architecture boundaries are enforced by ESLint', () => {
     ['server/storage/ok-core.ts', 'adapter → core and Node APIs'],
     ['contract/routes.ts', 'contract → core model'],
     ['web/features/alpha/index.ts', 'feature → its own internals'],
-  ])('%s is allowed (%s)', async (file) => {
-    expect(await ruleIds(file)).toEqual([]);
-  });
+  ])(
+    '%s is allowed (%s)',
+    async (file) => {
+      expect(await ruleIds(file)).toEqual([]);
+    },
+    LINT_TIMEOUT_MS,
+  );
 });

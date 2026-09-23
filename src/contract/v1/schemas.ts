@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOARD_ERROR_CODES } from '../../core/errors.js';
 import { taskSchema } from '../../core/model/task.js';
 
 /**
@@ -64,8 +65,38 @@ export const createReportRequestSchema = z.strictObject({
 
 export const deletedSchema = z.strictObject({ deleted: z.literal(true) });
 
+/**
+ * Codes the transport itself produces. The domain codes come from the core, so the wire
+ * format has one list of error codes and no copy of it can drift (§13).
+ */
+export const TRANSPORT_ERROR_CODES = [
+  'INVALID_REQUEST',
+  'INVALID_JSON',
+  'UNAUTHORIZED',
+  'FORBIDDEN_HOST',
+  'FORBIDDEN_ORIGIN',
+  'NOT_FOUND',
+  'METHOD_NOT_ALLOWED',
+  'PAYLOAD_TOO_LARGE',
+  'INTERNAL_ERROR',
+] as const;
+
+export const errorCodeSchema = z.enum([...BOARD_ERROR_CODES, ...TRANSPORT_ERROR_CODES]);
+
+/** Every failing request answers with this and with nothing else. */
+export const errorResponseSchema = z.strictObject({
+  error: z.strictObject({
+    code: errorCodeSchema,
+    message: z.string().min(1),
+    /** Context for the client; never anything about the machine the board runs on. */
+    details: z.record(z.string(), z.unknown()),
+  }),
+});
+
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;
 export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
+export type ErrorCode = z.infer<typeof errorCodeSchema>;
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;

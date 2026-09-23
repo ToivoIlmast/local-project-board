@@ -37,6 +37,8 @@ export interface Route<
   query?: Query;
   request?: Request;
   response: RouteResponse<Response>;
+  /** The status of a successful answer; 200 unless a route says otherwise. */
+  successStatus?: 200 | 201;
   example: RouteExample;
   ai: {
     /** Whether the route appears in the instructions given to AI agents. */
@@ -132,6 +134,7 @@ export const routes = {
     summary: 'Create a task',
     request: s.createTaskRequestSchema,
     response: json(s.taskSchema),
+    successStatus: 201,
     example: {
       body: {
         title: 'Extract the git adapter',
@@ -341,6 +344,7 @@ export const routes = {
     summary: 'Store an HTML or markdown report',
     request: s.createReportRequestSchema,
     response: json(s.reportSchema),
+    successStatus: 201,
     example: {
       body: {
         title: 'Dependency audit',
@@ -404,13 +408,10 @@ export type RouteId = keyof Routes;
 
 export const routeList: Route[] = Object.values(routes);
 
+/** What a schema yields; a route that declares none is described by the empty object. */
+type Parsed<S> = S extends z.ZodType ? z.infer<S> : never;
+
 export type ResponseOf<K extends RouteId> = z.infer<Routes[K]['response']['schema']>;
-export type BodyOf<K extends RouteId> = Routes[K] extends { request: infer S extends z.ZodType }
-  ? z.infer<S>
-  : never;
-export type ParamsOf<K extends RouteId> = Routes[K] extends { params: infer S extends z.ZodType }
-  ? z.infer<S>
-  : never;
-export type QueryOf<K extends RouteId> = Routes[K] extends { query: infer S extends z.ZodType }
-  ? z.infer<S>
-  : never;
+export type BodyOf<K extends RouteId> = Parsed<NonNullable<Routes[K]['request']>>;
+export type ParamsOf<K extends RouteId> = Parsed<NonNullable<Routes[K]['params']>>;
+export type QueryOf<K extends RouteId> = Parsed<NonNullable<Routes[K]['query']>>;

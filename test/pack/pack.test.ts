@@ -118,5 +118,18 @@ describe('npm package', () => {
 
     // Client-side routes fall back to the SPA.
     expect(await (await fetch(`${base}/task/T1`)).text()).toContain('<div id="root">');
+
+    // The installed package serves the API, and refuses a mutation without the token.
+    const board = await fetch(`${base}/api/v1/project`);
+    expect(board.status).toBe(200);
+    expect(await board.json()).toMatchObject({ storage: { provider: 'markdown' } });
+
+    const refused = await fetch(`${base}/api/v1/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'from outside' }),
+    });
+    expect(refused.status).toBe(401);
+    expect(await (await fetch(`${base}/api/v1/tasks`)).json()).toEqual([]);
   });
 });
