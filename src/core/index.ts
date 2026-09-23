@@ -1,4 +1,5 @@
 export * from './errors.js';
+export * from './events.js';
 export * from './model/index.js';
 export * from './rules/documentName.js';
 export * from './rules/ids.js';

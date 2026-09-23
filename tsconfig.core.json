@@ -8,5 +8,5 @@
     "sourceMap": true,
     "types": []
   },
-  "include": ["src/core/**/*.ts"]
+  "include": ["src/core/**/*.ts", "src/contract/**/*.ts"]
 }

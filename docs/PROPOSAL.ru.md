@@ -1,6 +1,6 @@
 # local-project-board — архитектурный proposal (v2)
 
-Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–1 завершены, следующая — фаза 2 (contract v1).**
+Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–2 завершены, следующая — фаза 3 (config).**
 Дата: 2026-09-21
 
 - v1 (2026-09-21) — первичный анализ.
@@ -546,6 +546,10 @@ GET    /api/v1/events                       SSE
 GET    /api/v1/instructions                 ← сгенерированные Claude Instructions (markdown)
 ```
 
+Канонический список — `src/contract/v1/routes.ts` (21 роут); список выше — его читаемая форма.
+Генератор AI Instructions сделан здесь же, в фазе 2, а не в фазе 9: он — часть того же
+источника правды, и drift-тест без него не имеет смысла. В фазе 9 остаётся только эндпоинт.
+
 Версионирование: `/api/v1` — это префикс в таблице роутов, а не инфраструктура. `v2`,
 если появится, — второй каталог `contract/v2` + `server/http/v2` над тем же `core`.
 Именно поэтому `contract` отделён от `core/model`: wire-формат может разойтись с доменом.
@@ -963,7 +967,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 6. Git | парсеры; temp-репо и 4 edge-кейса | `server/git`, NullGitReader | |
 | 7. HTTP /api/v1 + security | supertest: CRUD, move, коды, security-инварианты | `server/http` | |
 | 8. SSE | событие на каждую мутацию; поток | `server/events`, `http/sse` | |
-| 9. Instructions | drift-тест | `contract/v1/instructions` | |
+| 9. Instructions | тест эндпоинта | `http/v1/instructions` (генератор — в фазе 2) | |
 | 10. CLI + export | порт/токен/runtime.json; round-trip export | `server/cli` | **доска работает через curl** |
 | ☐ checkpoint | — | Claude на dep-health работает с API по Instructions (без UI) | правка API до UI |
 | 11. React UI | RTL: формы, состояния; unit: позиция DnD | web: board, DnD, details, documents, git, reports, copy instructions | |
