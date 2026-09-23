@@ -333,12 +333,15 @@ describe('the application page', () => {
 
 describe('the server boundary', () => {
   it('binds the loopback interface and offers no way to change it', async () => {
-    const main = await readFile(
-      fileURLToPath(new URL('../../src/server/cli/main.ts', import.meta.url)),
-      'utf8',
-    );
-    expect(main).toContain("const HOST = '127.0.0.1'");
-    expect(main).not.toMatch(/0\.0\.0\.0/);
-    expect(main).not.toMatch(/['"]?host['"]?\s*:\s*\{\s*type/);
+    const read = (file: string): Promise<string> =>
+      readFile(fileURLToPath(new URL(`../../src/server/cli/${file}`, import.meta.url)), 'utf8');
+    const serve = await read('serve.ts');
+    const args = await read('args.ts');
+
+    expect(serve).toContain("const HOST = '127.0.0.1'");
+    expect(serve).not.toMatch(/0\.0\.0\.0/);
+    // There is no --host flag to add an interface, and the usage offers none.
+    expect(args).not.toMatch(/['"]?host['"]?\s*:\s*\{\s*type/);
+    expect(args).not.toContain('--host');
   });
 });

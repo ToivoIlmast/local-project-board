@@ -25,3 +25,4 @@
 | 0021 | [Configuration is an adapter concern, validated per layer](0021-configuration-is-an-adapter-concern-validated-per-layer.md)      | accepted |
 | 0022 | [Unreadable files are reported separately from tasks](0022-unreadable-files-are-reported-separately-from-tasks.md)               | accepted |
 | 0023 | [Agent-written HTML is served sandboxed and offline](0023-agent-written-html-is-served-sandboxed-and-offline.md)                 | accepted |
+| 0024 | [One board per directory, claimed by runtime.json](0024-one-board-per-directory-claimed-by-runtime-json.md)                      | accepted |

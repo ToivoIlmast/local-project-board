@@ -1,6 +1,6 @@
 # local-project-board — архитектурный proposal (v2)
 
-Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–9 завершены, следующая — фаза 10 (CLI + export).**
+Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–10 завершены, следующая — фаза 11 (React UI).**
 Дата: 2026-09-21
 
 - v1 (2026-09-21) — первичный анализ.
@@ -400,7 +400,7 @@ project/
     ├── .gitignore           ← содержит "*": каталог игнорирует сам себя
     ├── tasks/F25/{task.md, audit.md, plan.md, review.md}
     ├── reports/audit-2026-09-21.html
-    └── runtime.json         ← url, pid, token; права 600; удаляется при выходе
+    └── runtime.json         ← pid, port, url, token, root; права 600; удаляется при выходе
 ```
 
 - untracked-файлы `git checkout` не трогает → `main`, `feature/F25`, `feature/F26` видят одну доску;
@@ -489,6 +489,8 @@ CLI flags > env (BOARD_*) > ./board.config.yaml > ~/.config/local-project-board/
   тоже не в MVP: у них пока нет потребителя.
 - `core` не знает о конфиге: YAML, env и флаги живут только в `server/config`, ядро получает
   готовые значения аргументами.
+- путь user-level конфига считает `server/cli/board.ts`: `$XDG_CONFIG_HOME` или `~/.config`,
+  далее `local-project-board/config.yaml`. Отсутствующий файл — не ошибка.
 - удалён статус, в котором есть задачи → сервер не стартует молча: чистое правило ядра
   `assertNoOrphanedStatuses` называет и статус, и конкретные задачи (`review: 2 tasks (T3, T7)`).
 
@@ -829,6 +831,36 @@ server/http (Express)  →  core/services  →  core/ports  ←  server/{storage
 - Express импортируется только в `server/http/**` — замена фреймворка = переписать этот каталог;
 - `server/cli` — composition root: единственное место, которое собирает конкретные адаптеры.
 
+**Как это устроено (фаза 10).** `main.ts` — только процесс: argv внутрь, текст наружу, сигналы в
+`stop()`. Всё остальное — чистые функции, которые тест вызывает в своём процессе:
+`args.ts` (разбор командной строки; значения не валидирует — их назовёт конфиг вместе с источником),
+`board.ts` (`resolveBoardRoot` → `loadConfig`), `serve.ts` (сборка и запуск), `runtime.ts`
+(`.board/runtime.json`), `instructions.ts`, `export.ts`, `run.ts` (одна команда, один exit code).
+
+Порядок запуска — он же порядок зависимостей, и он проверен тестами:
+
+```text
+parse argv → board root → config → runtime.json (занято? протухло?) → storage → init
+  → assertNoOrphanedStatuses → git → services → event bus → session token → app
+  → listen → runtime.json ← пишется только здесь → сообщение → браузер
+```
+
+**ИНВАРИАНТ:** `runtime.json` не появляется, пока сервер не слушает; падение до `listen`
+не оставляет ни файла, ни открытого порта, ни незакрытого storage. Остановка (`SIGINT`/`SIGTERM`)
+делает `closeServer()` (обрывает и открытые SSE-соединения), закрывает storage и удаляет файл.
+
+`runtime.json` — состояние процесса, а не доменная модель: `{ formatVersion, pid, port, url,
+token, root }`, права 600, запись через временный файл и `rename`. Живость доски проверяется
+не по pid, а вопросом самой доске: `GET /api/v1/project` должен ответить и назвать **тот же**
+board root. Поэтому чужой процесс на том же порту и переиспользованный pid не считаются
+«доска уже запущена». Протухший файл молча заменяется, повреждённый — останавливает запуск
+с просьбой удалить его (второй сервер на одном `.board/` опаснее, чем отказ стартовать).
+
+CLI: `local-project-board` (запуск), `instructions`, `export [--out <file>]`; флаги `--port`,
+`--no-open`, `--help`. `instructions` при запущенной доске отдаёт то, что ответил её же эндпоинт
+(живой URL и токен), иначе — офлайн-текст без токена и со ссылкой на `GET /api/v1/session`;
+генератор один и тот же. Exit codes: 0 и 1.
+
 ---
 
 ## 20. Architectural boundaries
@@ -1065,6 +1097,11 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 0017 | OpenAPI не в MVP (§35 D1) |
 | 0018 | Обновления задач — last-write-wins (§35 D2) |
 | 0019 | Markdown-хранилище читает с диска на каждый запрос, без индекса в памяти (§35 D3) |
+| 0020 | Id задач монотонны и не переиспользуются |
+| 0021 | Конфигурация — дело адаптера, валидируется послойно |
+| 0022 | Нечитаемые файлы отдаются отдельно от задач (`readIssues`) |
+| 0023 | Отчёты и `.html`-документы отдаются в sandbox и без сети |
+| 0024 | Одна доска на каталог; заявка — `runtime.json`, живость — вопрос самой доске, а не pid |
 
 ---
 
@@ -1087,7 +1124,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 7. HTTP /api/v1 + security | supertest: CRUD, move, коды, security-инварианты | `server/http` (роутер из таблицы роутов, `security.ts`, `errors.ts`, `v1/handlers.ts`) | |
 | 8. SSE | событие на каждую мутацию; поток; уход клиента; остановка сервера | `server/events`, `http/sse`, `closeServer` | |
 | 9. Instructions + session | drift-тест по контракту; agent workflow через `fetch` по одному лишь тексту инструкций; токен только в двух ответах | `session.get` в контракте, хендлеры `instructions.get`/`session.get`, `RouteContext.session` | **агент работает с доской по Instructions** |
-| 10. CLI + export | порт/токен/runtime.json; round-trip export | `server/cli` | **доска работает через curl** |
+| 10. CLI + export | порядок старта, runtime.json, stale/повреждённый, порты, shutdown с SSE, instructions online/offline, round-trip export | `server/cli`: `args`, `board`, `serve`, `runtime`, `instructions`, `export`, `run` | **доска работает через curl** |
 | ☐ checkpoint | — | Claude на dep-health работает с API по Instructions (без UI) | правка API до UI |
 | 11. React UI | RTL: формы, состояния; unit: позиция DnD | web: board, DnD, details, documents, git, reports, copy instructions | |
 | 12. E2E | 3 сценария §25 | — | |

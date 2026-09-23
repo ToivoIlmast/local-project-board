@@ -1,7 +1,7 @@
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { resolveBoardRoot } from '../../src/server/project/boardRoot.js';
-import { git, repoWithCommit } from '../support/gitRepo.js';
+import { git, initRepo, repoWithCommit } from '../support/gitRepo.js';
 import { cleanTmpDirs, tmpDir } from '../support/tmp.js';
 
 afterAll(cleanTmpDirs);
@@ -28,6 +28,24 @@ describe('resolveBoardRoot', () => {
   it('falls back to the current directory outside a repository', async () => {
     const dir = await tmpDir();
     expect(await resolveBoardRoot(dir)).toBe(await realpath(dir));
+  });
+
+  it('finds the root of a repository that has no commits yet', async () => {
+    const root = await initRepo(await tmpDir());
+    const nested = join(root, 'src');
+    await mkdir(nested, { recursive: true });
+
+    expect(await resolveBoardRoot(nested)).toBe(await realpath(root));
+  });
+
+  it('falls back to the directory itself when .git is damaged', async () => {
+    const root = await initRepo(await tmpDir());
+    await rm(join(root, '.git', 'HEAD'), { force: true });
+    await writeFile(join(root, '.git', 'config'), 'this is not a git config\n', 'utf8');
+
+    // git refuses to answer for a broken repository, and the board is not a git tool:
+    // it uses the directory it was started in rather than failing to start at all.
+    expect(await resolveBoardRoot(root)).toBe(await realpath(root));
   });
 
   it('falls back to the current directory when git is missing', async () => {

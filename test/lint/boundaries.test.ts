@@ -25,6 +25,7 @@ describe('architecture boundaries are enforced by ESLint', () => {
   it.each([
     ['core/bad-imports-node.ts', 'no-restricted-imports', 'core must not use Node APIs'],
     ['core/bad-uses-fetch.ts', 'no-restricted-globals', 'core must not make network calls'],
+    ['core/bad-uses-process.ts', 'no-restricted-globals', 'core must not read the environment'],
     ['core/bad-imports-server.ts', 'boundaries/dependencies', 'core must not depend on adapters'],
     [
       'contract/bad-imports-express.ts',
@@ -76,6 +77,7 @@ describe('architecture boundaries are enforced by ESLint', () => {
       'feature → other feature index, single-file feature, shared, contract',
     ],
     ['server/storage/ok-core.ts', 'adapter → core and Node APIs'],
+    ['server/cli/ok-composition.ts', 'the composition root → core, contract, http, adapters'],
     ['contract/routes.ts', 'contract → core model'],
     ['web/features/alpha/index.ts', 'feature → its own internals'],
   ])(
