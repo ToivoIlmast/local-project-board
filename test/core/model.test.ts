@@ -85,6 +85,7 @@ describe('projectSchema', () => {
       storage: { provider: 'markdown' },
       git: { available: true, branch: 'main', detached: false },
       version: '0.1.0',
+      readIssues: [{ file: 'tasks/T7/task.md', message: 'Invalid YAML frontmatter' }],
     };
     expect(projectSchema.safeParse(project).success).toBe(true);
     expect(projectSchema.safeParse({ ...project, idPrefix: 'f' }).success).toBe(false);

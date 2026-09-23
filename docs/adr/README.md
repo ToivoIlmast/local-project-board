@@ -23,3 +23,4 @@
 | 0019 | [Markdown storage reads from disk on every request](0019-markdown-storage-reads-from-disk-on-every-request.md)                   | accepted |
 | 0020 | [Task ids are monotonic and never reused](0020-task-ids-are-monotonic-and-never-reused.md)                                       | accepted |
 | 0021 | [Configuration is an adapter concern, validated per layer](0021-configuration-is-an-adapter-concern-validated-per-layer.md)      | accepted |
+| 0022 | [Unreadable files are reported separately from tasks](0022-unreadable-files-are-reported-separately-from-tasks.md)               | accepted |

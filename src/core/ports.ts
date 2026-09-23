@@ -37,6 +37,13 @@ export interface NewReport {
   content: string;
 }
 
+/** A file on the board that cannot be read as a task, reported separately from the tasks. */
+export interface ReadIssue {
+  /** Path relative to the board directory, e.g. tasks/T7/task.md */
+  file: string;
+  message: string;
+}
+
 /**
  * Persistence. Deliberately without queries, transactions, configuration or watching:
  * filtering happens in services, and watching is the Markdown adapter's own business.
@@ -47,6 +54,8 @@ export interface Storage {
   close(): Promise<void>;
 
   listTasks(): Promise<Task[]>;
+  /** What could not be read on the last scan. A file that is fixed stops being reported. */
+  readIssues(): Promise<ReadIssue[]>;
   getTask(id: string): Promise<Task | null>;
   /** Allocates the id atomically; an id is never reused (ADR-0020). */
   createTask(input: NewTask): Promise<Task>;

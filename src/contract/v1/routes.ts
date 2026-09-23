@@ -98,7 +98,7 @@ export const routes = {
     id: 'project.get',
     method: 'GET',
     path: '/project',
-    summary: 'Read the board: its name, statuses, id prefix and git state',
+    summary: 'Read the board: statuses, id prefix, git state and any unreadable files',
     response: json(s.projectSchema),
     example: {
       response: {
@@ -109,6 +109,7 @@ export const routes = {
         storage: { provider: 'markdown' },
         git: { available: true, branch: 'main', detached: false },
         version: '0.1.0',
+        readIssues: [{ file: 'tasks/T7/task.md', message: 'Invalid YAML frontmatter' }],
       },
     },
     ai: { include: true },

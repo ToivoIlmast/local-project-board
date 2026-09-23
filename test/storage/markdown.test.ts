@@ -122,20 +122,40 @@ describe('markdown storage on disk', () => {
   });
 
   it('reports a broken task file instead of crashing (INVARIANT)', async () => {
-    const issues: { file: string; message: string }[] = [];
-    const reader = markdownStorage({ root, onIssue: (issue) => issues.push(issue) });
-    await reader.init();
-    const good = await reader.createTask(task);
+    const good = await storage.createTask(task);
     const dir = join(root, '.board', 'tasks', 'T99');
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, 'task.md'), '---\ntitle: [broken\n---\nBody\n', 'utf8');
 
-    const tasks = await reader.listTasks();
-    expect(tasks.map((t) => t.id)).toEqual([good.id]);
+    expect((await storage.listTasks()).map((t) => t.id)).toEqual([good.id]);
+    expect(await storage.getTask('T99')).toBeNull();
+
+    const issues = await storage.readIssues();
     expect(issues).toHaveLength(1);
-    expect(issues[0]?.file).toContain('T99');
-    expect(await reader.getTask('T99')).toBeNull();
-    await reader.close();
+    expect(issues[0]?.file).toBe('tasks/T99/task.md');
+    expect(issues[0]?.message).toContain('frontmatter');
+  });
+
+  it('reports a file with no frontmatter instead of crashing', async () => {
+    const dir = join(root, '.board', 'tasks', 'T42');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'task.md'), 'Just a note, no frontmatter.\n', 'utf8');
+    expect(await storage.listTasks()).toEqual([]);
+    expect((await storage.readIssues())[0]?.message).toContain('frontmatter');
+  });
+
+  it('stops reporting a file once it is fixed', async () => {
+    const dir = join(root, '.board', 'tasks', 'T42');
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, 'task.md');
+    await writeFile(file, 'broken\n', 'utf8');
+    expect(await storage.readIssues()).toHaveLength(1);
+    await writeFile(
+      file,
+      '---\nid: T42\ntitle: Fixed\nstatus: todo\nrank: a0\nlabels: []\ncreatedAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\n',
+      'utf8',
+    );
+    expect(await storage.readIssues()).toEqual([]);
   });
 
   it('removes the task directory, documents and all, when a task is deleted', async () => {
@@ -144,18 +164,6 @@ describe('markdown storage on disk', () => {
     const dir = join(root, '.board', 'tasks', created.id);
     await storage.deleteTask(created.id);
     await expect(readdir(dir)).rejects.toThrow();
-  });
-
-  it('reports a file with no frontmatter instead of crashing', async () => {
-    const issues: { file: string; message: string }[] = [];
-    const reader = markdownStorage({ root, onIssue: (issue) => issues.push(issue) });
-    await reader.init();
-    const dir = join(root, '.board', 'tasks', 'T42');
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, 'task.md'), 'Just a note, no frontmatter.\n', 'utf8');
-    expect(await reader.listTasks()).toEqual([]);
-    expect(issues[0]?.message).toContain('frontmatter');
-    await reader.close();
   });
 
   it('ignores files and directories that are not tasks', async () => {

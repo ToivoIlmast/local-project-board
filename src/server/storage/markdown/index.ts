@@ -2,23 +2,16 @@ import { mkdir, readFile, readdir, rm, stat, watch, writeFile } from 'node:fs/pr
 import { join } from 'node:path';
 import { BoardError } from '../../../core/errors.js';
 import type { DocumentMeta, Report, Task } from '../../../core/model/index.js';
-import type { NewReport, NewTask, Storage, TaskPatch } from '../../../core/ports.js';
+import type { NewReport, NewTask, ReadIssue, Storage, TaskPatch } from '../../../core/ports.js';
 import { documentFormat, isDocumentName } from '../../../core/rules/documentName.js';
 import { REPORT_ID_PREFIX, allocateId, isReportId, isTaskId } from '../../../core/rules/ids.js';
 import { writeFileAtomic } from './atomic.js';
 import { parseTask, serializeTask } from './taskFile.js';
 
-export interface StorageIssue {
-  file: string;
-  message: string;
-}
-
 export interface MarkdownStorageOptions {
   /** The board root; the board itself lives in <root>/.board. */
   root: string;
   idPrefix?: string | undefined;
-  /** Called when something on disk cannot be read as a task, instead of failing the request. */
-  onIssue?: ((issue: StorageIssue) => void) | undefined;
   /** Called when the board changed outside the server; drives live updates, never correctness. */
   onExternalChange?: (() => void) | undefined;
 }
@@ -99,20 +92,17 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       .map((e) => e.name);
   }
 
-  async function loadTask(id: string): Promise<Task | null> {
-    const file = join(tasksDir, id, TASK_FILE);
-    let text: string;
+  async function readTaskFile(id: string): Promise<{ task: Task } | { error: string } | null> {
     try {
-      text = await readFile(file, 'utf8');
+      return parseTask(id, await readFile(join(tasksDir, id, TASK_FILE), 'utf8'));
     } catch {
       return null;
     }
-    const result = parseTask(id, text);
-    if ('error' in result) {
-      options.onIssue?.({ file, message: result.error });
-      return null;
-    }
-    return result.task;
+  }
+
+  async function loadTask(id: string): Promise<Task | null> {
+    const result = await readTaskFile(id);
+    return result !== null && 'task' in result ? result.task : null;
   }
 
   async function requireTask(id: string): Promise<Task> {
@@ -163,6 +153,18 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
 
     async getTask(id) {
       return isTaskId(id) ? loadTask(id) : null;
+    },
+
+    async readIssues() {
+      const ids = (await taskIds()).sort(byNumber);
+      const issues: ReadIssue[] = [];
+      for (const id of ids) {
+        const result = await readTaskFile(id);
+        if (result !== null && 'error' in result) {
+          issues.push({ file: `tasks/${id}/${TASK_FILE}`, message: result.error });
+        }
+      }
+      return issues;
     },
 
     createTask(input: NewTask) {

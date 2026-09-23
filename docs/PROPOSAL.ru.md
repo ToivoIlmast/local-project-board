@@ -265,6 +265,7 @@ interface Project {
   storage: { provider: string };
   git: { available: boolean; branch?: string; detached?: boolean };
   version: string;
+  readIssues: { file: string; message: string }[];   // файлы, которые не читаются как задачи
 }
 
 interface BoardSnapshot {                // портируемый срез доски
@@ -361,8 +362,8 @@ grep, backup из коробки; ничего не теряется при уд
 миллисекунды; кэш появится, только если профилирование покажет необходимость — §35 D3);
 конкурентность → один процесс-сервер, атомарная запись temp+rename, `fs.watch` только для
 обновления UI при внешних правках, `runtime.json` не даёт запустить второй сервер; порядок → fractional index;
-битый frontmatter → файл пропускается и сообщается через callback `onIssue`, сервер не падает
-(**ИНВАРИАНТ**). Как такие файлы показывать в UI — открытый вопрос фазы 11.
+битый frontmatter → файл не становится задачей и попадает в `readIssues` (ADR-0022),
+сервер не падает (**ИНВАРИАНТ**); UI показывает «2 files could not be read».
 
 **SQLite.** За: запросы, транзакции, объёмы. Против: бинарный файл (агент без API слеп),
 native-модуль или `node:sqlite` (в Node 22+ доступен без флага, но всё ещё помечен

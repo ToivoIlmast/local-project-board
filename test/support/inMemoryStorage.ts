@@ -67,6 +67,8 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     close: async () => {},
 
     listTasks: async () => [...store.tasks.values()],
+    /** Memory cannot hold an unreadable task; the board it backs never has read problems. */
+    readIssues: async () => [],
     getTask: async (id) => store.tasks.get(id) ?? null,
 
     createTask: async (input: NewTask) => {

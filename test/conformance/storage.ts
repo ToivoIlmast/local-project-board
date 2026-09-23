@@ -173,6 +173,11 @@ export function runStorageConformance(harness: StorageHarness): void {
         expect((await storage.listTasks()).map((task) => task.id)).toEqual(ids);
       });
 
+      it('reports no read problems for a board it wrote itself', async () => {
+        await storage.createTask(newTask());
+        expect(await storage.readIssues()).toEqual([]);
+      });
+
       it('is idempotent on a second init (INVARIANT 7)', async () => {
         const created = await storage.createTask(newTask());
         await storage.init();

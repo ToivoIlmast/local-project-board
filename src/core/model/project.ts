@@ -23,6 +23,11 @@ export const projectSchema = z.strictObject({
     detached: z.boolean().optional(),
   }),
   version: z.string().min(1),
+  /**
+   * Files that could not be read as tasks. Kept apart from the tasks on purpose: a file that
+   * does not fit the schema must not become a Task with invented values (ADR-0022).
+   */
+  readIssues: z.array(z.strictObject({ file: z.string().min(1), message: z.string().min(1) })),
 });
 
 export type Project = z.infer<typeof projectSchema>;

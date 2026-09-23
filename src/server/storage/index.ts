@@ -1,14 +1,11 @@
 import type { Storage } from '../../core/ports.js';
 import type { AppConfig } from '../config/schema.js';
 import { STORAGE_PROVIDERS } from '../config/schema.js';
-import { markdownStorage, type StorageIssue } from './markdown/index.js';
-
-export type { StorageIssue };
+import { markdownStorage } from './markdown/index.js';
 
 export interface StorageOptions {
   /** The board root (the main worktree). */
   root: string;
-  onIssue?: ((issue: StorageIssue) => void) | undefined;
   onExternalChange?: (() => void) | undefined;
 }
 
@@ -19,7 +16,6 @@ export function createStorage(config: AppConfig, options: StorageOptions): Stora
       return markdownStorage({
         root: options.root,
         idPrefix: config.tasks.idPrefix,
-        onIssue: options.onIssue,
         onExternalChange: options.onExternalChange,
       });
     default:
