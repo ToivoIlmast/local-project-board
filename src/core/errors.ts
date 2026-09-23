@@ -1,6 +1,7 @@
 /** Stable error codes. The HTTP layer maps them to status codes; clients may rely on them. */
 export type BoardErrorCode =
   | 'UNKNOWN_STATUS'
+  | 'ORPHANED_STATUSES'
   | 'INVALID_ID_PREFIX'
   | 'INVALID_ID_SEQUENCE'
   | 'NEIGHBOR_NOT_FOUND'
