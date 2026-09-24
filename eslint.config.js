@@ -42,8 +42,10 @@ const dependencyPolicies = [
     allow: to(['web-app', 'web-pages', 'web-feature', 'web-shared', 'web-api']),
   },
   {
+    // A page is where the board's state meets its layout, so it may use the API client
+    // (phase 11). It still knows no server internals: `web-api` is the only way in.
     from: { element: { type: 'web-pages' } },
-    allow: to(['web-pages', 'web-feature', 'web-shared']),
+    allow: to(['web-pages', 'web-feature', 'web-shared', 'web-api']),
   },
   { from: { element: { type: 'web-api' } }, allow: to(['web-api', 'contract', 'web-shared']) },
   { from: { element: { type: 'web-shared' } }, allow: to(['web-shared']) },
@@ -145,6 +147,10 @@ export default tseslint.config(
         'error',
         { name: 'fetch', message: 'core must not make network calls (local-first).' },
         { name: 'process', message: 'core must not depend on the Node process.' },
+        ...['document', 'window', 'localStorage', 'sessionStorage', 'navigator'].map((name) => ({
+          name,
+          message: 'core and contract must not depend on a browser either.',
+        })),
       ],
     },
   },
@@ -157,6 +163,23 @@ export default tseslint.config(
         {
           patterns: [
             { group: ['express', 'express/*'], message: 'Express lives only in src/server/http.' },
+          ],
+        },
+      ],
+    },
+  },
+  // The API layer is not a place for components: it answers with data, never with markup.
+  {
+    files: ['**/src/web/api/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/shared/ui', '**/shared/ui/*', '@/shared/ui', '@/shared/ui/*'],
+              message: 'web/api must not depend on UI components.',
+            },
           ],
         },
       ],

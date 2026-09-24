@@ -4,8 +4,8 @@
 
 > Henkilökohtainen kehittäjän taulu sekunneissa. Ei seremonioita. Ei pilveä. Jakaminen silloin, kun sitä tarvitset.
 
-**Tila: pre-alpha.** Taulu käynnistyy ja tarjoilee API:nsa; selainkäyttöliittymä on vielä
-paikanpitäjä, joten tällä hetkellä tämä on taulu komentoriville ja tekoälyagenteille.
+**Tila: pre-alpha.** Taulu käynnistyy, tarjoilee API:nsa ja siinä on toimiva
+selainkäyttöliittymä; oikeassa työssä sitä ei ole vielä koeteltu.
 Kieliversiot: [English](README.md) · [Svenska](README.sv.md)
 
 ## Mikä tämä on
@@ -33,6 +33,28 @@ koneen ulkopuolelle.
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
 `--no-open` (älä avaa selainta), `--help`.
+
+## Selaimessa
+
+Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mitä katsot.
+
+- **Tehtävät.** Luo, muokkaa ja poista; raahaa kortti sarakkeesta toiseen tai siirrä se kortin
+  valikosta — pelkkä näppäimistö riittää kaikkeen. Järjestyksen päättää palvelin, joten kaksi
+  ikkunaa eivät voi olla siitä eri mieltä.
+- **Tehtävän tiedot.** Otsikko, tila, tunnisteet, haara, päivämäärät ja markdown-kuvaus, ja
+  vieressä tehtävään kuuluvat dokumentit.
+- **Dokumentit.** Lue markdownina, kirjoita ja muuta sivulla, poista. `.html`-dokumentti avautuu
+  omaan kehykseensä, jonka palvelin eristää.
+- **Raportit.** Mitä agentti on tallentanut, HTML tai markdown, avattuna yhtä turvallisesti.
+- **Git.** Nykyinen haara, onko työpuu siisti, mikä muuttui, tiedoston diff ja kymmenen viimeistä
+  committia.
+- **Elossa.** Agentin luoma tehtävä, editorissa muokattu tiedosto, skriptin kirjoittama raportti:
+  sivu seuraa perässä ilman uudelleenlatausta ja kertoo, jos taulu lakkaa vastaamasta.
+- **Tekoälyohjeet.** Sama teksti, jonka `npx local-project-board instructions` tulostaa, yhden
+  painikkeen päässä ja valmiina liitettäväksi.
+
+Tiedostot, joita taulu ei osaa lukea, näkyvät juuri sellaisina sarakkeiden yläpuolella — eivät
+koskaan tehtävinä, joiden arvot on keksitty.
 
 ## Missä taulu sijaitsee
 
@@ -90,15 +112,18 @@ Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi).
 
 Vaatii Node.js >= 22.12.0.
 
-| Komento                                   | Mitä se tekee                                       |
-| ----------------------------------------- | --------------------------------------------------- |
-| `npm install`                             | Asentaa riippuvuudet                                |
-| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän               |
-| `npm test`                                | Jest-testit                                         |
-| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
-| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                   |
-| `npm run typecheck`                       | TypeScript                                          |
-| `npm run format` / `npm run format:check` | Prettier                                            |
+| Komento            | Mitä se tekee                                   |
+| ------------------ | ----------------------------------------------- |
+| `npm install`      | Asentaa riippuvuudet                            |
+| `npm run build`    | Kääntää palvelimen ja käyttöliittymän           |
+| `npm test`         | Jest-testit (palvelin ja sivu)                  |
+| `npm run test:e2e` | Playwright oikeasti käynnistettyä taulua vasten |
+
+Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps chromium`.
+| `npm run test:pack` | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
+| `npm run lint` | ESLint, myös arkkitehtuurisäännöt |
+| `npm run typecheck` | TypeScript |
+| `npm run format` / `npm run format:check` | Prettier |
 
 ## Lisenssi
 

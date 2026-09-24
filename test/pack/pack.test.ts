@@ -135,6 +135,14 @@ describe('npm package', () => {
         expect((await fetch(`${base}${ref}`)).status).toBe(200);
       }
 
+      // The page the package ships is the board's own UI, and local-first is enforced by the
+      // header it is served with, not only by what the page happens to ask for.
+      const script = refs.find((ref) => ref.endsWith('.js')) ?? '';
+      expect(await (await fetch(`${base}${script}`)).text()).toContain('/api/');
+      const csp = page.headers.get('content-security-policy') ?? '';
+      expect(csp).toContain("script-src 'self'");
+      expect(csp).toContain("connect-src 'self'");
+
       // Client-side routes fall back to the SPA.
       expect(await (await fetch(`${base}/task/T1`)).text()).toContain('<div id="root">');
 

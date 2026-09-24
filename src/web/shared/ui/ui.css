@@ -1,0 +1,364 @@
+/* The primitives. Everything visual the features use is defined here, once. */
+
+:root {
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --surface-2: #f0f1f3;
+  --border: #d9dce1;
+  --ink: #1a1d21;
+  --ink-muted: #63696f;
+  --accent: #2f6f4f;
+  --accent-ink: #ffffff;
+  --danger: #a3302a;
+  --warning-bg: #fdf3e2;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181b;
+    --surface: #1d2126;
+    --surface-2: #23282e;
+    --border: #333a42;
+    --ink: #e7eaed;
+    --ink-muted: #9aa2ab;
+    --accent: #6fb08a;
+    --accent-ink: #10231a;
+    --danger: #e58b85;
+    --warning-bg: #3a3122;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.button {
+  font: inherit;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.button--danger {
+  color: var(--danger);
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--small {
+  padding: 2px 8px;
+  font-size: 13px;
+}
+
+.icon-button {
+  font: inherit;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.input {
+  font: inherit;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.textarea {
+  font-family: var(--mono);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.field__hint {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge--accent {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.badge--warning {
+  background: var(--warning-bg);
+  color: var(--ink);
+}
+
+.text {
+  margin: 6px 0;
+}
+
+.text--muted {
+  color: var(--ink-muted);
+}
+
+.text--mono {
+  font-family: var(--mono);
+}
+
+.spinner {
+  color: var(--ink-muted);
+  padding: 24px;
+}
+
+.spinner__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner__dot {
+    animation: none;
+  }
+}
+
+.empty {
+  padding: 16px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.empty__title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.error-state {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.error-state__title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.error-state__message {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  background: rgb(0 0 0 / 35%);
+  overflow: auto;
+}
+
+.modal__panel {
+  width: 100%;
+  max-width: 460px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 20%);
+}
+
+.modal__panel--wide {
+  max-width: 640px;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.modal__body {
+  padding: 16px;
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu__list {
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  min-width: 170px;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.menu__item {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.menu__item--danger {
+  color: var(--danger);
+}
+
+.menu__separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.form__error {
+  margin: 8px 0;
+  color: var(--danger);
+}
+
+.form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown pre {
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: auto;
+}
+
+.markdown code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 15px;
+  margin: 16px 0 6px;
+}

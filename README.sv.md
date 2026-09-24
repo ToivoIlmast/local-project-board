@@ -4,8 +4,8 @@
 
 > En personlig utvecklartavla på några sekunder. Ingen ceremoni. Inget moln krävs. Delning när du behöver det.
 
-**Status: pre-alpha.** Tavlan startar och serverar sitt API; webbgränssnittet är fortfarande en
-platshållare, så i dag är detta en tavla för kommandoraden och för AI-agenter.
+**Status: pre-alpha.** Tavlan startar, serverar sitt API och har ett fungerande webbgränssnitt;
+den är ännu inte prövad i skarpt arbete.
 Språkversioner: [English](README.md) · [Suomi](README.fi.md)
 
 ## Vad det är
@@ -32,6 +32,29 @@ webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk uta
 
 Flaggor: `--port <nummer>` (porten du anger måste vara ledig, annars stannar tavlan med ett fel),
 `--no-open` (öppna ingen webbläsare), `--help`.
+
+## I webbläsaren
+
+Tavlan är en enda vy: projektets statusar som kolumner, och till höger en panel för det du tittar
+på.
+
+- **Uppgifter.** Skapa, ändra och ta bort; dra ett kort mellan kolumner, eller flytta det från
+  kortets meny — enbart tangentbordet räcker till allt. Ordningen bestäms av servern, så två
+  fönster kan aldrig vara oense om den.
+- **En uppgift i detalj.** Titel, status, etiketter, gren, datum och en beskrivning i Markdown,
+  och bredvid den uppgiftens dokument.
+- **Dokument.** Läs dem som Markdown, skriv och ändra dem på sidan, ta bort dem. Ett
+  `.html`-dokument öppnas i en egen ram som servern isolerar.
+- **Rapporter.** Det en agent har sparat, HTML eller Markdown, öppnat lika säkert.
+- **Git.** Nuvarande gren, om trädet är rent, vad som ändrats, diffen för en fil och de tio
+  senaste commitarna.
+- **Levande.** En uppgift som en agent skapat, en fil du ändrat i editorn, en rapport som ett
+  skript skrivit: sidan följer med utan omladdning, och säger till när tavlan slutar svara.
+- **AI-instruktioner.** Samma text som `npx local-project-board instructions` skriver ut, en knapp
+  bort och redo att klistra in.
+
+Filer som tavlan inte kan läsa visas som just det, ovanför kolumnerna — aldrig som uppgifter med
+påhittade värden.
 
 ## Var tavlan bor
 
@@ -87,15 +110,18 @@ Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska).
 
 Kräver Node.js >= 22.12.0.
 
-| Kommando                                  | Vad det gör                                     |
-| ----------------------------------------- | ----------------------------------------------- |
-| `npm install`                             | Installerar beroenden                           |
-| `npm run build`                           | Bygger servern och användargränssnittet         |
-| `npm test`                                | Jest-tester                                     |
-| `npm run test:pack`                       | Bygger npm-paketet, installerar och startar det |
-| `npm run lint`                            | ESLint, inklusive arkitekturregler              |
-| `npm run typecheck`                       | TypeScript                                      |
-| `npm run format` / `npm run format:check` | Prettier                                        |
+| Kommando           | Vad det gör                                     |
+| ------------------ | ----------------------------------------------- |
+| `npm install`      | Installerar beroenden                           |
+| `npm run build`    | Bygger servern och användargränssnittet         |
+| `npm test`         | Jest-tester (servern och sidan)                 |
+| `npm run test:e2e` | Playwright mot en tavla som startats på riktigt |
+
+Webbläsartesterna behöver en webbläsare en gång: `npx playwright install --with-deps chromium`.
+| `npm run test:pack` | Bygger npm-paketet, installerar och startar det |
+| `npm run lint` | ESLint, inklusive arkitekturregler |
+| `npm run typecheck` | TypeScript |
+| `npm run format` / `npm run format:check` | Prettier |
 
 ## Licens
 

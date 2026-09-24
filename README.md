@@ -2,8 +2,8 @@
 
 > A personal developer board in seconds. No ceremony. No cloud required. Sharing when you need it.
 
-**Status: pre-alpha.** The board runs and serves its API; the browser UI is still a placeholder,
-so today this is a board for the command line and for AI agents.
+**Status: pre-alpha.** The board runs, serves its API and has a working browser UI; it has not
+been used in anger yet.
 Translations: [Suomi](README.fi.md) · [Svenska](README.sv.md)
 
 ## What it is
@@ -30,6 +30,29 @@ in your browser. No sign-up, no account, no database, no network beyond your own
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
 `--no-open` (do not open a browser), `--help`.
+
+## In the browser
+
+The board is one screen: the statuses of your project as columns, and a panel on the right for
+whatever you are looking at.
+
+- **Tasks.** Create, edit and delete them; drag a card between columns, or move it from the
+  card's menu — the keyboard alone is enough for everything. The server decides the order, so
+  two windows never disagree about it.
+- **A task in detail.** Title, status, labels, branch, dates and a markdown description, with
+  the documents that belong to the task next to it.
+- **Documents.** Read them as markdown, write and change them in the page, delete them. An
+  `.html` document opens in a frame of its own, sandboxed by the server.
+- **Reports.** Whatever an agent has stored, HTML or markdown, opened the same safe way.
+- **Git.** The current branch, whether the tree is clean, what changed, the diff of a file and
+  the last ten commits.
+- **Live.** A task created by an agent, a file edited in your editor, a report written by a
+  script: the page follows without a reload, and says so when the board stops answering.
+- **AI instructions.** The same text `npx local-project-board instructions` prints, one button
+  away and ready to paste.
+
+Files the board cannot read are shown as exactly that, above the columns — never as tasks with
+invented values.
 
 ## Where the board lives
 
@@ -85,15 +108,18 @@ See [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
 
 Requires Node.js >= 22.12.0.
 
-| Command                                   | What it does                                   |
-| ----------------------------------------- | ---------------------------------------------- |
-| `npm install`                             | Install dependencies                           |
-| `npm run build`                           | Build the server and the UI                    |
-| `npm test`                                | Jest tests                                     |
-| `npm run test:pack`                       | Build the npm package, install it and start it |
-| `npm run lint`                            | ESLint, including architecture rules           |
-| `npm run typecheck`                       | TypeScript                                     |
-| `npm run format` / `npm run format:check` | Prettier                                       |
+| Command            | What it does                                 |
+| ------------------ | -------------------------------------------- |
+| `npm install`      | Install dependencies                         |
+| `npm run build`    | Build the server and the UI                  |
+| `npm test`         | Jest tests (server and page)                 |
+| `npm run test:e2e` | Playwright, against a board started for real |
+
+The browser tests need a browser once: `npx playwright install --with-deps chromium`.
+| `npm run test:pack` | Build the npm package, install it and start it |
+| `npm run lint` | ESLint, including architecture rules |
+| `npm run typecheck` | TypeScript |
+| `npm run format` / `npm run format:check` | Prettier |
 
 ## License
 

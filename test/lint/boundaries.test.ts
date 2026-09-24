@@ -27,6 +27,8 @@ describe('architecture boundaries are enforced by ESLint', () => {
     ['core/bad-uses-fetch.ts', 'no-restricted-globals', 'core must not make network calls'],
     ['core/bad-uses-process.ts', 'no-restricted-globals', 'core must not read the environment'],
     ['core/bad-imports-server.ts', 'boundaries/dependencies', 'core must not depend on adapters'],
+    ['core/bad-uses-document.ts', 'no-restricted-globals', 'core must not know a browser'],
+    ['core/bad-imports-react.ts', 'no-restricted-imports', 'core must not depend on React'],
     [
       'contract/bad-imports-express.ts',
       'no-restricted-imports',
@@ -63,6 +65,8 @@ describe('architecture boundaries are enforced by ESLint', () => {
       'shared must not know features',
     ],
     ['web/api/bad-imports-feature.ts', 'boundaries/dependencies', 'web/api must not know features'],
+    ['web/api/bad-imports-ui.ts', 'no-restricted-imports', 'web/api must not know components'],
+    ['web/shared/ui/bad-imports-api.ts', 'boundaries/dependencies', 'shared must not know the API'],
   ])(
     '%s → %s (%s)',
     async (file, rule) => {
@@ -80,6 +84,7 @@ describe('architecture boundaries are enforced by ESLint', () => {
     ['server/cli/ok-composition.ts', 'the composition root → core, contract, http, adapters'],
     ['contract/routes.ts', 'contract → core model'],
     ['web/features/alpha/index.ts', 'feature → its own internals'],
+    ['web/pages/ok-uses-api.ts', 'a page → the API client, features and shared'],
   ])(
     '%s is allowed (%s)',
     async (file) => {

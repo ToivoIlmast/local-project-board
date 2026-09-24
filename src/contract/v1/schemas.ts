@@ -23,6 +23,23 @@ export {
 } from '../../core/model/index.js';
 export { boardEventSchema } from '../../core/events.js';
 
+/**
+ * The wire types themselves, so a client of the API — the board's own page included —
+ * never has to reach into the domain model for the shape of an answer (§20).
+ */
+export type {
+  DocumentMeta,
+  GitBranch,
+  GitCommit,
+  GitDiff,
+  GitFileChange,
+  GitStatus,
+  Project,
+  Report,
+  Task,
+} from '../../core/model/index.js';
+export type { BoardEvent } from '../../core/events.js';
+
 const title = z.string().regex(/\S/, 'Must not be blank');
 const labels = z.array(z.string().min(1));
 /** A document or report body; the board is not a file server. */

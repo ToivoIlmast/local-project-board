@@ -28,3 +28,14 @@ frame-ancestors 'self'` and `X-Content-Type-Options: nosniff`.
   must carry what it needs inline or as a `data:` URI.
 - A report that needs `eval` (some chart libraries) will not run: `'unsafe-eval'` is not granted.
   Loosening this is a decision to take on its own, not a patch to a header.
+
+## Amendment (2026-09-23, implemented in phase 11)
+
+The UI now renders this content, which fixes how:
+
+- An HTML report or an `.html` document is shown in an `<iframe sandbox="allow-scripts">`
+  pointed at the board's own URL for it, so the server's headers apply as well. The page never
+  inlines that HTML, and `allow-same-origin` appears nowhere.
+- Markdown — task descriptions, `.md` documents, `.md` reports — is rendered to React
+  elements, not to HTML: raw HTML inside markdown is not parsed and never reaches the DOM.
+  That is why the page needs no HTML sanitizer to be safe.

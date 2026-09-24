@@ -1,0 +1,369 @@
+/* The board's own layout: a header, columns, and a panel for whatever is being looked at. */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.header__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.header__git {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.header__offline {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.read-issues,
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--warning-bg);
+  font-size: 13px;
+}
+
+.read-issues ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.read-issues__title {
+  margin: 0;
+  font-weight: 600;
+  flex-basis: 100%;
+}
+
+.page__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.page__board {
+  flex: 1;
+  min-width: 0;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.board__orphans {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 210px;
+  max-width: 340px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.column__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.column__title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.column__count {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.column__head .icon-button {
+  margin-left: auto;
+}
+
+.column__cards {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.column__empty {
+  margin: 0;
+  padding: 0 10px 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.card {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+.card--dragging {
+  opacity: 0.45;
+}
+
+.card--busy {
+  border-style: dashed;
+}
+
+.card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.card__title {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.card__busy {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.drop-line {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  list-style: none;
+}
+
+.panel {
+  width: 380px;
+  flex: 0 0 380px;
+  padding: 16px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 15px;
+  flex: 1;
+}
+
+.panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.panel__actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.panel__body {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.documents,
+.document,
+.report {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.documents__head,
+.document__head,
+.report__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.documents__title,
+.document__name,
+.report__title {
+  margin: 0;
+  font-size: 14px;
+  flex: 1;
+}
+
+.documents__list,
+.reports__list,
+.git__files,
+.git__commits {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.documents__item,
+.reports__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.documents__open,
+.reports__open,
+.git__file {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.documents__size,
+.reports__date,
+.git__author {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.document__frame,
+.report__frame {
+  width: 100%;
+  height: 420px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.git__section {
+  margin: 16px 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.git__files li,
+.git__commits li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.git__commits li {
+  display: block;
+}
+
+.git__sha,
+.instructions {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.git__diff-text,
+.instructions {
+  max-height: 340px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .page__body {
+    flex-direction: column;
+  }
+
+  .panel {
+    width: auto;
+    flex: 1 1 auto;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}

@@ -5,5 +5,5 @@
     "types": ["node", "jest"]
   },
   "include": ["test/**/*.ts", "jest.config.ts"],
-  "exclude": ["test/lint/fixtures/**"]
+  "exclude": ["test/lint/fixtures/**", "test/web/**", "test/e2e/**"]
 }

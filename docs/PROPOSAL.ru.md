@@ -1,6 +1,6 @@
 # local-project-board — архитектурный proposal (v2)
 
-Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–10 завершены, следующая — фаза 11 (React UI).**
+Статус: **v2.2 — approved (2026-09-21). Решения §34 и D1–D3 (§35) закрыты. Фазы 0–11 завершены, следующая — фаза 12 (E2E расширение и docs).**
 Дата: 2026-09-21
 
 - v1 (2026-09-21) — первичный анализ.
@@ -29,7 +29,7 @@
 | Экспорт | should-have | `board export` → `BoardSnapshot` **в MVP** как backup/export-формат (§12) |
 | Plugins / Standalone / Sharing / AI provider | не рассматривались | точки расширения, классифицированы в §21 |
 | E2E | отложено | в MVP, 3 сценария, отдельный раннер `@playwright/test` |
-| Редактирование документов в UI | открытый вопрос | future (просмотр + создание через API в MVP) |
+| Редактирование документов в UI | открытый вопрос | сделано в фазе 11: просмотр, создание, правка и удаление из UI (§18) |
 
 ---
 
@@ -795,7 +795,7 @@ Dropdown, IconButton`, http-транспорт, хуки общего назна
 
 **No GOD components.** Композиция:
 
-- данные — в хуках `features/*/model` (TanStack Query), разметка — в компонентах;
+- данные — в одном сторе (`web/api/store.ts`), разметка — в компонентах;
 - слоты для каркасов:
 
 ```tsx
@@ -808,15 +808,51 @@ Dropdown, IconButton`, http-транспорт, хуки общего назна
 
 - `children` по умолчанию, именованные слоты — когда мест больше одного, render-props — когда
   потребителю нужно состояние; вместо boolean-флагов — специализированный компонент или `variant`;
-- `TaskCard` имеет слот `actions` — core-UI сам через него рендерит «Details»; это же место,
-  куда когда-то придут plugin-actions (§21, UI);
 - порог дробления: >150 строк, или больше одной причины для изменения, или кусок нужен в
   другом месте. Микрокомпоненты по 10 строк ради «чистоты» — нет;
-- серверное состояние только в TanStack Query, UI-состояние локально, глобального store нет;
 - loading / empty / error обязательны для каждого списка.
 
-**`web/api`** — `BoardClient`: типизированные функции `tasks.list()`, `tasks.move()`, …
-поверх путей и схем `contract/v1`. `fetch` к серверу разрешён только здесь (ESLint).
+**`web/api`** — `BoardClient`: типизированные функции `listTasks()`, `moveTask()`, … поверх
+путей и схем `contract/v1`. `fetch` к серверу разрешён только здесь (ESLint).
+
+**Как это сделано (фаза 11).**
+
+```text
+app/      BoardProvider + BoardPage
+pages/    BoardPage — колонки слева, панель справа (задача | reports | git | instructions)
+features/ board (колонки, DnD), tasks (карточка, форма, детали), documents, reports,
+          git, instructions.tsx (плоская feature из одного файла)
+shared/   ui/ (Button, IconButton, Input, Textarea, Select, Field, Badge, Modal, Menu,
+          Tooltip, Spinner, EmptyState, ErrorState, ConfirmDialog, Text),
+          lib/ (Markdown, format), hooks/ (useSearchParam, useAsyncAction, useCopyToClipboard)
+api/      http.ts (транспорт) · client.ts (BoardClient из таблицы роутов) · errors.ts
+          (ApiError) · events.ts (SSE) · store.ts (состояние + чистые редьюсеры) · react.tsx
+```
+
+- **Состояние.** Один маленький стор вместо TanStack Query (ADR-0025): сервер на loopback,
+  ранжирование и так серверное, а поток событий уже присылает изменившийся объект целиком.
+  Чистые функции `applyEvent`, `columnsOf` — то, что покрыто unit- и mutation-тестами;
+  `useSyncExternalStore` — вся связь с React. Глобального стора состояния UI нет: что открыто,
+  живёт в адресной строке (`?task=T12`, `?panel=git`), поэтому reload возвращает туда же.
+- **Никаких оптимистичных обновлений** (ADR-0025): карточка переезжает тогда, когда это сказал
+  сервер. Пока запрос в пути, карточка помечена busy; откатывать нечего, потому что ничего и
+  не менялось. Один и тот же факт, пришедший дважды (ответ + событие), ничего не ломает —
+  `applyEvent` заменяет по id.
+- **DnD** — pointer events, без библиотеки (~90 строк). UI считает только **соседа**:
+  `intentFor(column, id, index, status)` → `{status, after?|before?}`; `isNoop` не даёт
+  записать на доску перетаскивание, которое ничего не меняет. Ранг по-прежнему считает сервер.
+  Перетаскивание — не единственный способ: у каждой карточки есть меню «Move up / Move down /
+  Move to <status>», и весь сценарий проходится с клавиатуры.
+- **Контракт как источник типов и путей.** `BoardClient` строит путь, метод и валидацию
+  ответа из `contract/v1/routes.ts`; ответ, не сходящийся со схемой, — ошибка
+  `MALFORMED_RESPONSE`, а не «показать, что пришло». Поэтому wire-типы (`Task`, `Project`, …)
+  экспортируются из контракта: `web/api` не лезет в `core/model`.
+- **Токен** живёт в замыкании клиента: не в DOM, не в localStorage, не в URL. Он нужен только
+  мутациям; читающие запросы уходят без заголовка. Если доску перезапустили под открытой
+  страницей, клиент один раз перечитает `GET /api/v1/session` и повторит запрос.
+- **Безопасность разметки.** Markdown рендерится в React-элементы (сырой HTML внутри markdown
+  не парсится вовсе), HTML-отчёты и `.html`-документы — только в `<iframe sandbox="allow-scripts">`
+  на URL сервера, где действует его же CSP (ADR-0023).
 
 ---
 
@@ -872,10 +908,10 @@ CLI: `local-project-board` (запуск), `instructions`, `export [--out <file>
 | `server/{storage,git,events,config,project}` | `core`, `node:*` | express, `web` | ESLint |
 | `server/http` | `core`, `contract`, express | исходники `web` (отдаёт только собранный `dist/web`) | ESLint |
 | `server/cli` | всё в `server` | `web` | ESLint |
-| `web/api` | `contract` | `core/services`, `server` | ESLint |
+| `web/api` | `contract`, `shared` | `core`, `server`, `features`, `shared/ui` | ESLint |
 | `web/features/*` | `web/api`, `shared`, другие features **только через index** | deep imports, `server`, `core/services` | ESLint |
 | `web/shared` | сторонние библиотеки | `features`, `api`, `contract`, `core` | ESLint |
-| `web/pages` | `features`, `shared` | `api` напрямую | ESLint |
+| `web/pages` | `features`, `shared`, `api` | `server`, `core` | ESLint |
 
 Архитектурные правила проверяются **тестом**: `test/lint/` содержит файлы-нарушители
 (deep import, `node:fs` в `core`, `express` в сервисе…), тест прогоняет ESLint и требует
@@ -987,7 +1023,8 @@ Host-проверка вынесена в конфигурируемое мес�
 | `api` | CRUD, move, документы, отчёты, коды ошибок, security-инварианты §15, SSE-события | Jest + supertest |
 | `snapshot` | export содержит всё, валиден по схеме, не меняет `.board/` | Jest |
 | `lint` | архитектурные границы §20 действительно ловятся | Jest + ESLint API |
-| `web` | формы создания/редактирования, пустые/ошибочные состояния, чистая функция позиции DnD | Jest + RTL |
+| `web` | доска, формы, документы, отчёты, git, состояния loading/empty/error, чистые функции стора и позиции DnD | Jest + RTL (проект `web`, jsdom) |
+| `web` integration | страница против **настоящего** сервера: сессия, CRUD, move, документы, отчёт, SSE | Jest + Express в процессе |
 | `e2e` | (1) задача, созданная через API, появляется в открытом UI без refresh; (2) DnD меняет статус и переживает reload; (3) документ, созданный через API, открывается в деталях | `@playwright/test` |
 | `pack` | опубликованный пакет запускается; HTML без внешних URL (local-first) | Jest + npm pack |
 
@@ -1057,7 +1094,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 ✗ AI chat UI                              ✗ SQLite / MySQL / PostgreSQL
 ✗ workflow engine                         ✗ standalone HTML, IndexedDB
 ✗ plugin platform / marketplace           ✗ sharing infrastructure
-✗ редактор документов в UI                ✗ search / filters / labels UI
+✓ редактор документов в UI (фаза 11)      ✗ search / filters / labels UI
 ```
 
 ---
@@ -1102,6 +1139,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 0022 | Нечитаемые файлы отдаются отдельно от задач (`readIssues`) |
 | 0023 | Отчёты и `.html`-документы отдаются в sandbox и без сети |
 | 0024 | Одна доска на каталог; заявка — `runtime.json`, живость — вопрос самой доске, а не pid |
+| 0025 | Страница — зеркало доски: один маленький стор, без оптимистичных обновлений |
 
 ---
 
@@ -1126,8 +1164,8 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 9. Instructions + session | drift-тест по контракту; agent workflow через `fetch` по одному лишь тексту инструкций; токен только в двух ответах | `session.get` в контракте, хендлеры `instructions.get`/`session.get`, `RouteContext.session` | **агент работает с доской по Instructions** |
 | 10. CLI + export | порядок старта, runtime.json, stale/повреждённый, порты, shutdown с SSE, instructions online/offline, round-trip export | `server/cli`: `args`, `board`, `serve`, `runtime`, `instructions`, `export`, `run` | **доска работает через curl** |
 | ☐ checkpoint | — | Claude на dep-health работает с API по Instructions (без UI) | правка API до UI |
-| 11. React UI | RTL: формы, состояния; unit: позиция DnD | web: board, DnD, details, documents, git, reports, copy instructions | |
-| 12. E2E | 3 сценария §25 | — | |
+| 11. React UI | RTL: доска, формы, состояния; unit: стор, SSE, ошибки, позиция DnD; integration против живого сервера | `web/`: api-клиент, стор, board + DnD, task details, documents, reports, git, instructions | **доска работает в браузере** |
+| 12. E2E | 3 сценария §25 | 4 сценария Playwright сделаны в фазе 11; остаётся расширение и CI | |
 | 13. Docs | CI-проверки переводов и api.md | README×3, architecture, configuration | |
 | 14. Dogfood | — | полный сценарий на dep-health-analyzer | решение про следующие шаги |
 
