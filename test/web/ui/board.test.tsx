@@ -1,5 +1,8 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
+import { BoardProvider } from '../../../src/web/api/react';
+import { BoardPage } from '../../../src/web/pages/BoardPage';
+import { fakeBoard } from '../support/fakeBoard';
 import { aProject, aTask } from '../support/fixtures';
 import { cardsIn, renderBoard } from '../support/render';
 
@@ -45,16 +48,39 @@ describe('the board a developer opens', () => {
     expect(within(done).getByText(/nothing here/i)).toBeInTheDocument();
   });
 
-  it('shows the board could not be read, and reads it again when asked', async () => {
-    const { board, user } = await renderBoard();
-    // The first load succeeded; break the next one and ask the page to try again.
+  it('says the board stopped answering without throwing away what it shows', async () => {
+    const { board, user } = await renderBoard({
+      tasks: [aTask({ id: 'T1', status: 'todo', title: 'Already on the board' })],
+    });
+    // The first load succeeded; break the next one and ask the page to read the board again.
     board.fail('project', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
 
     await user.click(screen.getByRole('button', { name: 'Reload' }));
 
     expect(await screen.findByText(/not answering/)).toBeInTheDocument();
+    // The board is still on screen: a failed read is not a reason for an empty page.
+    expect(screen.getByRole('heading', { level: 1, name: /dep-health/ })).toBeInTheDocument();
+    expect(screen.getByText('Already on the board')).toBeInTheDocument();
+    expect(cardsIn('todo')).toEqual(['T1']);
+
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.queryByText(/not answering/)).not.toBeInTheDocument());
+    expect(screen.getByText('Already on the board')).toBeInTheDocument();
+  });
+
+  it('shows nothing but the failure when the board has never been read', async () => {
+    const board = fakeBoard();
+    board.fail('project', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+
+    render(
+      <BoardProvider client={board.client} connect={() => () => undefined}>
+        <BoardPage />
+      </BoardProvider>,
+    );
+
+    // Nothing is known yet, so there is nothing to keep: the failure is the whole page.
+    expect(await screen.findByText('The board could not be read')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 
   it('reports files it could not read as tasks instead of hiding them (ADR-0022)', async () => {

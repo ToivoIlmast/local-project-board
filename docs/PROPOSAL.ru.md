@@ -1025,7 +1025,7 @@ Host-проверка вынесена в конфигурируемое мес�
 | `lint` | архитектурные границы §20 действительно ловятся | Jest + ESLint API |
 | `web` | доска, формы, документы, отчёты, git, состояния loading/empty/error, чистые функции стора и позиции DnD | Jest + RTL (проект `web`, jsdom) |
 | `web` integration | страница против **настоящего** сервера: сессия, CRUD, move, документы, отчёт, SSE | Jest + Express в процессе |
-| `e2e` | (1) задача, созданная через API, появляется в открытом UI без refresh; (2) DnD меняет статус и переживает reload; (3) документ, созданный через API, открывается в деталях | `@playwright/test` |
+| `e2e` | (1) задача, созданная через API, появляется в открытом UI без refresh; (2) DnD меняет статус и переживает reload; (3) документ, созданный через API, открывается в деталях; (4) инструкции и токен; (5) доска остановлена и запущена снова, пока страница открыта | `@playwright/test` |
 | `pack` | опубликованный пакет запускается; HTML без внешних URL (local-first) | Jest + npm pack |
 
 Обязательный минимум из исходного задания (create/edit/move task, create document/report,
@@ -1165,7 +1165,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | 10. CLI + export | порядок старта, runtime.json, stale/повреждённый, порты, shutdown с SSE, instructions online/offline, round-trip export | `server/cli`: `args`, `board`, `serve`, `runtime`, `instructions`, `export`, `run` | **доска работает через curl** |
 | ☐ checkpoint | — | Claude на dep-health работает с API по Instructions (без UI) | правка API до UI |
 | 11. React UI | RTL: доска, формы, состояния; unit: стор, SSE, ошибки, позиция DnD; integration против живого сервера | `web/`: api-клиент, стор, board + DnD, task details, documents, reports, git, instructions | **доска работает в браузере** |
-| 12. E2E | 3 сценария §25 | 4 сценария Playwright сделаны в фазе 11; остаётся расширение и CI | |
+| 12. E2E | 3 сценария §25 | 5 сценариев Playwright (4 в фазе 11, обрыв связи — в фазе 12); остаётся первый реальный прогон CI | |
 | 13. Docs | CI-проверки переводов и api.md | README×3, architecture, configuration | |
 | 14. Dogfood | — | полный сценарий на dep-health-analyzer | решение про следующие шаги |
 
@@ -1224,7 +1224,7 @@ docs/PHILOSOPHY.md · architecture.md · api.md (генерируется из r
 | Двойные события (своя запись + watcher) | при чтении без кэша безвредны (§35 D3) |
 | **`fs.watch` не работает на WSL2 для путей `/mnt/c/...`** (inotify через 9p) | при D3 влияет только на живое обновление UI, не на корректность; README: держать репозиторий в Linux-FS |
 | Агент и человек пишут одновременно | SSE; last-write-wins (§35 D2, ADR-0018) |
-| e2e нестабильны (DnD, SSE) | 3 сценария, не больше; DnD-логика покрыта unit |
+| e2e нестабильны (DnD, SSE) | 5 сценариев, больше не добавляем; сценарий берётся только там, где транспорт нельзя подделать (drag мышью, обрыв потока); остальное — unit и integration |
 | Переводы README — трёхкратная стоимость каждой правки | CI-проверка коммита-основы; переводы можно держать короче при той же функциональности |
 | «Документы всегда файлы» vs сетевые провайдеры | зафиксировано в §32, решение отложено |
 | Дрейф в PM-систему | PHILOSOPHY.md, warning signs, две контрольные вопроса |

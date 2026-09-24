@@ -123,3 +123,69 @@ test('the board hands over the instructions an agent needs, token and all', asyn
   const token = (await board.api('/api/v1/session')) as { token: string };
   expect(board.output()).not.toContain(token.token);
 });
+
+test('the board is stopped and started again while the page stays open', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Already on the board', status: 'todo' },
+  });
+  await page.goto(board.url);
+  await expect(page.getByText('Already on the board')).toBeVisible();
+
+  // One change through the page first: from here on it holds a token of this run, and that
+  // token is what the restart below invalidates.
+  await page.getByRole('button', { name: 'New task' }).click();
+  await page.getByLabel('Title').fill('Written before the stop');
+  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('complementary', { name: 'Task T2' })).toBeVisible();
+
+  await board.stop();
+
+  // The stream is gone and the page says so, in the one place that can only mean the stream.
+  // It keeps showing what it last knew: no blank screen, nothing pretending to be current.
+  await expect(page.getByText(/Live updates are off/)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByText('Already on the board')).toBeVisible();
+
+  // A change attempted now fails in the open instead of looking as though it worked.
+  await page.getByRole('button', { name: 'New task' }).click();
+  await page.getByLabel('Title').fill('Written while the board was down');
+  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText(/not answering/);
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('region', { name: /^todo \(2\)/ })).toBeVisible();
+
+  // The board comes back on the same port, and another process changes it meanwhile.
+  await board.restart();
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Created while the page waited', status: 'todo' },
+  });
+
+  // The browser reconnects the stream on its own. There is no event log (§14), so the page
+  // recovers by reading the whole board again.
+  await expect(page.getByText('Created while the page waited')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Live updates are off/)).toHaveCount(0);
+  await expect(page.getByText(/is not answering/)).toHaveCount(0);
+
+  // Changes work again, although the token this page was given died with the old process:
+  // the board answers 401 once, the page asks for the current token and sends it (ADR-0008).
+  await page.getByRole('button', { name: 'New task' }).click();
+  await page.getByLabel('Title').fill('Written after the restart');
+  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('complementary', { name: 'Task T4' })).toBeVisible();
+
+  const tasks = (await board.api('/api/v1/tasks')) as { id: string; title: string }[];
+  expect(tasks.map((task) => task.title)).toEqual([
+    'Already on the board',
+    'Written before the stop',
+    'Created while the page waited',
+    'Written after the restart',
+  ]);
+});

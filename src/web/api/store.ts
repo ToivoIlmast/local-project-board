@@ -216,7 +216,14 @@ export function createBoardStore(client: BoardClient): BoardStore {
           git,
         }));
       } catch (error) {
-        set((current) => ({ ...current, phase: 'failed', error: asApiError(error) }));
+        // A board that has been read once is not thrown away because a later read failed:
+        // the page keeps showing what it last knew and says what happened (ADR-0025). Only
+        // a board that was never read has nothing to show but the failure.
+        set((current) => ({
+          ...current,
+          phase: current.project === undefined ? 'failed' : 'ready',
+          error: asApiError(error),
+        }));
         return;
       }
       // Whatever was open keeps its documents fresh after a full re-read.

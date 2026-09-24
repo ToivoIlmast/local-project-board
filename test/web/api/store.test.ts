@@ -201,6 +201,36 @@ describe('the store', () => {
     expect(store.getState()).toMatchObject({ phase: 'ready', error: undefined });
   });
 
+  it('keeps the board it has already read when a later read fails (INVARIANT)', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1', title: 'Already on the board' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+
+    // The board was stopped in its terminal while the page was open.
+    board.fail('project', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await store.load();
+
+    const current = store.getState();
+    // What the page knows is worth more than nothing, so it is not thrown away (ADR-0025).
+    expect(current.phase).toBe('ready');
+    expect(current.project).toBeDefined();
+    expect(current.tasks).toHaveLength(1);
+    expect(current.error).toMatchObject({ code: 'NETWORK_ERROR' });
+  });
+
+  it('forgets the failure once the board answers again', async () => {
+    const board = fakeBoard({ tasks: [aTask()] });
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.fail('listTasks', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await store.load();
+
+    await store.load();
+
+    expect(store.getState()).toMatchObject({ phase: 'ready', error: undefined });
+    expect(store.getState().tasks).toHaveLength(1);
+  });
+
   it('still shows the board when git alone cannot be read', async () => {
     const board = fakeBoard({ tasks: [aTask()] });
     board.fail('gitStatus', new ApiError(500, 'INTERNAL_ERROR', 'git failed'));

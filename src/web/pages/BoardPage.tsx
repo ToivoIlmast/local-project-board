@@ -65,6 +65,15 @@ export function BoardPage() {
 
       <ReadIssues issues={project.readIssues} />
 
+      {state.error === undefined ? null : (
+        <p className="notice" role="alert">
+          {state.error.message}
+          <Button size="small" onClick={() => void store.load()}>
+            Try again
+          </Button>
+        </p>
+      )}
+
       {notice === undefined ? null : (
         <p className="notice" role="alert">
           {notice}

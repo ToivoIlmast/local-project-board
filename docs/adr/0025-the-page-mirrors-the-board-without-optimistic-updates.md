@@ -32,6 +32,16 @@ truth next to the event stream, which already delivers the whole changed object.
 - UI state (which panel is open, what is typed in a form) is not in this store. What the page
   is looking at lives in the address bar instead, so a reload lands where the user was.
 
+## Amendment (2026-09-24, dogfooding)
+
+A board that has been read once is not thrown away because a later read failed. The first
+implementation set `phase: 'failed'` in every failed `load()`, so a re-read that failed — and
+one is triggered by `board.changed`, which the board itself emits as it shuts down — replaced
+the whole page with an error screen, losing the board the user was looking at. The page now
+keeps the last state it was given, says that the board stopped answering, and offers to read it
+again; only a board that was never read has nothing to show but the failure. The mirror may be
+stale, and the page says so, but a stale mirror beats an empty wall.
+
 ## Consequences
 
 - A move costs one request and shows the result the server computed; on a loopback board the
