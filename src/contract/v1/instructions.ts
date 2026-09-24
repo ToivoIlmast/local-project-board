@@ -176,7 +176,7 @@ function describe(route: Route): string[] {
 }
 
 /** The path with the example parameters filled in, so the agent sees a real URL. */
-function concretePath(route: Route): string | undefined {
+export function concretePath(route: Route): string | undefined {
   const params = route.example.params;
   if (params === null || typeof params !== 'object') return undefined;
   const values = params as Record<string, unknown>;
@@ -185,7 +185,7 @@ function concretePath(route: Route): string | undefined {
   );
 }
 
-function queryString(query: unknown): string | undefined {
+export function queryString(query: unknown): string | undefined {
   if (query === null || typeof query !== 'object') return undefined;
   // Written by hand: the contract is plain TypeScript and takes nothing from a host platform.
   const text = Object.entries(query as Record<string, unknown>)
