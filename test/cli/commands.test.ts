@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DEFAULT_AI_RULES } from '../../src/contract/v1/index.js';
 import { boardSnapshotSchema } from '../../src/core/model/snapshot.js';
 import { readRuntime, runtimePath, type RuntimeState } from '../../src/server/cli/runtime.js';
 import { cli, deadPid, stopBoards } from '../support/cli.js';
@@ -57,6 +58,22 @@ describe('local-project-board instructions', () => {
     expect(text).toContain('Base URL: http://127.0.0.1:7500/api/v1');
     // It describes the board; it does not start one.
     expect(await readRuntime(root)).toEqual({ kind: 'missing' });
+  });
+
+  it('follows the ai.rules of board.config.yaml, not the built-in defaults', async () => {
+    const root = await tmpDir();
+    await writeYaml(
+      root,
+      'board.config.yaml',
+      'ai:\n  rules:\n    - Ask before renaming a task.\n',
+    );
+
+    const run = await cli(['instructions'], { cwd: root });
+
+    expect(run.exitCode).toBe(0);
+    const text = run.out.join('\n');
+    expect(text).toContain('- Ask before renaming a task.');
+    for (const rule of DEFAULT_AI_RULES) expect(text).not.toContain(rule);
   });
 
   it('does not take the word of a runtime file whose board is gone (INVARIANT)', async () => {

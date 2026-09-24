@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import type { Express } from 'express';
 import request, { type Test } from 'supertest';
+import { DEFAULT_AI_RULES } from '../../src/contract/v1/index.js';
 import {
   createDocumentService,
   createProjectService,
@@ -26,6 +27,8 @@ export const STATUSES = ['backlog', 'todo', 'in-progress', 'done'];
 export interface TestBoardOptions {
   root?: string;
   statuses?: string[];
+  /** ai.rules; defaults to DEFAULT_AI_RULES, as an unconfigured board would. */
+  rules?: string[];
   git?: GitReader;
   /** A stand-in provider, to make a failure inside the server observable over HTTP. */
   storage?: Storage;
@@ -99,6 +102,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     }),
     git,
     events: bus,
+    ai: { rules: options.rules ?? [...DEFAULT_AI_RULES] },
   };
 
   // The app needs the bound port, so the server starts first and gets its handler after.

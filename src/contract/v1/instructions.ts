@@ -1,5 +1,8 @@
+import { DEFAULT_AI_RULES } from '../../core/rules/aiRules.js';
 import { API_BASE_PATH, routeList, type Route } from './routes.js';
 import { errorCodeSchema } from './schemas.js';
+
+export { DEFAULT_AI_RULES };
 
 /** What the board itself is called and what a task on it may say; read at generation time. */
 export interface BoardFacts {
@@ -15,6 +18,8 @@ export interface InstructionsOptions {
   token?: string | undefined;
   /** The live board, so an agent does not have to guess a status or an id. */
   board?: BoardFacts | undefined;
+  /** What "## Rules" tells the agent; defaults to DEFAULT_AI_RULES (overridable: ai.rules). */
+  rules?: readonly string[] | undefined;
 }
 
 const TOKEN_PLACEHOLDER = '<session token>';
@@ -42,7 +47,12 @@ const ERROR_EXAMPLE = {
  * describe an API that does not exist (ADR-0005). They are operating instructions for the
  * API surface: what to call, what to send, what comes back, what may not be done.
  */
-export function generateInstructions({ baseUrl, token, board }: InstructionsOptions): string {
+export function generateInstructions({
+  baseUrl,
+  token,
+  board,
+  rules,
+}: InstructionsOptions): string {
   const api = `${baseUrl}${API_BASE_PATH}`;
   const lines: string[] = [
     '# local-project-board API (v1)',
@@ -81,22 +91,7 @@ export function generateInstructions({ baseUrl, token, board }: InstructionsOpti
     );
   }
 
-  lines.push(
-    '',
-    '## Rules',
-    '',
-    '- Requests and responses are JSON, except where a route says otherwise.',
-    '- Unknown fields are rejected, so send exactly what a route describes.',
-    '- A task carries its own markdown in `body`; there is no separate route for it.',
-    '- To reorder a task or put it in another column, use the move route with the ids of its',
-    '  neighbours (`before`, `after`). The board computes the position; never invent one.',
-    '- A document name is a plain file name ending in `.md` or `.html`. No directories, and',
-    '  `task.md` is reserved by the board itself.',
-    '- A report is markdown or HTML. HTML is shown in a sandbox with no network access, so put',
-    '  the styles and the data inside the file and load nothing from the internet.',
-    '- Documents and reports are text of at most a million characters; this is not a file store.',
-    '- Deleting a task deletes its documents with it, and its id is not given to another task.',
-  );
+  lines.push('', '## Rules', '', ...(rules ?? DEFAULT_AI_RULES).map((rule) => `- ${rule}`));
 
   // `ai.include` is the only thing that decides what an agent is told about: a resource the
   // route table grows is documented under a heading of its own rather than silently dropped.

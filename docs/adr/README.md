@@ -27,3 +27,4 @@
 | 0023 | [Agent-written HTML is served sandboxed and offline](0023-agent-written-html-is-served-sandboxed-and-offline.md)                 | accepted |
 | 0024 | [One board per directory, claimed by runtime.json](0024-one-board-per-directory-claimed-by-runtime-json.md)                      | accepted |
 | 0025 | [The page mirrors the board, without optimistic updates](0025-the-page-mirrors-the-board-without-optimistic-updates.md)          | accepted |
+| 0026 | [AI workflow rules are configurable (ai.rules)](0026-ai-workflow-rules-are-configurable-ai-rules.md)                             | accepted |

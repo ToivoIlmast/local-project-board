@@ -61,6 +61,7 @@ export const handlers: Handlers = {
           statuses: project.statuses,
           idPrefix: project.idPrefix,
         },
+        rules: context.ai.rules,
       }),
       media: 'text/markdown',
     };
