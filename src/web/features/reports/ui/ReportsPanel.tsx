@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { formatDate } from '../../../shared/lib/format';
-import { Badge, Button, ConfirmDialog, EmptyState } from '../../../shared/ui/index';
+import { Badge, Button, ConfirmDialog, EmptyState, Panel } from '../../../shared/ui/index';
 import { ReportView } from './ReportView';
 
 export interface ReportsPanelProps {
@@ -19,7 +19,7 @@ export function ReportsPanel({ onClose }: ReportsPanelProps) {
   const reports = [...state.reports].reverse();
 
   return (
-    <aside className="panel" aria-label="Reports">
+    <Panel label="Reports">
       <header className="panel__head">
         <h2 className="panel__title">Reports</h2>
         <Button size="small" onClick={onClose}>
@@ -75,6 +75,6 @@ export function ReportsPanel({ onClose }: ReportsPanelProps) {
           }}
         />
       )}
-    </aside>
+    </Panel>
   );
 }

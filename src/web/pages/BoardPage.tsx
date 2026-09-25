@@ -7,7 +7,7 @@ import { ReportsPanel } from '../features/reports/index';
 import { TaskDetails, TaskDialog } from '../features/tasks/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
 import { useSearchParam } from '../shared/hooks/useSearchParam';
-import { Button, ConfirmDialog, ErrorState, Spinner } from '../shared/ui/index';
+import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
 type Panel = 'reports' | 'git' | 'instructions';
 
@@ -107,14 +107,14 @@ export function BoardPage() {
             onClose={() => setOpenTaskId(null)}
           />
         ) : openTaskId !== null ? (
-          <aside className="panel" aria-label="Task">
+          <Panel label="Task">
             <ErrorState
               title="This task is not on the board"
               message="It may have been deleted while this page was open."
               onRetry={() => setOpenTaskId(null)}
               retryLabel="Close"
             />
-          </aside>
+          </Panel>
         ) : panel === 'reports' ? (
           <ReportsPanel onClose={() => setPanel(null)} />
         ) : panel === 'git' ? (

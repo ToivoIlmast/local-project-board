@@ -8,6 +8,7 @@ export { IconButton } from './IconButton';
 export { Input, Textarea } from './Input';
 export { Menu, type MenuItem } from './Menu';
 export { Modal } from './Modal';
+export { Panel } from './Panel';
 export { Select } from './Select';
 export { Spinner } from './Spinner';
 export { Text } from './Text';

@@ -216,6 +216,11 @@
   overflow-y: auto;
 }
 
+.panel:focus-visible {
+  /* Inside the edge: the panel scrolls, and a ring outside it would be cut off. */
+  outline-offset: -2px;
+}
+
 .panel__head {
   display: flex;
   align-items: flex-start;
