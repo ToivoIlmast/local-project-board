@@ -315,6 +315,23 @@ describe('the store', () => {
     expect(store.getState().documents['T1']).toEqual([]);
   });
 
+  it('reads the documents of a task again when the first read failed and the board is read again', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+
+    // The person opened the task while the board was gone, so its list was never read.
+    board.fail('listDocuments', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await expect(store.loadDocuments('T1')).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(store.getState().documents['T1']).toBeUndefined();
+
+    // The stream came back and the page read the whole board (§14): what was asked for is
+    // read too, or the list stays "loading" for as long as the page is open.
+    await store.load();
+
+    expect(store.getState().documents['T1']).toEqual([]);
+  });
+
   it('notifies the page whenever the state changes, and stops when it unsubscribes', async () => {
     const board = fakeBoard();
     const store = createBoardStore(board.client);
