@@ -4,3 +4,6 @@ node_modules/
 package-lock.json
 # Working design notes keep hand-aligned code samples.
 docs/PROPOSAL.ru.md
+# Generated verbatim by renderApiDoc (test/contract/apiDoc.test.ts); prettier would reformat the
+# embedded json examples and fight the drift test.
+docs/api.md
