@@ -119,7 +119,8 @@ virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samast
 
 ## Periaatteet
 
-Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi).
+Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi). Koodin rakenne ja se, mihin uusi
+koodi kuuluu, on kuvattu tiedostossa [docs/architecture.md](docs/architecture.md) (englanniksi).
 
 ## Kehitys
 

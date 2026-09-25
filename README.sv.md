@@ -117,7 +117,8 @@ mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
 
 ## Principer
 
-Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska).
+Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska). Hur koden är uppbyggd och var ny kod
+hör hemma beskrivs i [docs/architecture.md](docs/architecture.md) (på engelska).
 
 ## Utveckling
 
