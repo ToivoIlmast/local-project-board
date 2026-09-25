@@ -1,5 +1,6 @@
 import {
   API_BASE_PATH as API,
+  DEFAULT_AI_RULES,
   errorResponseSchema,
   routeList,
   routes,
@@ -64,6 +65,22 @@ describe('GET /api/v1/instructions', () => {
     } finally {
       await custom.close();
     }
+  });
+
+  it('follows the ai.rules this board is configured with, not the built-in defaults', async () => {
+    const custom = await createTestBoard({ rules: ['Never delete a task without asking first.'] });
+    try {
+      const text = (await custom.get(`${API}/instructions`).expect(200)).text;
+      expect(text).toContain('## Rules\n\n- Never delete a task without asking first.');
+      for (const rule of DEFAULT_AI_RULES) expect(text).not.toContain(rule);
+    } finally {
+      await custom.close();
+    }
+  });
+
+  it('lists the built-in default rules when the board is not configured with its own', async () => {
+    const response = await board.get(`${API}/instructions`).expect(200);
+    for (const rule of DEFAULT_AI_RULES) expect(response.text).toContain(`- ${rule}`);
   });
 
   it('documents every route an agent may use and no route it may not', async () => {

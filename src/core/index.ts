@@ -7,6 +7,7 @@ export * from './services/reports.js';
 export * from './services/snapshot.js';
 export * from './services/tasks.js';
 export * from './model/index.js';
+export * from './rules/aiRules.js';
 export * from './rules/documentName.js';
 export * from './rules/ids.js';
 export * from './rules/rank.js';

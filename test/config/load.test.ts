@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { DEFAULT_AI_RULES } from '../../src/contract/v1/index.js';
 import { ConfigError, loadConfig } from '../../src/server/config/index.js';
 import { cleanTmpDirs, tmpDir, writeYaml } from '../support/tmp.js';
 
@@ -24,7 +25,7 @@ describe('defaults', () => {
       tasks: { idPrefix: 'T' },
       storage: { provider: 'markdown' },
       server: { port: 7432, open: true },
-      ai: { allowSourceEdits: false },
+      ai: { allowSourceEdits: false, rules: [...DEFAULT_AI_RULES] },
     });
   });
 
@@ -83,6 +84,33 @@ describe('precedence: CLI > env > board.config.yaml > user config > defaults', (
     const root = await tmpDir();
     await writeYaml(root, 'board.config.yaml', 'statuses: [todo, done]\n');
     expect((await load({ root })).statuses).toEqual(['todo', 'done']);
+  });
+
+  it('overrides ai.rules without dropping allowSourceEdits (the rest of the section)', async () => {
+    const root = await tmpDir();
+    await writeYaml(
+      root,
+      'board.config.yaml',
+      'ai:\n  rules:\n    - Never delete a task without asking first.\n',
+    );
+    const config = await load({ root });
+    expect(config.ai).toEqual({
+      allowSourceEdits: false,
+      rules: ['Never delete a task without asking first.'],
+    });
+  });
+
+  it('lets the user config set rules that board.config.yaml then replaces wholesale', async () => {
+    const root = await tmpDir();
+    const userDir = await tmpDir();
+    await writeYaml(root, 'board.config.yaml', 'ai:\n  rules: [From the project file.]\n');
+    const userConfigPath = await writeYaml(
+      userDir,
+      'config.yaml',
+      'ai:\n  rules: [From the user file.]\n',
+    );
+    const config = await load({ root, userConfigPath });
+    expect(config.ai.rules).toEqual(['From the project file.']);
   });
 
   it('reads the board shape from board.config.yaml', async () => {
@@ -162,6 +190,7 @@ describe('strict validation', () => {
     ['statuses: [todo, ""]\n', 'config.statuses.1'],
     ['storage:\n  provider: postgres\n', 'config.storage.provider'],
     ['project:\n  name: ""\n', 'config.project.name'],
+    ['ai:\n  rules: [""]\n', 'config.ai.rules.0'],
   ])('rejects %p at %s', async (yaml, path) => {
     const root = await tmpDir();
     await writeYaml(root, 'board.config.yaml', yaml);

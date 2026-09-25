@@ -1,5 +1,6 @@
 import {
   API_BASE_PATH,
+  DEFAULT_AI_RULES,
   errorResponseSchema,
   generateInstructions,
   routeList,
@@ -97,6 +98,33 @@ describe('generated AI instructions', () => {
     expect(instructions).toMatch(/before.*after|after.*before/);
     expect(instructions).toContain('task.md');
     expect(instructions).toMatch(/sandbox/i);
+  });
+
+  it('lists every default rule when none is configured (INVARIANT)', () => {
+    expect(DEFAULT_AI_RULES.length).toBeGreaterThan(0);
+    for (const rule of DEFAULT_AI_RULES) expect(instructions).toContain(`- ${rule}`);
+  });
+
+  it('uses the configured rules instead of the defaults, and only those', () => {
+    const custom = generateInstructions({
+      baseUrl: 'http://127.0.0.1:7432',
+      board: BOARD,
+      rules: ['Never delete a task without asking first.', 'Ask before changing branch.'],
+    });
+    expect(custom).toContain(
+      '## Rules\n\n- Never delete a task without asking first.\n' + '- Ask before changing branch.',
+    );
+    for (const rule of DEFAULT_AI_RULES) expect(custom).not.toContain(rule);
+  });
+
+  it('treats an empty rules list as no rules at all, rather than falling back to defaults', () => {
+    const empty = generateInstructions({
+      baseUrl: 'http://127.0.0.1:7432',
+      board: BOARD,
+      rules: [],
+    });
+    expect(empty).not.toMatch(/## Rules\n\n- /);
+    for (const rule of DEFAULT_AI_RULES) expect(empty).not.toContain(rule);
   });
 
   it('describes the error format and every code the board can answer with', () => {

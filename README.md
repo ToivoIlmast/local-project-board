@@ -70,7 +70,11 @@ statuses: [backlog, todo, in-progress, done]
 tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
-ai: { allowSourceEdits: false }
+ai:
+  allowSourceEdits: false
+  rules:
+    - Never delete a task without asking first.
+    - Ask before renaming a status.
 ```
 
 Settings are read from the flags first, then `BOARD_PORT`, `BOARD_OPEN`, `BOARD_PROJECT_NAME`,
@@ -78,6 +82,13 @@ Settings are read from the flags first, then `BOARD_PORT`, `BOARD_OPEN`, `BOARD_
 `~/.config/local-project-board/config.yaml`, then the defaults. A key that is misspelled or a
 value that is out of range stops the board with a message naming the key and where it came from.
 Removing a status that tasks still use also stops the board, rather than hiding those tasks.
+
+`ai.rules` is the "## Rules" section of the AI instructions below — what an agent must not
+violate about the mechanics of the API. The board ships with a small built-in default; setting
+`ai.rules` in either config file replaces that whole list, it does not add to it. The rules a
+board actually hands out right now are always the ones `npx local-project-board instructions`
+prints — including the built-in defaults when nothing overrides them — so this file never needs
+to repeat them.
 
 ## While it runs
 

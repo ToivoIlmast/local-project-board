@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { statusesSchema, taskIdPrefixSchema } from '../../core/model/project.js';
+import { DEFAULT_AI_RULES } from '../../core/rules/aiRules.js';
 
 /** The only storage provider in the MVP; the list is what the error message offers. */
 export const STORAGE_PROVIDERS = ['markdown'] as const;
@@ -17,7 +18,11 @@ const section = {
     /** Open the browser on start. */
     open: z.boolean(),
   }),
-  ai: z.strictObject({ allowSourceEdits: z.boolean() }),
+  ai: z.strictObject({
+    allowSourceEdits: z.boolean(),
+    /** The "## Rules" lines of the generated AI instructions; replaces the whole list. */
+    rules: z.array(z.string().min(1)),
+  }),
 };
 
 /** The validated result: every value is present, so nothing downstream deals with defaults. */
@@ -57,6 +62,6 @@ export function defaultConfig(projectName: string): AppConfig {
     tasks: { idPrefix: 'T' },
     storage: { provider: 'markdown' },
     server: { port: DEFAULT_PORT, open: true },
-    ai: { allowSourceEdits: false },
+    ai: { allowSourceEdits: false, rules: [...DEFAULT_AI_RULES] },
   };
 }
