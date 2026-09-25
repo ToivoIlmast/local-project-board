@@ -1,4 +1,4 @@
-<!-- Based on README.md @ d58910b2e27bd48f6acb1a73940915d78125d7b7 -->
+<!-- Based on README.md @ cb1c36965db8355728da3bf5fc785f1c88764714 -->
 
 # local-project-board
 
@@ -119,7 +119,8 @@ virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samast
 
 ## Periaatteet
 
-Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi).
+Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi). Koodin rakenne ja se, mihin uusi
+koodi kuuluu, on kuvattu tiedostossa [docs/architecture.md](docs/architecture.md) (englanniksi).
 
 ## Kehitys
 

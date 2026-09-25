@@ -116,7 +116,8 @@ and media type — is [docs/api.md](docs/api.md), generated from the same route 
 
 ## Principles
 
-See [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
+See [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md). How the code is laid out, and where new code
+goes, is in [docs/architecture.md](docs/architecture.md).
 
 ## Development
 

@@ -1,4 +1,4 @@
-<!-- Based on README.md @ d58910b2e27bd48f6acb1a73940915d78125d7b7 -->
+<!-- Based on README.md @ cb1c36965db8355728da3bf5fc785f1c88764714 -->
 
 # local-project-board
 
@@ -117,7 +117,8 @@ mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
 
 ## Principer
 
-Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska).
+Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska). Hur koden är uppbyggd och var ny kod
+hör hemma beskrivs i [docs/architecture.md](docs/architecture.md) (på engelska).
 
 ## Utveckling
 
