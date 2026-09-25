@@ -95,7 +95,20 @@ describe('npm package', () => {
         'package.json',
       ]),
     );
-    expect(packedFiles.filter((f) => /^(src|test|docs)\//.test(f))).toEqual([]);
+    // An allow-list, not a deny-list: whatever else lands in the tarball (`.board/`, local
+    // data, scratch files, test output) fails here instead of being published.
+    const allowed =
+      /^(bin\/|dist\/node\/|dist\/web\/|README(\.[a-z]{2})?\.md$|LICENSE$|package\.json$)/;
+    expect(packedFiles.filter((f) => !allowed.test(f))).toEqual([]);
+    expect(packedFiles.filter((f) => /\.(test|spec)\.|\.tsbuildinfo$/.test(f))).toEqual([]);
+  });
+
+  it('ships a LICENSE with a real copyright holder', () => {
+    const license = execFileSync('tar', ['-xzOf', tarball, 'package/LICENSE'], {
+      encoding: 'utf8',
+    });
+    expect(license).toMatch(/^Copyright \(c\) \d{4} \S.+$/m);
+    expect(license).not.toContain('contributors');
   });
 
   it(
@@ -122,6 +135,17 @@ describe('npm package', () => {
       await waitForOutput(child, new RegExp(`http://127\\.0\\.0\\.1:${port}/`));
 
       const base = `http://127.0.0.1:${port}`;
+      // The package that was installed is the one this repository describes.
+      const installed = JSON.parse(
+        readFileSync(
+          path.join(install, 'node_modules', 'local-project-board', 'package.json'),
+          'utf8',
+        ),
+      ) as { version: string };
+      expect(installed.version).toBe(
+        (JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string })
+          .version,
+      );
       const page = await fetch(`${base}/`);
       expect(page.status).toBe(200);
       const html = await page.text();
