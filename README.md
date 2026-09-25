@@ -135,6 +135,8 @@ The browser tests need a browser once: `npx playwright install --with-deps chrom
 | `npm run typecheck` | TypeScript |
 | `npm run format` / `npm run format:check` | Prettier |
 
+Translations (`README.fi.md`, `README.sv.md`) follow `README.md`: after a commit that changes it, update them and set their first line to `<!-- Based on README.md @ <that commit> -->` — `npm test` fails while they differ.
+
 ## License
 
 [MIT](LICENSE)
