@@ -149,7 +149,14 @@ describe('npm package', () => {
       // The installed package serves the API, and refuses a mutation without the token.
       const board = await fetch(`${base}/api/v1/project`);
       expect(board.status).toBe(200);
-      expect(await board.json()).toMatchObject({ storage: { provider: 'markdown' } });
+      const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as {
+        version: string;
+      };
+      // The version lives in package.json only; the installed board reports that one.
+      expect(await board.json()).toMatchObject({
+        storage: { provider: 'markdown' },
+        version,
+      });
 
       const refused = await fetch(`${base}/api/v1/tasks`, {
         method: 'POST',

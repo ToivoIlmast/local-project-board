@@ -1,6 +1,6 @@
 {
   "name": "local-project-board",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A personal developer board for your Git project in seconds. Local-first, AI-friendly, no ceremony.",
   "license": "MIT",
   "type": "module",
