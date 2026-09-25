@@ -19,7 +19,11 @@ export const boardEventSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({ type: z.literal('report.created'), report: reportSchema }),
   z.strictObject({ type: z.literal('report.deleted'), reportId: reportIdSchema }),
-  /** Something changed on disk outside the server; the client refetches. */
+  /**
+   * Something changed on disk; the client refetches. Mostly an edit made outside the server,
+   * but the watcher also echoes the server's own writes (ADR-0019), so it may follow, or come
+   * before, the event of a change the server made itself. Never the only sign of such a change.
+   */
   z.strictObject({ type: z.literal('board.changed') }),
 ]);
 
