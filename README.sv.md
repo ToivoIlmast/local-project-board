@@ -1,4 +1,4 @@
-<!-- Based on README.md @ uncommitted -->
+<!-- Based on README.md @ d58910b2e27bd48f6acb1a73940915d78125d7b7 -->
 
 # local-project-board
 
@@ -71,7 +71,11 @@ statuses: [backlog, todo, in-progress, done]
 tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
-ai: { allowSourceEdits: false }
+ai:
+  allowSourceEdits: false
+  rules:
+    - Ta aldrig bort en uppgift utan att fråga först.
+    - Fråga innan du byter namn på en status.
 ```
 
 Inställningarna läses först från flaggorna, sedan `BOARD_PORT`, `BOARD_OPEN`,
@@ -80,6 +84,12 @@ sedan `~/.config/local-project-board/config.yaml` och till sist standardvärdena
 nyckel eller ett värde utanför det tillåtna stoppar tavlan med ett meddelande som namnger nyckeln
 och varifrån den kom. Att ta bort en status som uppgifter fortfarande använder stoppar också
 tavlan, i stället för att dölja de uppgifterna.
+
+`ai.rules` är avsnittet "## Rules" i AI-instruktionerna nedan — det en agent inte får bryta mot
+när det gäller API:ets mekanik. Tavlan levereras med en liten inbyggd standard; sätter du `ai.rules`
+i någon av konfigurationsfilerna ersätts hela listan, den utökas inte. Reglerna som en tavla delar ut
+just nu är alltid de som `npx local-project-board instructions` skriver ut — även de inbyggda
+standardreglerna när inget åsidosätter dem — så den här filen behöver aldrig upprepa dem.
 
 ## Medan den kör
 
@@ -102,6 +112,9 @@ tavlan kör), den här tavlans statusar och varje rutt med exempel. Ge texten ti
 eller ditt eget verktyg, så kan den läsa tavlan, skapa och flytta uppgifter, skriva dokument och
 spara rapporter.
 
+Den fullständiga ruttreferensen — varje rutt, även de som den här texten utelämnar, varje felkod och
+mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
+
 ## Principer
 
 Se [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (på engelska).
@@ -122,6 +135,8 @@ Webbläsartesterna behöver en webbläsare en gång: `npx playwright install --w
 | `npm run lint` | ESLint, inklusive arkitekturregler |
 | `npm run typecheck` | TypeScript |
 | `npm run format` / `npm run format:check` | Prettier |
+
+Översättningarna (`README.fi.md`, `README.sv.md`) följer `README.md`: när en commit som ändrar den är gjord, uppdatera dem och sätt deras första rad till `<!-- Based on README.md @ <commit> -->` med den committen — `npm test` misslyckas så länge de skiljer sig åt.
 
 ## Licens
 

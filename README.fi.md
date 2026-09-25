@@ -1,4 +1,4 @@
-<!-- Based on README.md @ uncommitted -->
+<!-- Based on README.md @ d58910b2e27bd48f6acb1a73940915d78125d7b7 -->
 
 # local-project-board
 
@@ -72,7 +72,11 @@ statuses: [backlog, todo, in-progress, done]
 tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
-ai: { allowSourceEdits: false }
+ai:
+  allowSourceEdits: false
+  rules:
+    - Älä koskaan poista tehtävää kysymättä ensin.
+    - Kysy ennen tilan uudelleennimeämistä.
 ```
 
 Asetukset luetaan ensin valitsimista, sitten muuttujista `BOARD_PORT`, `BOARD_OPEN`,
@@ -81,6 +85,12 @@ Asetukset luetaan ensin valitsimista, sitten muuttujista `BOARD_PORT`, `BOARD_OP
 oletuksista. Väärin kirjoitettu avain tai sallitun ulkopuolinen arvo pysäyttää taulun viestiin,
 joka nimeää avaimen ja sen lähteen. Myös sellaisen tilan poistaminen, jota tehtävät yhä käyttävät,
 pysäyttää taulun sen sijaan että ne tehtävät piilotettaisiin.
+
+`ai.rules` on alla olevien tekoälyohjeiden osio "## Rules" — se, mitä agentin ei saa rikkoa
+API:n mekaniikassa. Taulussa on pieni sisäänrakennettu oletus; kun `ai.rules` asetetaan jommassakummassa
+asetustiedostossa, se korvaa koko listan eikä lisää siihen mitään. Säännöt, jotka taulu jakaa juuri nyt,
+ovat aina ne, jotka `npx local-project-board instructions` tulostaa — myös sisäänrakennetut oletukset,
+kun mikään ei ohita niitä — joten tämän tiedoston ei tarvitse toistaa niitä.
 
 ## Kun taulu on käynnissä
 
@@ -104,6 +114,9 @@ tulostaa kaiken, mitä agentti tarvitsee käyttääkseen taulua API:n kautta: pe
 Claudelle, ChatGPT:lle tai omalle työkalullesi, niin se voi lukea taulua, luoda ja siirtää
 tehtäviä, kirjoittaa dokumentteja ja tallentaa raportteja.
 
+Täydellinen reittiviite — jokainen reitti, myös ne, jotka tämä teksti jättää pois, sekä jokainen
+virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samasta reittitaulusta.
+
 ## Periaatteet
 
 Katso [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) (englanniksi).
@@ -124,6 +137,8 @@ Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps ch
 | `npm run lint` | ESLint, myös arkkitehtuurisäännöt |
 | `npm run typecheck` | TypeScript |
 | `npm run format` / `npm run format:check` | Prettier |
+
+Käännökset (`README.fi.md`, `README.sv.md`) seuraavat tiedostoa `README.md`: kun sitä muuttava commit on tehty, päivitä ne ja aseta niiden ensimmäiseksi riviksi `<!-- Based on README.md @ <commit> -->` kyseisellä commitilla — `npm test` epäonnistuu, niin kauan kuin ne eroavat toisistaan.
 
 ## Lisenssi
 
