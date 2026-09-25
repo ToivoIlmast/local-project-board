@@ -143,6 +143,23 @@ describe('a change made outside the server', () => {
   }, 20_000);
 });
 
+describe('the watcher next to the events of the server', () => {
+  it("may echo the server's own write first, and the event of the write still arrives", async () => {
+    board = await createTestBoard({ watch: true });
+    const created = await board.post(`${API}/tasks`, { title: 'a' }).expect(201);
+    const client = await stream();
+
+    // Longer than the watcher waits to report the write above (ADR-0019: the echo of an own
+    // write is harmless): it reaches this client before the change made next.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const renamed = await board.patch(`${API}/tasks/T1`, { title: 'b' }).expect(200);
+
+    await client.waitFor((c) => c.events.some((e) => e.type === 'task.updated'), 'task.updated');
+    expect(client.events).toContainEqual({ type: 'task.updated', task: renamed.body });
+    expect(created.body).toMatchObject({ id: 'T1' });
+  }, 20_000);
+});
+
 describe('the stream and the security boundary', () => {
   beforeEach(async () => {
     board = await createTestBoard();

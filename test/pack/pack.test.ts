@@ -176,10 +176,14 @@ describe('npm package', () => {
       expect(created.status).toBe(201);
       expect(await created.json()).toMatchObject({ id: 'T1' });
 
-      // The event stream works on the installed package too: the task just created arrives.
+      // The event stream works on the installed package too: the change made while it is open
+      // arrives, whatever else the watcher reports around it.
       const stream = await fetch(`${base}/api/v1/events`, { signal: AbortSignal.timeout(10_000) });
       expect(stream.headers.get('content-type')).toMatch(/^text\/event-stream/);
-      const frames = readFrames(stream);
+      const frames = readFrames(stream, 'task.updated');
+      // Longer than the watcher waits before it reports the write that created T1: on a slow
+      // machine that echo arrives here by itself, and it must not hide what comes after it.
+      await new Promise((resolve) => setTimeout(resolve, 200));
       await fetch(`${base}/api/v1/tasks/T1`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -248,23 +252,29 @@ function run(
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 
-/** The event types of the first frames of an SSE response, until the stream is dropped. */
-async function readFrames(response: Response): Promise<string[]> {
+/**
+ * The event types received until `until` arrives, until the stream is dropped. The frames
+ * before it are kept: the watcher echoes the board's own earlier writes as `board.changed`
+ * (ADR-0019), so the event a test waits for is not necessarily the first one to arrive.
+ */
+async function readFrames(response: Response, until: string): Promise<string[]> {
   const reader = response.body?.getReader();
   if (!reader) return [];
   const decoder = new TextDecoder();
   const types: string[] = [];
   const deadline = Date.now() + 10_000;
   let buffer = '';
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !types.includes(until)) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    for (const line of buffer.split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      types.push((JSON.parse(line.slice(6)) as { type: string }).type);
+    // Only whole frames are parsed; a frame cut in half waits for the rest of its bytes.
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() ?? '';
+    for (const frame of frames) {
+      const data = frame.split('\n').find((line) => line.startsWith('data: '));
+      if (data) types.push((JSON.parse(data.slice(6)) as { type: string }).type);
     }
-    if (types.length > 0) break;
   }
   await reader.cancel();
   return types;
