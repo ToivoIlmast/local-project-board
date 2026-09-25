@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { columnsOf } from '../../../api/index';
 import type { Project, Task } from '../../../../contract/v1/index';
 import { EmptyState } from '../../../shared/ui/index';
@@ -35,29 +35,42 @@ export function Board({
 }: BoardProps) {
   const { columns, orphans } = useMemo(() => columnsOf(project, tasks), [project, tasks]);
 
-  const move = (id: string, status: string, index: number): void => {
+  /** Whether a move was sent: a drop that changes nothing is not a change, so nothing is. */
+  const move = (id: string, status: string, index: number): boolean => {
     const column = columns.find((candidate) => candidate.status === status);
     const task = tasks.find((candidate) => candidate.id === id);
-    if (!column || !task) return;
+    if (!column || !task) return false;
     const intent = intentFor(column.tasks, id, index, status);
-    // A drop that changes nothing is not a change: the board is not written to for nothing.
-    if (isNoop(task, column.tasks, intent)) return;
+    if (isNoop(task, column.tasks, intent)) return false;
     onMove(id, intent);
+    return true;
   };
 
   const { drag, onPointerDown, registerColumn } = useDrag({ onDrop: move });
+
+  // A card moved from its menu lands somewhere else in the DOM, and the button that was
+  // focused goes with the old place. Once the board has settled, the focus follows the card.
+  const followedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = followedRef.current;
+    if (id === null || busy.includes(id)) return;
+    followedRef.current = null;
+    document.querySelector<HTMLElement>(`[data-task-id="${CSS.escape(id)}"] .card__title`)?.focus();
+  }, [busy, tasks]);
 
   const nudge = (id: string, direction: -1 | 1): void => {
     const task = tasks.find((candidate) => candidate.id === id);
     const column = columns.find((candidate) => candidate.status === task?.status);
     if (!task || !column) return;
     const index = column.tasks.findIndex((candidate) => candidate.id === id) + direction;
-    move(id, task.status, Math.max(0, Math.min(index, column.tasks.length - 1)));
+    if (move(id, task.status, Math.max(0, Math.min(index, column.tasks.length - 1)))) {
+      followedRef.current = id;
+    }
   };
 
   const moveTo = (id: string, status: string): void => {
     const column = columns.find((candidate) => candidate.status === status);
-    move(id, status, column?.tasks.length ?? 0);
+    if (move(id, status, column?.tasks.length ?? 0)) followedRef.current = id;
   };
 
   return (

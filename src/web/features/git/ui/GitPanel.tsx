@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { GitCommit } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { formatDate } from '../../../shared/lib/format';
-import { Badge, Button, EmptyState, Spinner, Text } from '../../../shared/ui/index';
+import { Badge, Button, EmptyState, Panel, Spinner, Text } from '../../../shared/ui/index';
 
 export interface GitPanelProps {
   onClose: () => void;
@@ -37,7 +37,7 @@ export function GitPanel({ onClose }: GitPanelProps) {
   };
 
   return (
-    <aside className="panel" aria-label="Git">
+    <Panel label="Git">
       <header className="panel__head">
         <h2 className="panel__title">Git</h2>
         <Button size="small" onClick={onClose}>
@@ -80,7 +80,9 @@ export function GitPanel({ onClose }: GitPanelProps) {
           {diff === null ? null : (
             <section className="git__diff" aria-label={`Diff of ${diff.path}`}>
               <h3 className="git__section">{diff.path}</h3>
-              <pre className="git__diff-text">{diff.text === '' ? 'No changes.' : diff.text}</pre>
+              <pre className="git__diff-text" tabIndex={0} role="region" aria-label="Diff text">
+                {diff.text === '' ? 'No changes.' : diff.text}
+              </pre>
               {diff.truncated ? <Text tone="muted">The diff was cut off.</Text> : null}
             </section>
           )}
@@ -105,6 +107,6 @@ export function GitPanel({ onClose }: GitPanelProps) {
           )}
         </>
       )}
-    </aside>
+    </Panel>
   );
 }

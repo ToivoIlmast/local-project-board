@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useBoard } from '../api/react';
 import { useCopyToClipboard } from '../shared/hooks/useCopyToClipboard';
-import { Button, ErrorState, Spinner, Text } from '../shared/ui/index';
+import { Button, ErrorState, Panel, Spinner, Text } from '../shared/ui/index';
 
 export interface InstructionsPanelProps {
   onClose: () => void;
@@ -30,7 +30,7 @@ export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
   }, [client]);
 
   return (
-    <aside className="panel" aria-label="AI instructions">
+    <Panel label="AI instructions">
       <header className="panel__head">
         <h2 className="panel__title">AI instructions</h2>
         <Button size="small" onClick={onClose}>
@@ -54,9 +54,11 @@ export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
               {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
             </Button>
           </div>
-          <pre className="instructions">{text}</pre>
+          <pre className="instructions" tabIndex={0} role="region" aria-label="Instructions text">
+            {text}
+          </pre>
         </>
       )}
-    </aside>
+    </Panel>
   );
 }

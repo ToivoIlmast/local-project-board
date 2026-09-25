@@ -11,7 +11,14 @@ export interface MarkdownProps {
 export function Markdown({ children }: MarkdownProps) {
   return (
     <div className="markdown">
-      <ReactMarkdown>{children}</ReactMarkdown>
+      <ReactMarkdown
+        components={{
+          // A code block can be wider than the panel; a keyboard has to be able to scroll it.
+          pre: ({ node: _node, ...props }) => <pre tabIndex={0} {...props} />,
+        }}
+      >
+        {children}
+      </ReactMarkdown>
     </div>
   );
 }

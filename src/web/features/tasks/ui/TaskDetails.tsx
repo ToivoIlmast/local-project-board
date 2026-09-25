@@ -3,7 +3,7 @@ import type { Task } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { formatDate } from '../../../shared/lib/format';
 import { Markdown } from '../../../shared/lib/Markdown';
-import { Badge, Button, Field, Select, Text } from '../../../shared/ui/index';
+import { Badge, Button, Field, Panel, Select, Text } from '../../../shared/ui/index';
 import { TaskDocuments } from '../../documents/index';
 
 export interface TaskDetailsProps {
@@ -20,7 +20,7 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
   const setStatus = useAsyncAction((status: string) => store.updateTask(task.id, { status }));
 
   return (
-    <aside className="panel" aria-label={`Task ${task.id}`}>
+    <Panel label={`Task ${task.id}`}>
       <header className="panel__head">
         <h2 className="panel__title">{task.title}</h2>
         <Button size="small" onClick={onClose}>
@@ -75,6 +75,6 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       </div>
 
       <TaskDocuments taskId={task.id} />
-    </aside>
+    </Panel>
   );
 }
