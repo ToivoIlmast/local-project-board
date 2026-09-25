@@ -170,6 +170,60 @@ test('the whole board can be used with the keyboard alone, and the focus is neve
   expect(tasks.map((task) => task.id)).toEqual(['T1']);
 });
 
+test('a read of the board that began before a move does not take the focus from the moved card', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Seed', status: 'todo' } });
+  await page.goto(board.url);
+  await expect(page.getByRole('region', { name: /^todo \(1\)/ })).toBeVisible();
+
+  // The page reads the whole board again after every write, and it has the answer only once
+  // git has answered too. Hold git open: a read that began before the move is then still
+  // open when the move is done, as on a runner where `git status` is slow.
+  let held = 0;
+  let answered = 0;
+  let reading!: () => void;
+  const started = new Promise<void>((resolve) => (reading = resolve));
+  let release!: () => void;
+  const open = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/v1/git/status', async (route) => {
+    held += 1;
+    reading();
+    await open;
+    await route.continue();
+  });
+  page.on('response', (response) => {
+    if (response.url().endsWith('/api/v1/git/status')) answered += 1;
+  });
+
+  // An agent adds a card, and the read that follows sees it in "todo".
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Made by an agent', status: 'todo' },
+  });
+  await started;
+  await expect(page.getByRole('region', { name: /^todo \(2\)/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Actions for T2' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Move to done' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('region', { name: /^done \(1\)/ })).toBeVisible();
+  await expect(page.locator('[data-task-id="T2"] .card__title')).toBeFocused();
+
+  // The old read now finishes. What it saw is older than what the move told the page, so it
+  // must not put the card back, and the card the person is on must stay where the focus is.
+  release();
+  await expect.poll(() => held - answered).toBe(0);
+  // Two frames: whatever the answer changed has been drawn.
+  await page.evaluate(
+    'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))',
+  );
+  await expect(page.getByRole('region', { name: /^done \(1\)/ })).toBeVisible();
+  await expect(page.locator('[data-task-id="T2"] .card__title')).toBeFocused();
+});
+
 test('what an agent does to the board does not take the focus out of a form', async ({
   page,
   board,
