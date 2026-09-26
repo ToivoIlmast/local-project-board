@@ -1,4 +1,4 @@
-<!-- Based on README.md @ cb1c36965db8355728da3bf5fc785f1c88764714 -->
+<!-- Based on README.md @ c27751963a16197a42ea305ce499057bfb35e9dd -->
 
 # local-project-board
 
@@ -124,18 +124,18 @@ hör hemma beskrivs i [docs/architecture.md](docs/architecture.md) (på engelska
 
 Kräver Node.js >= 22.12.0.
 
-| Kommando           | Vad det gör                                     |
-| ------------------ | ----------------------------------------------- |
-| `npm install`      | Installerar beroenden                           |
-| `npm run build`    | Bygger servern och användargränssnittet         |
-| `npm test`         | Jest-tester (servern och sidan)                 |
-| `npm run test:e2e` | Playwright mot en tavla som startats på riktigt |
+| Kommando                                  | Vad det gör                                     |
+| ----------------------------------------- | ----------------------------------------------- |
+| `npm install`                             | Installerar beroenden                           |
+| `npm run build`                           | Bygger servern och användargränssnittet         |
+| `npm test`                                | Jest-tester (servern och sidan)                 |
+| `npm run test:e2e`                        | Playwright mot en tavla som startats på riktigt |
+| `npm run test:pack`                       | Bygger npm-paketet, installerar och startar det |
+| `npm run lint`                            | ESLint, inklusive arkitekturregler              |
+| `npm run typecheck`                       | TypeScript                                      |
+| `npm run format` / `npm run format:check` | Prettier                                        |
 
 Webbläsartesterna behöver en webbläsare en gång: `npx playwright install --with-deps chromium`.
-| `npm run test:pack` | Bygger npm-paketet, installerar och startar det |
-| `npm run lint` | ESLint, inklusive arkitekturregler |
-| `npm run typecheck` | TypeScript |
-| `npm run format` / `npm run format:check` | Prettier |
 
 Översättningarna (`README.fi.md`, `README.sv.md`) följer `README.md`: när en commit som ändrar den är gjord, uppdatera dem och sätt deras första rad till `<!-- Based on README.md @ <commit> -->` med den committen — `npm test` misslyckas så länge de skiljer sig åt.
 

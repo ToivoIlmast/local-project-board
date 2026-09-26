@@ -1,4 +1,4 @@
-<!-- Based on README.md @ cb1c36965db8355728da3bf5fc785f1c88764714 -->
+<!-- Based on README.md @ c27751963a16197a42ea305ce499057bfb35e9dd -->
 
 # local-project-board
 
@@ -126,18 +126,18 @@ koodi kuuluu, on kuvattu tiedostossa [docs/architecture.md](docs/architecture.md
 
 Vaatii Node.js >= 22.12.0.
 
-| Komento            | Mitä se tekee                                   |
-| ------------------ | ----------------------------------------------- |
-| `npm install`      | Asentaa riippuvuudet                            |
-| `npm run build`    | Kääntää palvelimen ja käyttöliittymän           |
-| `npm test`         | Jest-testit (palvelin ja sivu)                  |
-| `npm run test:e2e` | Playwright oikeasti käynnistettyä taulua vasten |
+| Komento                                   | Mitä se tekee                                       |
+| ----------------------------------------- | --------------------------------------------------- |
+| `npm install`                             | Asentaa riippuvuudet                                |
+| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän               |
+| `npm test`                                | Jest-testit (palvelin ja sivu)                      |
+| `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten     |
+| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
+| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                   |
+| `npm run typecheck`                       | TypeScript                                          |
+| `npm run format` / `npm run format:check` | Prettier                                            |
 
 Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps chromium`.
-| `npm run test:pack` | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
-| `npm run lint` | ESLint, myös arkkitehtuurisäännöt |
-| `npm run typecheck` | TypeScript |
-| `npm run format` / `npm run format:check` | Prettier |
 
 Käännökset (`README.fi.md`, `README.sv.md`) seuraavat tiedostoa `README.md`: kun sitä muuttava commit on tehty, päivitä ne ja aseta niiden ensimmäiseksi riviksi `<!-- Based on README.md @ <commit> -->` kyseisellä commitilla — `npm test` epäonnistuu, niin kauan kuin ne eroavat toisistaan.
 

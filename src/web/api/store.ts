@@ -142,6 +142,9 @@ function replaceById(tasks: Task[], task: Task): Task[] {
   return tasks.map((candidate, at) => (at === index ? task : candidate));
 }
 
+/** How many times a read of the board is repeated because it was overtaken by a change. */
+const READ_ATTEMPTS = 3;
+
 export interface BoardStore {
   getState(): BoardState;
   subscribe(listener: () => void): () => void;
@@ -173,7 +176,46 @@ export function createBoardStore(client: BoardClient): BoardStore {
     for (const listener of [...listeners]) listener();
   };
 
-  const apply = (event: BoardEvent): void => set((current) => applyEvent(current, event));
+  /**
+   * The tasks whose documents the page has asked for, including the ones whose read failed:
+   * a list that was never read is in no other record, and would otherwise never be tried again.
+   */
+  const wanted = new Set<string>();
+
+  /**
+   * How many things the server has told this store since it was made. A read of the whole
+   * board is a photograph taken at one moment; this is how it finds out it was taken before
+   * something the store has since been told, and so must not be put on the page.
+   */
+  let told = 0;
+
+  const apply = (event: BoardEvent): void => {
+    told += 1;
+    if (event.type === 'task.deleted') wanted.delete(event.taskId);
+    set((current) => applyEvent(current, event));
+  };
+
+  /**
+   * The whole board as the server has it now. A change the store was told of while this was
+   * being read is newer than the photograph (a move that was answered while `git status`
+   * was still running, say), so the photograph is taken again rather than shown: showing it
+   * would put the card back where it was, and the person's focus with it. A few tries, then
+   * what was read is used: every write makes the server publish `board.changed`, so a page
+   * that could not catch up here is read again anyway.
+   */
+  async function readBoard(): Promise<Pick<BoardState, 'project' | 'tasks' | 'reports' | 'git'>> {
+    for (let attempt = 1; ; attempt += 1) {
+      const before = told;
+      const [project, tasks, reports] = await Promise.all([
+        client.project(),
+        client.listTasks(),
+        client.listReports(),
+      ]);
+      // Git is context, not the board: a repository that cannot be read hides nothing else.
+      const git = await client.gitStatus().catch(() => undefined);
+      if (told === before || attempt === READ_ATTEMPTS) return { project, tasks, reports, git };
+    }
+  }
 
   async function busy<T>(id: string, run: () => Promise<T>): Promise<T> {
     set((current) => ({ ...current, busy: [...current.busy, id] }));
@@ -199,13 +241,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
         error: undefined,
       }));
       try {
-        const [project, tasks, reports] = await Promise.all([
-          client.project(),
-          client.listTasks(),
-          client.listReports(),
-        ]);
-        // Git is context, not the board: a repository that cannot be read hides nothing else.
-        const git = await client.gitStatus().catch(() => undefined);
+        const { project, tasks, reports, git } = await readBoard();
         set((current) => ({
           ...current,
           phase: 'ready',
@@ -226,10 +262,9 @@ export function createBoardStore(client: BoardClient): BoardStore {
         }));
         return;
       }
-      // Whatever was open keeps its documents fresh after a full re-read.
-      await Promise.all(
-        Object.keys(state.documents).map((id) => store.loadDocuments(id).catch(() => undefined)),
-      );
+      // Whatever was open keeps its documents fresh after a full re-read, and so does what was
+      // opened while the board was not answering: its first read failed, this is the retry.
+      await Promise.all([...wanted].map((id) => store.loadDocuments(id).catch(() => undefined)));
     },
 
     async createTask(input) {
@@ -259,6 +294,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
       }),
 
     async loadDocuments(taskId) {
+      wanted.add(taskId);
       const documents = await client.listDocuments(taskId);
       set((current) => ({ ...current, documents: { ...current.documents, [taskId]: documents } }));
     },

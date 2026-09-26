@@ -299,6 +299,28 @@ describe('the store', () => {
     expect(board.calls).toEqual(expect.arrayContaining(['project', 'listTasks', 'listReports']));
   });
 
+  it('does not put back what a read that began before a change had seen (INVARIANT)', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1', status: 'todo' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.calls.length = 0;
+    // The read has the task in "todo" and waits for git, as a slow `git status` makes it.
+    const release = board.hold('gitStatus');
+    const reading = store.load();
+    while (!board.calls.includes('gitStatus')) await Promise.resolve();
+
+    await store.moveTask('T1', { status: 'done' });
+    const shown: string[] = [];
+    store.subscribe(() => shown.push(store.getState().tasks[0]?.status ?? 'gone'));
+    release();
+    await reading;
+
+    // The move is what the board said last; the older answer must not show, not even for a
+    // moment, or the card is taken out of the page and the focus goes with it.
+    expect(shown).not.toContain('todo');
+    expect(store.getState().tasks[0]?.status).toBe('done');
+  });
+
   it('reads the documents of a task once and keeps them live', async () => {
     const board = fakeBoard({ tasks: [aTask({ id: 'T1' })] });
     const store = createBoardStore(board.client);
@@ -312,6 +334,23 @@ describe('the store', () => {
     expect(store.getState().documents['T1']?.map((d) => d.name)).toEqual(['plan.md']);
 
     await store.deleteDocument('T1', 'plan.md');
+    expect(store.getState().documents['T1']).toEqual([]);
+  });
+
+  it('reads the documents of a task again when the first read failed and the board is read again', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+
+    // The person opened the task while the board was gone, so its list was never read.
+    board.fail('listDocuments', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await expect(store.loadDocuments('T1')).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(store.getState().documents['T1']).toBeUndefined();
+
+    // The stream came back and the page read the whole board (§14): what was asked for is
+    // read too, or the list stays "loading" for as long as the page is open.
+    await store.load();
+
     expect(store.getState().documents['T1']).toEqual([]);
   });
 
