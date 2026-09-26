@@ -156,6 +156,42 @@ Three things describe what an agent does, and each has one place:
 config that still has it stops the board with an issue that names `editCode` and
 `.board/workflow.yaml`, like any other invalid key (ADR-0021); it is not silently ignored.
 
+## The Settings panel (T17)
+
+The page for the board's and the columns' settings reads and writes only what the API of T14
+does; there is no second model and nothing is stored in the browser.
+
+- **One more panel, no router.** `?panel=settings` beside `reports`, `git` and `instructions`
+  (ADR-0025: what the page looks at lives in the address). One form, one button, one
+  `PUT /workflow` with both sections whole.
+- **The form edits overrides, never effective values.** Its draft has the shape of the request.
+  What is in effect, and where it comes from, is computed for display from the `defaults` of the
+  answer with the rule `resolveWorkflow` uses; a test compares the two for every combination, so
+  the page cannot drift from the function. Consequences: a board checkbox that only repeats the
+  default is not stored (put back where it was, the form is clean again); "same as the board"
+  removes the key from the column, and a column left empty is not sent; a blank text is no
+  override; an explicit `null` that was in the file and was not touched is sent back as it was.
+  A column only has the six flags — the board-only keys are not offered there, and the request
+  has no `defaults`.
+- **Dependent settings are shown, not repaired.** With `editCode` off (on the board, or in a
+  column, from what that column has in effect) `branch`, `checks`, `commit` and `push` stay
+  editable and keep their values; they are marked as unused, in words and by a dashed rule, not
+  by colour or opacity alone.
+- **The form does not lose what is being typed.** A `workflow.updated` or a re-read of the board
+  (`board.changed`) is taken silently by a form with nothing unsaved. A form with changes keeps
+  them and says that the settings changed elsewhere, with a button to load the new ones;
+  saving then replaces the other change (last-write-wins, ADR-0018). The answer to the form's
+  own request is recognised as its own. Nothing is applied before the board has answered
+  (ADR-0025).
+- **A status that is gone is shown.** A column, `startStatus` or `finishStatus` naming a status
+  the board does not have is listed as a warning and kept in the form; the board refuses to save
+  it (422 `UNKNOWN_STATUS`, message shown in the form), so the person removes it or picks a
+  status.
+- **Not here:** a task's own overrides (T18) and `ai.rules`, which is configuration (ADR-0021,
+  "Rules of the agent"), not stored by the server and not part of the API; the panel only says
+  where it lives. The words of every setting are `WORKFLOW_LABELS` in the feature, for T18 to
+  reuse.
+
 ## Consequences
 
 - The first task of the chain is small: model, rule, port, provider. The API (T14), the handoff

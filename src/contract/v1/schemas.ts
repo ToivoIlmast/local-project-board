@@ -26,6 +26,7 @@ export {
   workflowOverridesSchema,
   workflowStateSchema,
 } from '../../core/model/index.js';
+export { BOARD_WORKFLOW_KEYS, WORKFLOW_FLAGS, WORKFLOW_KEYS } from '../../core/model/index.js';
 export { boardEventSchema } from '../../core/events.js';
 
 /**
@@ -43,6 +44,10 @@ export type {
   Project,
   Report,
   Task,
+  BoardWorkflowKey,
+  BoardWorkflowOverrides,
+  WorkflowFlag,
+  WorkflowKey,
   WorkflowFlagOverrides,
   WorkflowOverrides,
   WorkflowSettings,
