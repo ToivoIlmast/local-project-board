@@ -26,6 +26,8 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      # Exits 1 when src/ has a dependency cycle (dep-health.config.json sets the gate).
+      - run: npm run check:cycles
       - run: npm test
       - name: Build and package smoke test
         run: npm run test:pack
