@@ -24,7 +24,7 @@ written atomically.
   value ("no status change", "the repository's main branch", "the project's own pipeline"),
   not a missing key.
 - **Only overrides are stored; the effective settings never are.** The defaults are a constant
-  in `core/rules/workflow.ts` (`DEFAULT_WORKFLOW`, like `DEFAULT_AI_RULES`). The board's and the
+  in `core/rules/workflow.ts` (`DEFAULT_WORKFLOW`). The board's and the
   columns' overrides are in `.board/workflow.yaml`; a task's are in the optional `workflow:`
   field of its `task.md` frontmatter. Each holds only the keys somebody set.
 - **One pure function computes the result.** `resolveWorkflow(defaults, board, status, task)`
