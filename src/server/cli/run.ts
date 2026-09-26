@@ -1,6 +1,7 @@
 import { parseCliArgs, USAGE, UsageError } from './args.js';
 import { resolveBoard } from './board.js';
 import { exportBoard } from './export.js';
+import { printHandoff } from './handoff.js';
 import { printInstructions } from './instructions.js';
 import { openBrowser as spawnBrowser } from './openBrowser.js';
 import { startBoard } from './serve.js';
@@ -37,6 +38,10 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
     switch (args.command) {
       case 'instructions':
         await printInstructions(board, environment.write);
+        return { exitCode: 0 };
+      case 'handoff':
+        // The command line parser does not let a handoff without an id get this far.
+        await printHandoff(board, args.id as string, environment.write);
         return { exitCode: 0 };
       case 'export':
         await exportBoard(board, { out: args.out, write: environment.write });

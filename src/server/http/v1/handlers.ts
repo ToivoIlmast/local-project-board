@@ -1,13 +1,16 @@
 import {
   generateInstructions,
+  type BoardFacts,
   type BodyOf,
   type ParamsOf,
   type QueryOf,
   type ResponseOf,
   type RouteId,
 } from '../../../contract/v1/index.js';
+import type { Project } from '../../../core/index.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
+import { composeHandoff } from './handoff.js';
 
 /** A body that is text rather than JSON; the media type depends on the file, not the route. */
 export interface TextBody {
@@ -44,6 +47,13 @@ export type Handlers = { [K in Exclude<RouteId, 'events.stream'>]: RouteHandler<
 
 const deleted = { deleted: true } as const;
 
+/** What the instructions and the handoff say about the board itself. */
+const boardFacts = (project: Project): BoardFacts => ({
+  name: project.name,
+  statuses: project.statuses,
+  idPrefix: project.idPrefix,
+});
+
 export const handlers: Handlers = {
   'project.get': (context) => context.project.read(),
   'session.get': (context) => Promise.resolve({ token: context.session.token }),
@@ -56,11 +66,7 @@ export const handlers: Handlers = {
       text: generateInstructions({
         baseUrl: context.session.baseUrl,
         token: context.session.token,
-        board: {
-          name: project.name,
-          statuses: project.statuses,
-          idPrefix: project.idPrefix,
-        },
+        board: boardFacts(project),
         rules: context.ai.rules,
       }),
       media: 'text/markdown',
@@ -78,6 +84,17 @@ export const handlers: Handlers = {
   },
 
   'tasks.workflow': (context, { params }) => context.workflow.forTask(params.id),
+
+  // One text for one task, generated on every request from what the services read now and
+  // kept nowhere. It carries the live URL but never the token: whoever needs one asks for it.
+  'tasks.handoff': async (context, { params }) => ({
+    text: await composeHandoff(context, params.id, {
+      baseUrl: context.session.baseUrl,
+      board: boardFacts(await context.project.read()),
+      rules: context.ai.rules,
+    }),
+    media: 'text/markdown',
+  }),
 
   'workflow.get': (context) => context.workflow.read(),
   'workflow.update': (context, { body }) => context.workflow.replace(body),

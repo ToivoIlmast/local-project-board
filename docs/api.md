@@ -292,6 +292,36 @@ Response — 200, application/json:
 }
 ```
 
+### GET /api/v1/tasks/:id/handoff
+
+Read a task with the steps its settings call for and these instructions, as one text
+
+Given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/handoff
+
+Response — 200, text/markdown:
+
+```
+# Task T12: Extract the git adapter
+
+- Status: `in-progress`
+
+## Description
+
+## Context
+
+The status parser still lives in the HTTP layer.
+
+## Documents
+
+No documents are attached to this task yet.
+
+## How to work on this task
+
+1. You may change the files of the project. _(source: default)_
+```
+
 ## AI workflow
 
 ### GET /api/v1/workflow

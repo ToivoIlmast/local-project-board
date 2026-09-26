@@ -29,6 +29,19 @@ describe('the command line', () => {
     });
   });
 
+  it('takes a task id for the handoff command, and only there (T15)', () => {
+    expect(parseCliArgs(['handoff', 'T15'])).toEqual({ command: 'handoff', id: 'T15' });
+    // The id is passed on as it was written: whether such a task exists is for the board.
+    expect(parseCliArgs(['handoff', 'banana'])).toEqual({ command: 'handoff', id: 'banana' });
+    expect(() => parseCliArgs(['handoff'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['handoff'])).toThrow(/id of a task/);
+    expect(() => parseCliArgs(['handoff', 'T1', 'T2'])).toThrow('Unexpected argument: T2');
+    expect(() => parseCliArgs(['instructions', 'T1'])).toThrow('Unexpected argument: T1');
+    expect(() => parseCliArgs(['export', 'T1'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['handoff', 'T1', '--port', '8080'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['handoff', 'T1', '--out', 'x'])).toThrow(/export/);
+  });
+
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });
@@ -54,7 +67,14 @@ describe('the command line', () => {
 
   it('describes every command it takes in the usage text', () => {
     const usage = new UsageError('x').usage;
-    for (const word of ['local-project-board', 'instructions', 'export', '--port', '--no-open']) {
+    for (const word of [
+      'local-project-board',
+      'instructions',
+      'handoff <id>',
+      'export',
+      '--port',
+      '--no-open',
+    ]) {
       expect(usage).toContain(word);
     }
     expect(usage).not.toContain('--host');

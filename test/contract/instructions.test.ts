@@ -57,6 +57,31 @@ describe('generated AI instructions', () => {
     expect(instructions).not.toContain(`### PUT ${API_BASE_PATH}/workflow`);
   });
 
+  it('tells an agent to read the handoff of a task before it starts, and repeats none of its steps (INVARIANT)', () => {
+    expect(instructions).toContain(`### GET ${API_BASE_PATH}/tasks/:id/handoff`);
+    expect(instructions).toContain('## Working on a task');
+    const section = /## Working on a task\n([\s\S]*?)\n## /.exec(instructions)?.[1] ?? '';
+
+    expect(section).toContain(`GET http://127.0.0.1:7432${API_BASE_PATH}/tasks/<id>/handoff`);
+    // What to do is decided per task by its settings, so it is not said here at all.
+    expect(section).not.toMatch(/branch|commit|push|checks|report|merge/i);
+  });
+
+  it('says the same about working on a task whatever the rules are: it is not a rule (INVARIANT)', () => {
+    const custom = generateInstructions({
+      baseUrl: 'http://127.0.0.1:7432',
+      board: BOARD,
+      rules: ['Ask before renaming a task.'],
+    });
+    const empty = generateInstructions({
+      baseUrl: 'http://127.0.0.1:7432',
+      board: BOARD,
+      rules: [],
+    });
+
+    for (const text of [custom, empty]) expect(text).toContain('## Working on a task');
+  });
+
   it('never tells an agent to read the instructions it is already reading', () => {
     expect(instructions).not.toContain(routes['instructions.get'].path);
   });

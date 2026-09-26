@@ -87,6 +87,47 @@ second model, and only overrides are ever accepted.
   `PUT /workflow` is not — it is the Settings page's request, and an agent should not rewrite
   the rules it works under in one call. It can still be made; the token allows it.
 
+## Handoff (T15)
+
+An agent gets one text for one task, and it is generated: nothing about how to work is written
+by hand into a task any more, and there is no second set of rules next to the settings.
+
+- `GET /tasks/:id/handoff` answers markdown (`ai.include: true`, read without a token, 404
+  `TASK_NOT_FOUND` for a task that is not there). `local-project-board handoff <id>` prints the
+  same text — from the running board, or, when there is none, composed from the files of the
+  board. Both go through one function, `composeHandoff`, so the two cannot differ.
+- The text is: the task (id, title, status, labels, branch, body), its documents, the section
+  "How to work on this task", and then the general instructions of the board **without a
+  token** — the agent asks `GET /session` for one, as those instructions already say. The
+  handoff is generated on every request from what the services read, is the same for the same
+  state of the board, and is stored nowhere.
+- **The settings reach the text through one function.** `renderWorkflowSteps(effective, facts)`
+  is the only place in the board that says anything about how to work. It is given the
+  `EffectiveWorkflow` that `WorkflowService.forTask` computes with `resolveWorkflow` — the same
+  answer as `GET /tasks/:id/workflow` — and works out nothing itself: not a value, not a
+  source. There is one step for each setting and a text for each of its values; a setting that
+  is off is an explicit prohibition ("Do not push"), never silence, so that `push: false` cannot
+  be read as permission. While `editCode` is off, `branch`, `checks`, `commit` and `push` are
+  each an explicit "do not", whatever their value is (the `inactive` list of T13), and
+  `editCode: false` says that no project file is to be changed and where the result goes.
+  `baseBranch` and `checkCommand` are parameters of the branch and checks steps, not steps of
+  their own (`WORKFLOW_STEP_PARAMETERS`); the steps are typed per key, so a setting added to
+  the model without a text does not compile.
+- Each step names where its value came from: the default, the board, the column the task is in,
+  or the task itself — the `sources` that T13 already returns; there is no second bookkeeping
+  of origins.
+- The rules that are not settings are the last steps, always: never merge, never write the
+  token into a file, a task, a document or a report, stop and wait for the review. That the
+  branch is not committed to is part of the branch step, because it only holds when there is one.
+- `GET /instructions` gets a short section, "Working on a task": read the handoff before
+  starting. It repeats no step. `ai.rules` is untouched (T16).
+- **Branch name.** `taskBranchName(id, title)` in `core/rules` is `task/<ID>-<slug>`. The slug
+  is the Latin words of the title, lower-cased, at most 40 characters cut at a word; accents are
+  dropped and no other script is transliterated, so a Cyrillic title gives only its Latin words
+  and a title without any gives `task/<ID>`. A branch the task already records is used instead.
+- **Language.** The text is English, like the rest of the instructions; the body of the task is
+  copied as it was written. The two are not mixed by translating anything.
+
 ## Consequences
 
 - The first task of the chain is small: model, rule, port, provider. The API (T14), the handoff
