@@ -1,4 +1,4 @@
-<!-- Based on README.md @ c41cd88979d22f34397c04b7c8d70447644dda7b -->
+<!-- Based on README.md @ ad52a0d2dae16ea3784281585f09ea7d7c248cb4 -->
 
 # local-project-board
 
@@ -29,6 +29,7 @@ koneen ulkopuolelle.
 | -------------------------------------- | ------------------------------------------------------------------ |
 | `npx local-project-board`              | Käynnistää taulun                                                  |
 | `npx local-project-board instructions` | Tulostaa API-ohjeet tekoälyagentille annettavaksi                  |
+| `npx local-project-board claude <ID>`  | Käynnistää Claude Coden tehtävään tässä terminaalissa              |
 | `npx local-project-board export`       | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen) |
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
@@ -62,7 +63,8 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
 - **Lähetä tekoälylle.** Tehtävässä tai sen kortin valikossa yksi valinta kopioi handoffin —
   tehtävän, sen dokumentit ja asetusten edellyttämät vaiheet — valmiina liitettäväksi mille
   tahansa agentille. Siinä ei ole tokenia. `npx local-project-board handoff <ID>` tulostaa saman
-  tekstin.
+  tekstin. Toinen valinta, **Claude Code — kopioi komento**, kopioi yhden rivin, joka käynnistää
+  Claude Coden kyseiseen tehtävään; katso [Claude Code](#claude-code).
 
 Tiedostot, joita taulu ei osaa lukea, näkyvät juuri sellaisina sarakkeiden yläpuolella — eivät
 koskaan tehtävinä, joiden arvot on keksitty.
@@ -134,6 +136,38 @@ tehtäviä, kirjoittaa dokumentteja ja tallentaa raportteja.
 
 Täydellinen reittiviite — jokainen reitti, myös ne, jotka tämä teksti jättää pois, sekä jokainen
 virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samasta reittitaulusta.
+
+## Claude Code
+
+```bash
+npx local-project-board claude T13
+```
+
+käynnistää Claude Coden tehtävään `T13` siinä terminaalissa, johon komennon kirjoitit, ja projektin
+juuressa: taululta kysytään, onko tehtävä olemassa, ja `claude` käynnistetään yhdellä lyhyellä
+kehotteella, joka osoittaa tehtävän elävään handoffiin (`GET /api/v1/tasks/T13/handoff`). Claude
+lukee sen itse, joten se näkee asetukset aina sellaisina kuin ne ovat nyt, ja noudattaa sen
+vaiheita: haara, työ, tarkistukset, commit, `report.md`. Komento päättyy istunnon poistumiskoodiin.
+
+Selaimessa **Lähetä tekoälylle → Claude Code — kopioi komento** laittaa saman käynnistyksen
+leikepöydälle:
+`claude "Work on task T13 of the local board: read GET http://127.0.0.1:7432/api/v1/tasks/T13/handoff and follow it."`.
+Liitä se projektin terminaaliin.
+
+Hyvä tietää:
+
+- Taulun on oltava käynnissä (`npx local-project-board`, toisessa terminaalissa) ja `claude`:n
+  PATHissa. Muuten komento kertoo, kumpi puuttuu, eikä käynnistä mitään.
+- Taulu ei koskaan käynnistä `claude`a itse: ohjelmia ajava palvelin tekisi tokenistaan oikeuden
+  suorittaa koodia koneellasi, eikä sillä ole terminaalia interaktiiviselle ohjelmalle
+  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)).
+- Malli, käyttöoikeustila ja muu ovat omia Claude Code -asetuksiasi; taulu ei välitä mitään.
+  Kehotteessa tai argumenteissa ei ole tokenia.
+- Clauden on tehtävä HTTP-pyyntöjä osoitteeseen `127.0.0.1` — se käyttää `curl`ia Bash-työkalunsa
+  kautta — ja Claude Code kysyy siihen oletuksena luvan. Salli `Bash(curl *)` istunnolle tai omissa
+  Claude Code -asetuksissasi, jos et halua kysymyksiä.
+- Istunto työskentelee projektisi työkopiossa, joten sen luoma haara on sen jälkeen uloskirjattuna.
+  Työpuuta kutakin tehtävää varten ei ole vielä tehty.
 
 ## Periaatteet
 
