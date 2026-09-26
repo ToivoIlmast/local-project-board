@@ -7,6 +7,8 @@ import {
   markdownStorage,
   type MarkdownStorageOptions,
 } from '../../src/server/storage/markdown/index.js';
+import { defaultConfig } from '../../src/server/config/schema.js';
+import { createStorage } from '../../src/server/storage/index.js';
 import { writeFileAtomic } from '../../src/server/storage/markdown/atomic.js';
 import { runStorageConformance } from '../conformance/storage.js';
 import { cleanTmpDirs, tmpDir } from '../support/tmp.js';
@@ -413,6 +415,17 @@ describe('markdown storage: workflow settings', () => {
     it('does not take the configured columns down with it', async () => {
       await write();
       expect((await storage.readWorkflow()).statuses.todo).toEqual({ editCode: false });
+    });
+
+    it('is checked against the statuses of the board configuration when built from it', async () => {
+      const configured = createStorage(
+        { ...defaultConfig('test-board'), statuses: ['todo', 'done'] },
+        { root },
+      );
+      await write();
+      const issues = await configured.readIssues();
+      expect(issues).toHaveLength(1);
+      expect(issues[0]?.message).toContain('statuses.review');
     });
 
     it('is checked only when the provider knows the configured statuses', async () => {
