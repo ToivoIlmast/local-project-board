@@ -33,6 +33,7 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'tasks.move': { path: '/tasks/T1/move', body: { status: 'done' } },
   'tasks.delete': { path: '/tasks/T2' },
   'tasks.workflow': { path: '/tasks/T1/workflow' },
+  'tasks.handoff': { path: '/tasks/T1/handoff' },
   'workflow.get': { path: '/workflow' },
   'workflow.update': {
     path: '/workflow',

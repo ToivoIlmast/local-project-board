@@ -31,6 +31,24 @@ class Agent {
     readonly instructions: string,
   ) {}
 
+  /**
+   * An agent that is handed the handoff of one task and nothing else. The handoff has no token:
+   * it says where to ask for one, and the agent does exactly that.
+   */
+  static async fromHandoff(port: number, id: string): Promise<Agent> {
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/tasks/${id}/handoff`);
+    expect(response.status).toBe(200);
+    const handoff = await response.text();
+    expect(handoff).not.toMatch(/^Authorization: Bearer (?!<session token>)/m);
+
+    const api = /^Base URL: (\S+)$/m.exec(handoff)?.[1];
+    expect(typeof api).toBe('string');
+    expect(handoff).toContain(`GET ${api}/session`);
+    expect(handoff.includes('### GET /api/v1/session')).toBe(true);
+    const session = (await (await fetch(`${api}/session`)).json()) as { token: string };
+    return new Agent(api as string, session.token, handoff);
+  }
+
   static async start(port: number): Promise<Agent> {
     const response = await fetch(`http://127.0.0.1:${port}/api/v1/instructions`);
     expect(response.status).toBe(200);
@@ -41,6 +59,11 @@ class Agent {
     expect(typeof api).toBe('string');
     expect(typeof token).toBe('string');
     return new Agent(api as string, token as string, instructions);
+  }
+
+  /** What the agent was handed: the instructions, or the handoff that carries them. */
+  get text(): string {
+    return this.instructions;
   }
 
   /** The instructions promise this route; the agent calls nothing they do not describe. */
@@ -182,5 +205,99 @@ describe('an external agent with nothing but the instructions', () => {
 
     expect(response.status).toBe(401);
     expect(await board.storage.listTasks()).toEqual([]);
+  });
+});
+
+/** What an agent that only reads the numbered steps of a handoff is asked to do with the API. */
+function calls(handoff: string): { method: string; route: string; path: string; body?: unknown }[] {
+  const section = handoff.split('## How to work on this task\n')[1]?.split('\n---\n')[0] ?? '';
+  const found: { method: string; route: string; path: string; body?: unknown }[] = [];
+  for (const line of section.split('\n').filter((each) => /^\d+\. /.test(each))) {
+    if (/^\d+\. Do not /.test(line)) continue;
+    const patch = /`PATCH \/api\/v1(\/tasks\/T\d+)` with `(\{[^`]*\})`/.exec(line);
+    if (patch) {
+      found.push({
+        method: 'PATCH',
+        route: '/tasks/:id',
+        path: patch[1] ?? '',
+        body: JSON.parse(patch[2] ?? ''),
+      });
+    }
+    const put = /`PUT \/api\/v1(\/tasks\/T\d+\/documents\/report\.md)`/.exec(line);
+    if (put) {
+      found.push({
+        method: 'PUT',
+        route: '/tasks/:id/documents/:name',
+        path: put[1] ?? '',
+        body: { content: '# Report\n\nDone as the handoff said.\n' },
+      });
+    }
+  }
+  return found;
+}
+
+describe('an external agent with nothing but the handoff of a task', () => {
+  it('records the branch, moves the task and writes the report, as the steps say (INVARIANT)', async () => {
+    const created = taskSchema.parse(
+      (
+        await board
+          .post('/api/v1/tasks', { title: 'Audit the dependency graph', status: 'todo' })
+          .expect(201)
+      ).body,
+    );
+    const agent = await Agent.fromHandoff(board.port, created.id);
+
+    for (const call of calls(agent.text)) {
+      await agent.json(call.method, call.route, call.path, call.body);
+    }
+
+    const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
+    // The default workflow: work starts in `in-progress`, the branch is recorded, the status is
+    // left alone at the end because the task waits for the review.
+    expect(after.status).toBe('in-progress');
+    expect(after.branch).toBe('task/T1-audit-the-dependency-graph');
+    const report = await agent.call(
+      'GET',
+      '/tasks/:id/documents/:name',
+      `/tasks/${created.id}/documents/report.md`,
+    );
+    expect(await report.text()).toContain('Done as the handoff said');
+    expect(await board.storage.listDocuments('T1')).toMatchObject([{ name: 'report.md' }]);
+  });
+
+  it('is told to do less when the settings say so: no branch, no report, nothing to move to', async () => {
+    const created = taskSchema.parse(
+      (
+        await board
+          .post('/api/v1/tasks', {
+            title: 'Only look',
+            status: 'todo',
+            workflow: { branch: false, report: false },
+          })
+          .expect(201)
+      ).body,
+    );
+    await board.put('/api/v1/workflow', { board: { startStatus: null }, statuses: {} }).expect(200);
+    const agent = await Agent.fromHandoff(board.port, created.id);
+
+    expect(calls(agent.text)).toEqual([]);
+    const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
+    expect(after).toMatchObject({ status: 'todo' });
+    expect(after.branch).toBeUndefined();
+    expect(await board.storage.listDocuments('T1')).toEqual([]);
+  });
+
+  it('is refused the moment it stops sending the token it asked for', async () => {
+    const created = taskSchema.parse(
+      (await board.post('/api/v1/tasks', { title: 'x' }).expect(201)).body,
+    );
+    const agent = await Agent.fromHandoff(board.port, created.id);
+    const response = await fetch(`${agent.api}/tasks/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: 'x' }),
+    });
+
+    expect(response.status).toBe(401);
   });
 });

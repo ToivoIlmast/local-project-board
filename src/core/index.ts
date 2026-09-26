@@ -9,6 +9,7 @@ export * from './services/tasks.js';
 export * from './services/workflow.js';
 export * from './model/index.js';
 export * from './rules/aiRules.js';
+export * from './rules/branch.js';
 export * from './rules/documentName.js';
 export * from './rules/ids.js';
 export * from './rules/rank.js';

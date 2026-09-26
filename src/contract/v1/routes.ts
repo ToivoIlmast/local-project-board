@@ -260,6 +260,25 @@ export const routes = {
     ai: { include: true },
   }),
 
+  'tasks.handoff': route({
+    id: 'tasks.handoff',
+    method: 'GET',
+    path: '/tasks/:id/handoff',
+    summary: 'Read a task with the steps its settings call for and these instructions, as one text',
+    params: taskParams,
+    response: { schema: z.string(), media: 'text/markdown' },
+    example: {
+      params: { id: 'T12' },
+      response:
+        '# Task T12: Extract the git adapter\n\n- Status: `in-progress`\n\n' +
+        '## Description\n\n## Context\n\nThe status parser still lives in the HTTP layer.\n\n' +
+        '## Documents\n\nNo documents are attached to this task yet.\n\n' +
+        '## How to work on this task\n\n1. You may change the files of the project. ' +
+        '_(source: default)_\n',
+    },
+    ai: { include: true },
+  }),
+
   'workflow.get': route({
     id: 'workflow.get',
     method: 'GET',

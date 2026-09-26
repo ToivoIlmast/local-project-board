@@ -149,6 +149,7 @@ describe('response media types', () => {
   it('serves documents and reports as text, everything else as JSON', () => {
     expect(routes['documents.read'].response.media).toBe('text/markdown');
     expect(routes['instructions.get'].response.media).toBe('text/markdown');
+    expect(routes['tasks.handoff'].response.media).toBe('text/markdown');
     expect(routes['events.stream'].response.media).toBe('text/event-stream');
     expect(routes['tasks.list'].response.media).toBe('application/json');
   });
@@ -211,5 +212,34 @@ describe('the workflow routes (T14)', () => {
 
   it('say in the summary of PUT that it replaces everything', () => {
     expect(routes['workflow.update'].summary).toMatch(/replace/i);
+  });
+});
+
+describe('the handoff route (T15)', () => {
+  const route = routes['tasks.handoff'];
+
+  it('is one read of a task: GET /tasks/:id/handoff, markdown, no request body', () => {
+    expect(`${route.method} ${route.path}`).toBe('GET /tasks/:id/handoff');
+    expect(route.response.media).toBe('text/markdown');
+    expect('request' in route).toBe(false);
+    expect(routeList.filter((r) => r.path.includes('handoff'))).toEqual([route]);
+  });
+
+  it('is documented to agents: the handoff is what they are told to read first', () => {
+    expect(route.ai.include).toBe(true);
+  });
+
+  it('has an example that is a handoff of the task it names', () => {
+    const example = route.example.response;
+
+    expect(typeof example).toBe('string');
+    expect(example as string).toMatch(/^# Task T12: /);
+    expect(route.example.params).toEqual({ id: 'T12' });
+  });
+
+  it('takes the id of a task and nothing else', () => {
+    expect(parseParams(route, { id: 'T12' })).toMatchObject({ ok: true });
+    expect(parseParams(route, { id: '../T12' })).toMatchObject({ ok: false });
+    expect(parseParams(route, { id: 'T12', extra: 'x' })).toMatchObject({ ok: false });
   });
 });

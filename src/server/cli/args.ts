@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 
-export type Command = 'serve' | 'instructions' | 'export' | 'help';
+export type Command = 'serve' | 'instructions' | 'handoff' | 'export' | 'help';
 
 export interface ParsedArgs {
   command: Command;
@@ -11,6 +11,8 @@ export interface ParsedArgs {
   open?: boolean;
   /** Only for export: where to write the snapshot; stdout when absent. */
   out?: string;
+  /** Only for handoff: the task, as it was typed; the board says whether it exists. */
+  id?: string;
 }
 
 export const USAGE = [
@@ -19,6 +21,7 @@ export const USAGE = [
   'Commands:',
   '  (none)                 start the board and open it in a browser',
   '  instructions           print the API instructions for an AI agent',
+  '  handoff <id>           print everything an AI agent needs to work on a task',
   '  export                 print a snapshot of the board',
   '',
   'Options:',
@@ -34,7 +37,7 @@ export class UsageError extends Error {
   readonly usage = USAGE;
 }
 
-const COMMANDS = new Set<Command>(['instructions', 'export']);
+const COMMANDS = new Set<Command>(['instructions', 'handoff', 'export']);
 
 /**
  * The whole command line surface of the board. It only sorts out what was asked for:
@@ -64,8 +67,13 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   if (values.help === true) return { command: 'help' };
 
   const [name, ...rest] = positionals;
-  if (rest.length > 0) throw new UsageError(`Unexpected argument: ${rest[0]}`);
   const command: Command = name === undefined ? 'serve' : asCommand(name);
+  // The handoff command is the one that takes a positional argument: the task it is about.
+  const [id, ...extra] = command === 'handoff' ? rest : [undefined, ...rest];
+  if (command === 'handoff' && id === undefined) {
+    throw new UsageError('The handoff command needs the id of a task, for example: handoff T1');
+  }
+  if (extra.length > 0) throw new UsageError(`Unexpected argument: ${extra[0]}`);
 
   if (values.out !== undefined && command !== 'export') {
     throw new UsageError('The --out flag belongs to the export command.');
@@ -79,6 +87,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(values.port === undefined ? {} : { port: Number(values.port), explicitPort: true }),
     ...(values['no-open'] === true ? { open: false } : {}),
     ...(values.out === undefined ? {} : { out: values.out }),
+    ...(id === undefined ? {} : { id }),
   };
 }
 

@@ -92,6 +92,22 @@ export function generateInstructions({
     );
   }
 
+  // What to do on a task is decided per task, by its settings, and said in its handoff: this
+  // text tells an agent where to read it and repeats nothing of it.
+  lines.push(
+    '',
+    '## Working on a task',
+    '',
+    'A task has a handoff: one text with the task itself, the steps to take on it under the',
+    'settings that apply to it, and this reference. Read it before you start:',
+    '',
+    '```text',
+    `GET ${api}/tasks/<id>/handoff`,
+    '```',
+    '',
+    'The steps are decided there, per task; they are not repeated here.',
+  );
+
   lines.push('', '## Rules', '', ...(rules ?? DEFAULT_AI_RULES).map((rule) => `- ${rule}`));
 
   // `ai.include` is the only thing that decides what an agent is told about: a resource the
