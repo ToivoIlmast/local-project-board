@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
@@ -119,6 +119,25 @@ describe('the documents of a task', () => {
     });
 
     expect(await screen.findByRole('button', { name: 'audit.md' })).toBeInTheDocument();
+  });
+
+  it('are read once the board answers again, when the task was opened while it did not (§14)', async () => {
+    const { user, board, store } = await renderBoard({
+      tasks: [task],
+      documents: [{ taskId: 'T1', name: 'plan.md', content: '# Plan\n' }],
+    });
+    board.fail('listDocuments', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+
+    await user.click(screen.getByRole('button', { name: 'Extract the git adapter' }));
+    const documents = await screen.findByRole('region', { name: 'Documents' });
+    expect(await within(documents).findByText(/not answering/)).toBeInTheDocument();
+
+    // The stream comes back, and the page answers that by reading the whole board again.
+    await act(() => store.load());
+
+    expect(await within(documents).findByRole('button', { name: 'plan.md' })).toBeInTheDocument();
+    expect(within(documents).queryByText(/not answering/)).not.toBeInTheDocument();
+    expect(within(documents).queryByText('Loading documents…')).not.toBeInTheDocument();
   });
 
   it('say when there are none', async () => {

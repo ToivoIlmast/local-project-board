@@ -18,6 +18,7 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
   const [editing, setEditing] = useState<{ name?: string; content: string } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | undefined>(undefined);
+  const [listFailure, setListFailure] = useState<string | undefined>(undefined);
 
   const write = useAsyncAction((name: string, content: string) =>
     store.writeDocument(taskId, name, content),
@@ -26,7 +27,7 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
 
   // Mounted per task (the panel is keyed by it), so this reads them once, for this task.
   useEffect(() => {
-    store.loadDocuments(taskId).catch((error: Error) => setFailure(error.message));
+    store.loadDocuments(taskId).catch((error: Error) => setListFailure(error.message));
   }, [store, taskId]);
 
   const edit = async (name: string): Promise<void> => {
@@ -47,6 +48,10 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
       </header>
 
       {failure !== undefined ? <p className="form__error">{failure}</p> : null}
+      {/* Only while there is no list: the store reads it again when the board comes back. */}
+      {listFailure !== undefined && documents === undefined ? (
+        <p className="form__error">{listFailure}</p>
+      ) : null}
 
       {documents === undefined ? (
         <Spinner label="Loading documents…" />

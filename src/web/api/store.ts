@@ -177,6 +177,12 @@ export function createBoardStore(client: BoardClient): BoardStore {
   };
 
   /**
+   * The tasks whose documents the page has asked for, including the ones whose read failed:
+   * a list that was never read is in no other record, and would otherwise never be tried again.
+   */
+  const wanted = new Set<string>();
+
+  /**
    * How many things the server has told this store since it was made. A read of the whole
    * board is a photograph taken at one moment; this is how it finds out it was taken before
    * something the store has since been told, and so must not be put on the page.
@@ -185,6 +191,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
 
   const apply = (event: BoardEvent): void => {
     told += 1;
+    if (event.type === 'task.deleted') wanted.delete(event.taskId);
     set((current) => applyEvent(current, event));
   };
 
@@ -255,10 +262,9 @@ export function createBoardStore(client: BoardClient): BoardStore {
         }));
         return;
       }
-      // Whatever was open keeps its documents fresh after a full re-read.
-      await Promise.all(
-        Object.keys(state.documents).map((id) => store.loadDocuments(id).catch(() => undefined)),
-      );
+      // Whatever was open keeps its documents fresh after a full re-read, and so does what was
+      // opened while the board was not answering: its first read failed, this is the retry.
+      await Promise.all([...wanted].map((id) => store.loadDocuments(id).catch(() => undefined)));
     },
 
     async createTask(input) {
@@ -288,6 +294,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
       }),
 
     async loadDocuments(taskId) {
+      wanted.add(taskId);
       const documents = await client.listDocuments(taskId);
       set((current) => ({ ...current, documents: { ...current.documents, [taskId]: documents } }));
     },

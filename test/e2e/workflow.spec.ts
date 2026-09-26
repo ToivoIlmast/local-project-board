@@ -189,3 +189,39 @@ test('the board is stopped and started again while the page stays open', async (
     'Written after the restart',
   ]);
 });
+
+test('a task opened while the board is down gets its documents when the board is back', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Opened in the dark', status: 'todo' },
+  });
+  await board.api('/api/v1/tasks/T1/documents/plan.md', {
+    method: 'PUT',
+    body: { content: '# Plan\n' },
+  });
+  await page.goto(board.url);
+  await expect(page.getByText('Opened in the dark')).toBeVisible();
+
+  await board.stop();
+  await expect(page.getByText(/Live updates are off/)).toBeVisible();
+
+  // The person opens the task now, so the page has to read its documents from a board that
+  // is not there. It says so, in the panel where the documents would be.
+  await page.getByRole('button', { name: 'Opened in the dark' }).click();
+  const documents = page.getByRole('region', { name: 'Documents' });
+  await expect(documents.getByText(/not answering/)).toBeVisible();
+
+  await board.restart();
+
+  // Nothing was delivered while the stream was down, so the page reads the board again, and
+  // that has to include what the open panel asked for and never got.
+  await expect(documents.getByRole('button', { name: 'plan.md', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText(/Live updates are off/)).toHaveCount(0);
+  await expect(page.getByText(/is not answering/)).toHaveCount(0);
+  await expect(documents.getByText('Loading documents…')).toHaveCount(0);
+});
