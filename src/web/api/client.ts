@@ -14,6 +14,8 @@ import {
   type Route,
   type RouteId,
   type Task,
+  type WorkflowState,
+  type EffectiveWorkflow,
 } from '../../contract/v1/index';
 import { ApiError, errorFromResponse, malformedResponse, networkError, readJson } from './errors';
 import type { FetchLike, RequestInitLike } from './http';
@@ -42,6 +44,13 @@ export interface BoardClient {
   updateTask(id: string, patch: BodyOf<'tasks.update'>): Promise<Task>;
   moveTask(id: string, move: BodyOf<'tasks.move'>): Promise<Task>;
   deleteTask(id: string): Promise<void>;
+
+  /** The overrides of the board and of its columns, with the defaults they lie over. */
+  workflow(): Promise<WorkflowState>;
+  /** Replaces the overrides of the board and of all its columns; send both sections whole. */
+  updateWorkflow(overrides: BodyOf<'workflow.update'>): Promise<WorkflowState>;
+  /** What one task runs with and where each value comes from; computed by the board, not stored. */
+  taskWorkflow(id: string): Promise<EffectiveWorkflow>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string>;
@@ -139,6 +148,10 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     deleteTask: async (id) => {
       await call('tasks.delete', { params: { id } });
     },
+
+    workflow: () => call('workflow.get', {}),
+    updateWorkflow: (body) => call('workflow.update', { body }),
+    taskWorkflow: (id) => call('tasks.workflow', { params: { id } }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),
     readDocument: (id, name) => call('documents.read', { params: { id, name } }),

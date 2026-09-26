@@ -5,6 +5,7 @@ import type {
   Project,
   Report,
   Task,
+  WorkflowState,
 } from '../../contract/v1/index';
 import type { BoardClient } from './client';
 import { ApiError } from './errors';
@@ -20,6 +21,8 @@ export interface BoardState {
   /** Why the board could not be read at all; a failed change does not land here. */
   error?: ApiError | undefined;
   project?: Project | undefined;
+  /** The overrides of the board and of its columns, with the defaults; never a task's effective. */
+  workflow?: WorkflowState | undefined;
   tasks: Task[];
   reports: Report[];
   /** Missing when git could not be read; the board itself keeps working (§17). */
@@ -97,6 +100,8 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       };
     case 'report.deleted':
       return { ...state, reports: state.reports.filter((report) => report.id !== event.reportId) };
+    case 'workflow.updated':
+      return { ...state, workflow: event.workflow };
     case 'board.changed':
       // Files changed outside the server; the board must be read again, not patched.
       return state;
@@ -158,6 +163,8 @@ export interface BoardStore {
   writeDocument(taskId: string, name: string, content: string): Promise<void>;
   deleteDocument(taskId: string, name: string): Promise<void>;
   deleteReport(id: string): Promise<void>;
+  /** Replaces the overrides of the board and its columns; the store takes the server's answer. */
+  updateWorkflow(overrides: Parameters<BoardClient['updateWorkflow']>[0]): Promise<WorkflowState>;
   handleEvent(event: BoardEvent): Promise<void>;
   setConnection(status: ConnectionStatus): void;
 }
@@ -203,17 +210,22 @@ export function createBoardStore(client: BoardClient): BoardStore {
    * what was read is used: every write makes the server publish `board.changed`, so a page
    * that could not catch up here is read again anyway.
    */
-  async function readBoard(): Promise<Pick<BoardState, 'project' | 'tasks' | 'reports' | 'git'>> {
+  async function readBoard(): Promise<
+    Pick<BoardState, 'project' | 'workflow' | 'tasks' | 'reports' | 'git'>
+  > {
     for (let attempt = 1; ; attempt += 1) {
       const before = told;
-      const [project, tasks, reports] = await Promise.all([
+      const [project, workflow, tasks, reports] = await Promise.all([
         client.project(),
+        client.workflow(),
         client.listTasks(),
         client.listReports(),
       ]);
       // Git is context, not the board: a repository that cannot be read hides nothing else.
       const git = await client.gitStatus().catch(() => undefined);
-      if (told === before || attempt === READ_ATTEMPTS) return { project, tasks, reports, git };
+      if (told === before || attempt === READ_ATTEMPTS) {
+        return { project, workflow, tasks, reports, git };
+      }
     }
   }
 
@@ -241,12 +253,13 @@ export function createBoardStore(client: BoardClient): BoardStore {
         error: undefined,
       }));
       try {
-        const { project, tasks, reports, git } = await readBoard();
+        const { project, workflow, tasks, reports, git } = await readBoard();
         set((current) => ({
           ...current,
           phase: 'ready',
           error: undefined,
           project,
+          workflow,
           tasks,
           reports,
           git,
@@ -312,6 +325,12 @@ export function createBoardStore(client: BoardClient): BoardStore {
     async deleteReport(id) {
       await client.deleteReport(id);
       apply({ type: 'report.deleted', reportId: id });
+    },
+
+    async updateWorkflow(overrides) {
+      const workflow = await client.updateWorkflow(overrides);
+      apply({ type: 'workflow.updated', workflow });
+      return workflow;
     },
 
     async handleEvent(event) {

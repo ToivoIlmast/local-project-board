@@ -112,6 +112,74 @@ describe('GET /events', () => {
   });
 });
 
+describe('workflow settings', () => {
+  const overrides = { board: { push: true }, statuses: { backlog: { editCode: false } } };
+
+  beforeEach(async () => {
+    board = await createTestBoard();
+  });
+
+  it('are announced after a PUT, with the state that was answered', async () => {
+    const client = await stream();
+
+    const response = await board.put(`${API}/workflow`, overrides).expect(200);
+
+    const [event] = await client.waitForEvents(1);
+    expect(event).toEqual({ type: 'workflow.updated', workflow: response.body });
+  });
+
+  it('are not announced when the PUT was refused', async () => {
+    const client = await stream();
+
+    await board.put(`${API}/workflow`, { board: {}, statuses: { nope: {} } }).expect(422);
+    await board.put(`${API}/workflow`, { board: { deploy: true }, statuses: {} }).expect(400);
+    await board.agent().put(`${API}/workflow`).send(overrides).expect(401);
+    // The next event proves the refused ones did not slip in before it.
+    await board.post(`${API}/tasks`, { title: 'after' }).expect(201);
+
+    const events = await client.waitForEvents(1);
+    expect(events.map((event) => event.type)).toEqual(['task.created']);
+  });
+
+  it("a task's own overrides arrive as task.updated, with the task", async () => {
+    await board.post(`${API}/tasks`, { title: 'a' }).expect(201);
+    const client = await stream();
+
+    const response = await board.patch(`${API}/tasks/T1`, { workflow: { push: true } }).expect(200);
+
+    const [event] = await client.waitForEvents(1);
+    expect(event).toEqual({ type: 'task.updated', task: response.body });
+    expect(event).toMatchObject({ task: { workflow: { push: true } } });
+  });
+
+  it('are not announced by a read of the settings', async () => {
+    await board.post(`${API}/tasks`, { title: 'a' }).expect(201);
+    const client = await stream();
+
+    await board.get(`${API}/workflow`).expect(200);
+    await board.get(`${API}/tasks/T1/workflow`).expect(200);
+    await board.post(`${API}/tasks`, { title: 'b' }).expect(201);
+
+    expect((await client.waitForEvents(1)).map((event) => event.type)).toEqual(['task.created']);
+  });
+});
+
+describe('a change made to .board/workflow.yaml outside the server', () => {
+  it('reaches the open clients as board.changed, and the next read shows it', async () => {
+    board = await createTestBoard({ watch: true });
+    const client = await stream();
+
+    await writeFile(
+      join(board.root, '.board', 'workflow.yaml'),
+      'formatVersion: 1\nboard:\n  push: true\n',
+    );
+
+    await client.waitFor((c) => c.events.some((e) => e.type === 'board.changed'), 'board.changed');
+    const state = await board.get(`${API}/workflow`).expect(200);
+    expect(state.body).toMatchObject({ board: { push: true }, statuses: {} });
+  }, 20_000);
+});
+
 describe('a stream that is left open', () => {
   it('is kept alive by a heartbeat that is not an event', async () => {
     board = await createTestBoard({ sseHeartbeatMs: 30 });

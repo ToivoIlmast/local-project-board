@@ -70,29 +70,43 @@ export type BoardWorkflowOverrides = z.infer<typeof boardWorkflowSchema>;
 export type WorkflowOverrides = z.infer<typeof workflowOverridesSchema>;
 
 /** The settings a task runs with: every key has a value. */
-export interface WorkflowSettings {
-  editCode: boolean;
-  branch: boolean;
-  checks: boolean;
-  commit: boolean;
-  push: boolean;
-  report: boolean;
-  startStatus: string | null;
-  finishStatus: string | null;
-  baseBranch: string | null;
-  checkCommand: string | null;
-}
+export const workflowSettingsSchema = z.strictObject({
+  editCode: z.boolean(),
+  branch: z.boolean(),
+  checks: z.boolean(),
+  commit: z.boolean(),
+  push: z.boolean(),
+  report: z.boolean(),
+  startStatus: z.string().min(1).nullable(),
+  finishStatus: z.string().min(1).nullable(),
+  baseBranch: nonBlank.nullable(),
+  checkCommand: nonBlank.nullable(),
+});
 
 /** Where the value of a setting comes from. */
-export type WorkflowSource = 'default' | 'board' | 'status' | 'task';
+export const workflowSourceSchema = z.enum(['default', 'board', 'status', 'task']);
 
 /** What `resolveWorkflow` returns; computed on every call and never stored (ADR-0028). */
-export interface EffectiveWorkflow {
-  values: WorkflowSettings;
-  sources: Record<WorkflowKey, WorkflowSource>;
+export const effectiveWorkflowSchema = z.strictObject({
+  values: workflowSettingsSchema,
+  sources: z.record(z.enum(WORKFLOW_KEYS), workflowSourceSchema),
   /**
    * Settings that have no effect because the agent may not edit code. Their values are left as
    * they are, so switching `editCode` back on restores exactly what was configured.
    */
-  inactive: WorkflowFlag[];
-}
+  inactive: z.array(z.enum(WORKFLOW_FLAGS)),
+});
+
+/**
+ * What the workflow routes answer for the board: the overrides that are stored, next to the
+ * defaults they are laid over. The defaults are read-only context; they are never accepted back
+ * (the request of `PUT /workflow` is `workflowOverridesSchema`, which does not know the key).
+ */
+export const workflowStateSchema = workflowOverridesSchema.extend({
+  defaults: workflowSettingsSchema,
+});
+
+export type WorkflowSettings = z.infer<typeof workflowSettingsSchema>;
+export type WorkflowSource = z.infer<typeof workflowSourceSchema>;
+export type EffectiveWorkflow = z.infer<typeof effectiveWorkflowSchema>;
+export type WorkflowState = z.infer<typeof workflowStateSchema>;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
 import { taskSchema } from '../../core/model/task.js';
+import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
 /**
  * Wire DTOs. Where the wire format equals the domain, the core schema is re-exported:
@@ -9,6 +10,7 @@ import { taskSchema } from '../../core/model/task.js';
 export {
   documentMetaSchema,
   documentNameSchema,
+  effectiveWorkflowSchema,
   gitBranchSchema,
   gitCommitSchema,
   gitDiffSchema,
@@ -20,6 +22,9 @@ export {
   reportSchema,
   taskIdSchema,
   taskSchema,
+  workflowFlagsSchema,
+  workflowOverridesSchema,
+  workflowStateSchema,
 } from '../../core/model/index.js';
 export { boardEventSchema } from '../../core/events.js';
 
@@ -29,6 +34,7 @@ export { boardEventSchema } from '../../core/events.js';
  */
 export type {
   DocumentMeta,
+  EffectiveWorkflow,
   GitBranch,
   GitCommit,
   GitDiff,
@@ -37,6 +43,11 @@ export type {
   Project,
   Report,
   Task,
+  WorkflowFlagOverrides,
+  WorkflowOverrides,
+  WorkflowSettings,
+  WorkflowSource,
+  WorkflowState,
 } from '../../core/model/index.js';
 export type { BoardEvent } from '../../core/events.js';
 
@@ -52,6 +63,8 @@ export const createTaskRequestSchema = z.strictObject({
   body: z.string().optional(),
   labels: labels.optional(),
   branch: z.string().min(1).optional(),
+  /** The task's own overrides of the AI workflow settings; only what is set (ADR-0028). */
+  workflow: workflowFlagsSchema.optional(),
 });
 
 export const updateTaskRequestSchema = z
@@ -62,6 +75,8 @@ export const updateTaskRequestSchema = z
     labels: labels.optional(),
     /** null clears the branch. */
     branch: z.string().min(1).nullable().optional(),
+    /** An object replaces the task's overrides whole, as `labels` does; null removes them all. */
+    workflow: workflowFlagsSchema.nullable().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');
 
@@ -71,6 +86,13 @@ export const moveTaskRequestSchema = z.strictObject({
   after: taskSchema.shape.id.optional(),
   before: taskSchema.shape.id.optional(),
 });
+
+/**
+ * The overrides of the board and of its columns, both sections required: a request that leaves
+ * one out would otherwise wipe it without saying so. Never the state that GET answers with —
+ * its `defaults` are not accepted back — and never the effective settings of a task.
+ */
+export const replaceWorkflowRequestSchema = workflowOverridesSchema;
 
 export const writeDocumentRequestSchema = z.strictObject({ content });
 
@@ -120,6 +142,7 @@ export const errorResponseSchema = z.strictObject({
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;
 export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
+export type ReplaceWorkflowRequest = z.infer<typeof replaceWorkflowRequestSchema>;
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
 export type Session = z.infer<typeof sessionSchema>;

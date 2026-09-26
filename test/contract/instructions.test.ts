@@ -41,8 +41,20 @@ describe('generated AI instructions', () => {
 
   it('leaves out routes that are not for agents', () => {
     const excluded = routeList.filter((r) => !r.ai.include);
-    expect(excluded.map((r) => r.id).sort()).toEqual(['events.stream', 'instructions.get']);
+    // `workflow.update` replaces the board's and the columns' settings whole: it is the
+    // Settings page's request, not something an agent should do to the rules it works under.
+    expect(excluded.map((r) => r.id).sort()).toEqual([
+      'events.stream',
+      'instructions.get',
+      'workflow.update',
+    ]);
     for (const route of excluded) expect(instructions).not.toContain(endpoint(route));
+  });
+
+  it('tells an agent how to read the settings it works under, and only that', () => {
+    expect(instructions).toContain(`### GET ${API_BASE_PATH}/workflow`);
+    expect(instructions).toContain(`### GET ${API_BASE_PATH}/tasks/:id/workflow`);
+    expect(instructions).not.toContain(`### PUT ${API_BASE_PATH}/workflow`);
   });
 
   it('never tells an agent to read the instructions it is already reading', () => {

@@ -3,6 +3,8 @@ import type { Task } from '../../../src/core/model/task';
 import type { Report } from '../../../src/core/model/report';
 import type { DocumentMeta } from '../../../src/core/model/document';
 import type { GitStatus } from '../../../src/core/model/git';
+import type { EffectiveWorkflow, WorkflowState } from '../../../src/core/model/workflow';
+import { DEFAULT_WORKFLOW, defaultWorkflow } from '../../../src/core/rules/workflow';
 
 export const STATUSES = ['backlog', 'todo', 'in-progress', 'done'];
 
@@ -63,6 +65,35 @@ export function aGitStatus(overrides: Partial<GitStatus> = {}): GitStatus {
     detached: false,
     clean: true,
     files: [],
+    ...overrides,
+  };
+}
+
+export function aWorkflow(overrides: Partial<WorkflowState> = {}): WorkflowState {
+  return {
+    defaults: defaultWorkflow(STATUSES),
+    board: {},
+    statuses: {},
+    ...overrides,
+  };
+}
+
+export function anEffectiveWorkflow(overrides: Partial<EffectiveWorkflow> = {}): EffectiveWorkflow {
+  return {
+    values: { ...DEFAULT_WORKFLOW },
+    sources: {
+      editCode: 'default',
+      branch: 'default',
+      checks: 'default',
+      commit: 'default',
+      push: 'default',
+      report: 'default',
+      startStatus: 'default',
+      finishStatus: 'default',
+      baseBranch: 'default',
+      checkCommand: 'default',
+    },
+    inactive: [],
     ...overrides,
   };
 }

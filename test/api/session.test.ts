@@ -96,6 +96,8 @@ describe('the token on the wire', () => {
       'project.get': '/project',
       'tasks.list': '/tasks',
       'tasks.get': '/tasks/T1',
+      'tasks.workflow': '/tasks/T1/workflow',
+      'workflow.get': '/workflow',
       'documents.list': '/tasks/T1/documents',
       'documents.read': '/tasks/T1/documents/plan.md',
       'git.status': '/git/status',

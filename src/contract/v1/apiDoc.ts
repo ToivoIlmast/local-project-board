@@ -6,6 +6,7 @@ const GROUPS: Record<string, string> = {
   project: 'Board',
   session: 'Session',
   tasks: 'Tasks',
+  workflow: 'AI workflow',
   documents: 'Documents',
   git: 'Git (read-only)',
   reports: 'Reports',

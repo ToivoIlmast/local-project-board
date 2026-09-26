@@ -32,6 +32,12 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'tasks.update': { path: '/tasks/T1', body: { title: 'Renamed' } },
   'tasks.move': { path: '/tasks/T1/move', body: { status: 'done' } },
   'tasks.delete': { path: '/tasks/T2' },
+  'tasks.workflow': { path: '/tasks/T1/workflow' },
+  'workflow.get': { path: '/workflow' },
+  'workflow.update': {
+    path: '/workflow',
+    body: { board: { push: true }, statuses: { todo: { commit: false } } },
+  },
   'documents.list': { path: '/tasks/T1/documents' },
   'documents.read': { path: '/tasks/T1/documents/plan.md' },
   'documents.write': { path: '/tasks/T1/documents/notes.md', body: { content: '# Notes\n' } },

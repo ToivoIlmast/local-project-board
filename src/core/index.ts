@@ -6,6 +6,7 @@ export * from './services/project.js';
 export * from './services/reports.js';
 export * from './services/snapshot.js';
 export * from './services/tasks.js';
+export * from './services/workflow.js';
 export * from './model/index.js';
 export * from './rules/aiRules.js';
 export * from './rules/documentName.js';

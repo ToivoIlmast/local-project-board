@@ -59,6 +59,34 @@ written atomically.
   and a version-1 file no longer has the shape of a version-2 one. Nothing reads snapshots yet
   (ADR-0009), so no migration exists, but a future import can tell the two apart.
 
+## API (T14)
+
+The settings are served by the same route table as everything else (ADR-0005); nothing here is a
+second model, and only overrides are ever accepted.
+
+- `GET /workflow` answers `{ defaults, board, statuses }`: the stored overrides of the board and
+  of its columns, next to the defaults they lie over. `PUT /workflow` takes `{ board, statuses }`
+  — **both required**, so a request that leaves one out cannot wipe it unnoticed — and replaces
+  both whole (last-write-wins, ADR-0018). It answers like `GET`. The `defaults` of an answer are
+  not accepted back: sending the answer as a request is a 400, so a computed value cannot become
+  an override.
+- An unknown status in `statuses`, `startStatus` or `finishStatus` is a 422 `UNKNOWN_STATUS`,
+  found by `findWorkflowIssues` (the check the markdown provider already reports with), and
+  nothing is written. Every other misfit — an unknown key, a board-only key in a column, a wrong
+  type — is a 400 `INVALID_REQUEST` from the schemas of T13.
+- `GET /tasks/:id/workflow` answers what `resolveWorkflow` returns for the task on this request:
+  `values`, `sources` and `inactive`. There is no such route for the board as a whole, because
+  effective settings only mean something for a task.
+- A task's own overrides travel in `POST /tasks` and `PATCH /tasks/:id` as `workflow`. An object
+  replaces them whole, as `labels` does (the `Storage` decision above); `null` removes them;
+  leaving the key out leaves them alone. The task accepts only the six booleans.
+- `workflow.updated` (SSE) carries the state that `PUT` answered. A task's overrides arrive as
+  `task.updated`; a hand edit of `workflow.yaml` as `board.changed`. The page takes all three
+  from the server and applies nothing before it has answered (ADR-0025).
+- For agents (`ai.include`): `GET /workflow` and `GET /tasks/:id/workflow` are documented,
+  `PUT /workflow` is not — it is the Settings page's request, and an agent should not rewrite
+  the rules it works under in one call. It can still be made; the token allows it.
+
 ## Consequences
 
 - The first task of the chain is small: model, rule, port, provider. The API (T14), the handoff

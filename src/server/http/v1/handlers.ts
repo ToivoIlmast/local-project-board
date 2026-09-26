@@ -77,6 +77,11 @@ export const handlers: Handlers = {
     return deleted;
   },
 
+  'tasks.workflow': (context, { params }) => context.workflow.forTask(params.id),
+
+  'workflow.get': (context) => context.workflow.read(),
+  'workflow.update': (context, { body }) => context.workflow.replace(body),
+
   'documents.list': (context, { params }) => context.documents.list(params.id),
   'documents.read': async (context, { params }) => ({
     text: await context.documents.read(params.id, params.name),
