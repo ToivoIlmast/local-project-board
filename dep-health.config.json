@@ -1,0 +1,13 @@
+{
+  "features": {
+    "scc": {
+      "enabled": true,
+      "mode": "compact",
+      "failOn": "error",
+      "severity": "error",
+      "modulesInCyclesThreshold": 0,
+      "reporting": { "html": { "enabled": false } },
+      "typescript": { "includeTypeOnlyImports": true }
+    }
+  }
+}
