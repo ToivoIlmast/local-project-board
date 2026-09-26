@@ -1,4 +1,4 @@
-<!-- Based on README.md @ b00a923d6b329e3572cebf3241f3a755e837e71e -->
+<!-- Based on README.md @ 44c044f85409d4dd65ce986da8c6b88e410e1f79 -->
 
 # local-project-board
 
@@ -52,6 +52,9 @@ på.
   skript skrivit: sidan följer med utan omladdning, och säger till när tavlan slutar svara.
 - **AI-instruktioner.** Samma text som `npx local-project-board instructions` skriver ut, en knapp
   bort och redo att klistra in.
+- **Inställningar.** Hur en agent arbetar med en uppgift — ändra filer, arbeta i en egen gren,
+  köra kontrollerna, committa, pusha, skriva en rapport — för hela tavlan och för varje kolumn.
+  Bara det du ändrar sparas, i `.board/workflow.yaml`; en kolumn kan helt enkelt följa tavlan.
 
 Filer som tavlan inte kan läsa visas som just det, ovanför kolumnerna — aldrig som uppgifter med
 påhittade värden.

@@ -1,4 +1,4 @@
-<!-- Based on README.md @ b00a923d6b329e3572cebf3241f3a755e837e71e -->
+<!-- Based on README.md @ 44c044f85409d4dd65ce986da8c6b88e410e1f79 -->
 
 # local-project-board
 
@@ -52,6 +52,10 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
   sivu seuraa perässä ilman uudelleenlatausta ja kertoo, jos taulu lakkaa vastaamasta.
 - **Tekoälyohjeet.** Sama teksti, jonka `npx local-project-board instructions` tulostaa, yhden
   painikkeen päässä ja valmiina liitettäväksi.
+- **Asetukset.** Miten agentti työskentelee tehtävän parissa — muuttaa tiedostoja, työskennellä
+  omassa haarassa, ajaa tarkistukset, tehdä commitin, pushata, kirjoittaa raportin — koko taululle
+  ja jokaiselle sarakkeelle. Vain se, minkä muutat, tallennetaan tiedostoon
+  `.board/workflow.yaml`; sarake voi yksinkertaisesti seurata taulua.
 
 Tiedostot, joita taulu ei osaa lukea, näkyvät juuri sellaisina sarakkeiden yläpuolella — eivät
 koskaan tehtävinä, joiden arvot on keksitty.
