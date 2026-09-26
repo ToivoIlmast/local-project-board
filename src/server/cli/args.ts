@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 
-export type Command = 'serve' | 'instructions' | 'handoff' | 'export' | 'help';
+export type Command = 'serve' | 'instructions' | 'handoff' | 'claude' | 'export' | 'help';
 
 export interface ParsedArgs {
   command: Command;
@@ -11,7 +11,7 @@ export interface ParsedArgs {
   open?: boolean;
   /** Only for export: where to write the snapshot; stdout when absent. */
   out?: string;
-  /** Only for handoff: the task, as it was typed; the board says whether it exists. */
+  /** Only for handoff and claude: the task, as it was typed; the board says whether it exists. */
   id?: string;
 }
 
@@ -22,6 +22,7 @@ export const USAGE = [
   '  (none)                 start the board and open it in a browser',
   '  instructions           print the API instructions for an AI agent',
   '  handoff <id>           print everything an AI agent needs to work on a task',
+  '  claude <id>            start Claude Code on a task, in this terminal',
   '  export                 print a snapshot of the board',
   '',
   'Options:',
@@ -37,7 +38,7 @@ export class UsageError extends Error {
   readonly usage = USAGE;
 }
 
-const COMMANDS = new Set<Command>(['instructions', 'handoff', 'export']);
+const COMMANDS = new Set<Command>(['instructions', 'handoff', 'claude', 'export']);
 
 /**
  * The whole command line surface of the board. It only sorts out what was asked for:
@@ -68,10 +69,13 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   const [name, ...rest] = positionals;
   const command: Command = name === undefined ? 'serve' : asCommand(name);
-  // The handoff command is the one that takes a positional argument: the task it is about.
-  const [id, ...extra] = command === 'handoff' ? rest : [undefined, ...rest];
-  if (command === 'handoff' && id === undefined) {
-    throw new UsageError('The handoff command needs the id of a task, for example: handoff T1');
+  // The commands that take a positional argument take the task they are about.
+  const takesId = command === 'handoff' || command === 'claude';
+  const [id, ...extra] = takesId ? rest : [undefined, ...rest];
+  if (takesId && id === undefined) {
+    throw new UsageError(
+      `The ${command} command needs the id of a task, for example: ${command} T1`,
+    );
   }
   if (extra.length > 0) throw new UsageError(`Unexpected argument: ${extra[0]}`);
 

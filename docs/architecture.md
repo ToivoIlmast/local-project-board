@@ -30,14 +30,14 @@ and what is generated from them: [api.md](api.md) and the AI instructions (ADR-0
 
 ## The server
 
-| Directory                                 | Role                                                       |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `src/server/storage`                      | Implements `Storage`; the markdown adapter (ADR-0002/0004) |
-| `src/server/git`                          | Implements `GitReader` over the system `git` (ADR-0007)    |
-| `src/server/events`                       | Implements `EventSink`; in-process bus for the SSE stream  |
-| `src/server/config`, `src/server/project` | Configuration and board-root discovery (ADR-0021/0024)     |
-| `src/server/http`                         | Express: routes, errors, security, SSE. Nothing else       |
-| `src/server/cli`                          | Arguments, the composition root, listening, `runtime.json` |
+| Directory                                 | Role                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `src/server/storage`                      | Implements `Storage`; the markdown adapter (ADR-0002/0004)                |
+| `src/server/git`                          | Implements `GitReader` over the system `git` (ADR-0007)                   |
+| `src/server/events`                       | Implements `EventSink`; in-process bus for the SSE stream                 |
+| `src/server/config`, `src/server/project` | Configuration and board-root discovery (ADR-0021/0024)                    |
+| `src/server/http`                         | Express: routes, errors, security, SSE. Nothing else                      |
+| `src/server/cli`                          | Arguments, the composition root, listening, `runtime.json`, `claude <ID>` |
 
 `src/server/cli/serve.ts` is the only place where the pieces are put together: it creates the
 event bus and the storage, builds the services, and hands `http` a `BoardContext`. A route can
