@@ -13,3 +13,4 @@ export { Panel } from './Panel';
 export { Select, type SelectOption } from './Select';
 export { Spinner } from './Spinner';
 export { Text } from './Text';
+export { UnsavedChangesDialog } from './UnsavedChangesDialog';

@@ -138,3 +138,32 @@ describe('the settings panel on a real board', () => {
     SLOW_MS,
   );
 });
+
+describe('leaving the settings panel with unsaved changes on a real board', () => {
+  it(
+    'Save in the question writes .board/workflow.yaml, then leaves',
+    async () => {
+      const root = await tmpDir();
+      board = await renderAgainstRealBoard({ root });
+      const { user } = board;
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      await screen.findByRole('complementary', { name: 'Settings' });
+      await user.click(
+        within(boardGroup()).getByRole('checkbox', { name: WORKFLOW_LABELS.push.label }),
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Git' }));
+      const question = await screen.findByRole('dialog', { name: 'Unsaved changes' });
+      await user.click(within(question).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('complementary', { name: 'Settings' })).not.toBeInTheDocument(),
+      );
+      expect(await workflowFile(root)).toEqual({
+        formatVersion: 1,
+        board: { push: true },
+      });
+    },
+    SLOW_MS,
+  );
+});

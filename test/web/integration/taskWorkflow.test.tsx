@@ -321,3 +321,47 @@ describe('an edit and the world outside the page', () => {
     SLOW_MS,
   );
 });
+
+describe('leaving a task with unsaved AI settings on a real board', () => {
+  it(
+    'Save in the question writes the overrides of the task to its file, then leaves',
+    async () => {
+      const root = await tmpDir();
+      const { user } = await withTask(root);
+      await user.click(within(ai()).getByRole('button', { name: 'Customize for this task' }));
+      await user.selectOptions(push(), 'On');
+
+      await user.click(within(details()).getByRole('button', { name: 'Close' }));
+      const question = await screen.findByRole('dialog', { name: 'Unsaved changes' });
+      await user.click(within(question).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('complementary', { name: 'Task T1' })).not.toBeInTheDocument(),
+      );
+      expect((await frontmatter(root)).workflow).toEqual({ push: true });
+    },
+    SLOW_MS,
+  );
+
+  it(
+    'Save that the board cannot take keeps the panel and the change, and writes nothing',
+    async () => {
+      const root = await tmpDir();
+      const { user, server } = await withTask(root);
+      await user.click(within(ai()).getByRole('button', { name: 'Customize for this task' }));
+      await user.selectOptions(push(), 'On');
+
+      await server.close();
+      await user.click(within(details()).getByRole('button', { name: 'Close' }));
+      const question = await screen.findByRole('dialog', { name: 'Unsaved changes' });
+      await user.click(within(question).getByRole('button', { name: 'Save' }));
+
+      expect(await within(question).findByRole('alert')).toBeInTheDocument();
+      await user.click(within(question).getByRole('button', { name: 'Cancel' }));
+      expect(details()).toBeInTheDocument();
+      expect(push()).toHaveDisplayValue('On');
+      expect(await frontmatter(root)).not.toHaveProperty('workflow');
+    },
+    SLOW_MS,
+  );
+});

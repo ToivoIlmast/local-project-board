@@ -75,6 +75,8 @@ export interface OverridesDraft<Value> {
   edit: (change: (current: Value) => Value) => void;
   /** Throws away the draft for what the board says now. */
   takeElsewhere: () => void;
+  /** Throws the changes away: the draft is what the board last said, or says now. */
+  discard: () => void;
   /**
    * Sends the draft as overrides; what the board answers becomes the baseline. With a `value`
    * it sends that instead and the draft is dropped for the answer: a reset is a save of
@@ -115,6 +117,19 @@ export function useOverridesDraft<Source, Value>(
     );
   }, []);
 
+  const discard = useCallback(() => {
+    setSession((current) => {
+      const board = current.elsewhere ?? current.baseline;
+      return {
+        ...current,
+        draft: structuredClone(board),
+        baseline: board,
+        elsewhere: undefined,
+        saved: false,
+      };
+    });
+  }, []);
+
   const save = useCallback(
     async (send: (value: Value) => Promise<unknown>, value?: Value) => {
       const sending = kit.normalize(value ?? session.draft);
@@ -147,6 +162,7 @@ export function useOverridesDraft<Source, Value>(
     saved: session.saved,
     edit,
     takeElsewhere,
+    discard,
     save,
   };
 }

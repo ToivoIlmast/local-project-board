@@ -7,6 +7,7 @@ import {
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
 import { Button, Text } from '../../../shared/ui/index';
 import {
   FlagChoice,
@@ -22,7 +23,8 @@ import {
 } from '../../settings/index';
 import { hasOwnSettings, sameSettings, settingsRequest } from '../model/taskWorkflow';
 import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
-import { SendToAi, type AgentTarget } from './SendToAi';
+import type { AgentTarget } from '../model/useSendToAi';
+import { SendToAi } from './SendToAi';
 
 const taskKit: DraftKit<WorkflowFlagOverrides | undefined, WorkflowFlagOverrides> = {
   read: (workflow) => structuredClone(workflow ?? {}),
@@ -78,6 +80,16 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
     // A reset is a save of "nothing"; whatever was typed goes with it.
     await (mode === 'reset' ? form.save(push, {}) : form.save(push));
     setAsked(false);
+  });
+
+  useUnsavedChanges({
+    dirty: form.dirty,
+    what: `the AI settings of ${task.id}`,
+    note: form.changedElsewhere
+      ? 'These settings were also changed elsewhere; saving replaces that change.'
+      : undefined,
+    save: () => send.attempt('save'),
+    discard: form.discard,
   });
 
   const submit = (event: FormEvent): void => {

@@ -58,3 +58,13 @@ export function useBoard(): Board {
   const state = useSyncExternalStore(value.store.subscribe, value.store.getState);
   return { state, store: value.store, client: value.client };
 }
+
+/**
+ * The client, without the state: a component that only asks the board for something — a card
+ * that copies a handoff — does not have to be drawn again every time the board changes.
+ */
+export function useBoardClient(): BoardClient {
+  const value = use(BoardContext);
+  if (!value) throw new Error('This page must be rendered inside a BoardProvider.');
+  return value.client;
+}

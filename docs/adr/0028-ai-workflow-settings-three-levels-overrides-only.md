@@ -229,12 +229,39 @@ contract changed apart from the page's client getting `handoff(id)`.
   settings of column todo", and a button to open it. A task with overrides, or a block being
   edited, is open. Folding away after the last override goes returns the focus to the button that
   opens it. The card on the board carries a mark ("AI settings") when the task has overrides.
-- **Send to AI** is a menu whose entries are a list of `{ label, run(taskId) }`. The first is
+- **Send to AI** is a menu whose entries are a list of `{ label, run(taskId) }` (`AGENT_TARGETS`). The details of a task and its card on the board both use `useSendToAi`,
+  the one place that asks for the handoff (a test fails if any other file calls it); the card
+  offers the entries as "Send to AI: …" and says what came of it on the card. The first is
   "Copy handoff": the text of `GET /tasks/:id/handoff`, fetched when the entry is chosen — the
   page composes nothing, so it is the text of the API and of `local-project-board handoff`, and
   has no token (T15). A further way to send a task is one more entry in the list. The result is
   announced in a polite live region; a failure of the board, or a browser that refuses the
   clipboard, is said in words and copies nothing.
+
+## Leaving a form with unsaved changes (T18)
+
+Closing a panel, opening another task or another panel used to throw a form's changes away
+without a word. The Settings panel (T17) and the block of a task (T18) now share one mechanism,
+so they behave and read the same.
+
+- **One registry, one question.** A form that can hold changes tells the page what it holds
+  (`useUnsavedChanges`: `dirty`, `what`, `save`, `discard`, an optional `note`); every way out
+  of the panel goes through `useLeaveGuard` in `BoardPage`. If no form is dirty the way out is
+  taken at once — no question. Otherwise one dialog asks, Save, Discard or Cancel, in that
+  order, with the focus on Save (the choice that loses nothing).
+- **Save** saves every form that is dirty, and only then goes on. If the board refuses, nothing
+  closes and nothing is lost: the dialog stays with the board's message, the form keeps its draft
+  (and shows the same error), and the person can retry, discard or cancel. **Discard** drops the
+  draft (to what the board says now, if it was changed elsewhere meanwhile) and goes on.
+  **Cancel**, Escape and the ✕ of the dialog stay where they are, with the focus back on what was
+  pressed. While a save is on its way the dialog cannot be dismissed.
+- **What is not a way out:** opening the task that is already open, and deleting the task that is
+  open (it is already asked about, and there is nothing left to save to).
+- **Where it does not reach:** the browser's back button changes the address without asking,
+  and this page cannot stop it. Closing or reloading the tab is held by the browser's own
+  question (`beforeunload`) while something is unsaved; that question cannot offer Save.
+- If the settings were also changed elsewhere, the dialog says that Save replaces that change
+  (last-write-wins, ADR-0018) — the same warning the form shows.
 
 ## Consequences
 

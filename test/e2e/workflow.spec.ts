@@ -363,3 +363,33 @@ test('the AI settings of a task are changed with the keyboard, and the handoff c
   await board.api('/api/v1/tasks/T1', { method: 'PATCH', body: { workflow: { checks: false } } });
   await expect(ai.getByLabel('Run the checks')).toHaveValue('off');
 });
+
+test('the handoff is copied from the menu of a card, and is the one the board serves', async ({
+  page,
+  board,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Ship it', status: 'todo', workflow: { push: true } },
+  });
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Actions for T1' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Send to AI: Copy handoff' }).focus();
+  await page.keyboard.press('Enter');
+
+  const card = page.getByRole('button', { name: 'Ship it' }).locator('xpath=ancestor::li');
+  await expect(card.getByText('Handoff copied to the clipboard.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Actions for T1' })).toBeFocused();
+  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  const served = await (
+    await fetch(`${board.url.replace(/\/$/, '')}/api/v1/tasks/T1/handoff`)
+  ).text();
+  expect(copied).toBe(served);
+  expect(copied).toContain('Push your commits to the remote. _(source: this task)_');
+  // Nothing was opened by it.
+  await expect(page.getByRole('complementary')).toHaveCount(0);
+});

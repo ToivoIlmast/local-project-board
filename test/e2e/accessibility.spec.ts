@@ -257,3 +257,60 @@ test('what an agent does to the board does not take the focus out of a form', as
   await expect(page.getByLabel('Labels')).toBeFocused();
   await expect(page.getByLabel('Labels')).toHaveValue('half typed');
 });
+
+test('a task left with unsaved AI settings asks Save, Discard or Cancel, answered with the keyboard, in both themes', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Ship it', status: 'todo', workflow: { report: false } },
+  });
+  await page.goto(board.url);
+  await page.getByRole('button', { name: 'Ship it' }).click();
+  const task = page.getByRole('complementary', { name: 'Task T1' });
+  await task.getByLabel('Push').selectOption('On');
+
+  const close = task.getByRole('button', { name: 'Close', exact: true });
+  await close.focus();
+  await page.keyboard.press('Enter');
+  const question = page.getByRole('dialog', { name: 'Unsaved changes' });
+  await expect(question).toContainText('You have unsaved changes to the AI settings of T1.');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect(await violations(page), `the question, ${scheme} theme`).toEqual([]);
+  }
+
+  // The keyboard starts on the choice that loses nothing, and goes through the three in order.
+  await expect(question.getByRole('button', { name: 'Save' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(question.getByRole('button', { name: 'Discard' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(question.getByRole('button', { name: 'Cancel' })).toBeFocused();
+
+  // Escape is Cancel: the panel stays, the change is in the form, the focus is back where it was.
+  await page.keyboard.press('Escape');
+  await expect(question).toHaveCount(0);
+  await expect(close).toBeFocused();
+  await expect(task.getByLabel('Push')).toHaveValue('on');
+  expect((await board.api('/api/v1/tasks/T1')) as { workflow: unknown }).toMatchObject({
+    workflow: { report: false },
+  });
+
+  // Save, from the keyboard: written, and then the panel closes.
+  await page.keyboard.press('Enter');
+  await expect(question.getByRole('button', { name: 'Save' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(task).toHaveCount(0);
+  expect((await board.api('/api/v1/tasks/T1')) as { workflow: unknown }).toMatchObject({
+    workflow: { report: false, push: true },
+  });
+
+  // Nothing is unsaved now: no question.
+  await page.getByRole('button', { name: 'Ship it' }).click();
+  await page
+    .getByRole('complementary', { name: 'Task T1' })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
