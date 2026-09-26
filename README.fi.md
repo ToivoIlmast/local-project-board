@@ -1,4 +1,4 @@
-<!-- Based on README.md @ c27751963a16197a42ea305ce499057bfb35e9dd -->
+<!-- Based on README.md @ b00a923d6b329e3572cebf3241f3a755e837e71e -->
 
 # local-project-board
 
@@ -73,7 +73,6 @@ tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
 ai:
-  allowSourceEdits: false
   rules:
     - Älä koskaan poista tehtävää kysymättä ensin.
     - Kysy ennen tilan uudelleennimeämistä.
@@ -86,11 +85,19 @@ oletuksista. Väärin kirjoitettu avain tai sallitun ulkopuolinen arvo pysäytt�
 joka nimeää avaimen ja sen lähteen. Myös sellaisen tilan poistaminen, jota tehtävät yhä käyttävät,
 pysäyttää taulun sen sijaan että ne tehtävät piilotettaisiin.
 
-`ai.rules` on alla olevien tekoälyohjeiden osio "## Rules" — se, mitä agentin ei saa rikkoa
-API:n mekaniikassa. Taulussa on pieni sisäänrakennettu oletus; kun `ai.rules` asetetaan jommassakummassa
-asetustiedostossa, se korvaa koko listan eikä lisää siihen mitään. Säännöt, jotka taulu jakaa juuri nyt,
-ovat aina ne, jotka `npx local-project-board instructions` tulostaa — myös sisäänrakennetut oletukset,
-kun mikään ei ohita niitä — joten tämän tiedoston ei tarvitse toistaa niitä.
+`ai.rules` ovat projektisi omat käytännöt agentille — se, mitä mikään asetus ei ilmaise, kuten
+kommenttien kieli tai commit-viestien tyyli. Alla olevat tekoälyohjeet luettelevat ne otsikon
+"Project rules" alla API:n sääntöjen jälkeen. API:n säännöt ovat aina mukana: `ai.rules` lisää
+niihin eikä voi poistaa tai korvata yhtäkään, ja tyhjä lista ei lisää mitään. Kerroksen lista korvaa
+alemman kerroksen listan, kuten jokainen tämän tiedoston lista. Se, mitä agentti saa tehdä
+tehtävällä — muuttaa tiedostoja, työskennellä omassa haarassa, ajaa tarkistukset, commitoida,
+pushata, kirjoittaa raportin — ei kuulu `ai.rules`-asetukseen: ne ovat AI workflow -asetukset, jotka
+tallennetaan tiedostoon `.board/workflow.yaml` ja jotka `GET /api/v1/workflow` palauttaa; `npx
+local-project-board handoff <id>` tulostaa yhteen tehtävään sopivat vaiheet. Se, saako agentti
+muuttaa tiedostoja, on asetus `editCode`; vanhalla `ai.allowSourceEdits`-avaimella ei ollut koskaan
+vaikutusta ja se on poistettu, joten asetustiedosto, jossa se yhä on, pysäyttää taulun viestiin,
+joka kertoo siitä. Se, mitä taulu jakaa juuri nyt, on aina se, mitä `npx local-project-board
+instructions` tulostaa, joten tämän tiedoston ei tarvitse toistaa sääntöjä.
 
 ## Kun taulu on käynnissä
 
