@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button } from './Button';
 import { IconButton } from './IconButton';
 
 export interface MenuItem {
@@ -11,7 +12,13 @@ export interface MenuItem {
 export interface MenuProps {
   label: string;
   items: (MenuItem | 'separator')[];
+  /** What the button shows; by default a glyph. */
   children?: ReactNode;
+  /**
+   * `icon` is a glyph with a name behind it, for the corner of a card. `button` is a button
+   * that says what it does; its `label` is then also its text, so the name is what is shown.
+   */
+  appearance?: 'icon' | 'button';
 }
 
 /** Separators have no name of their own; the item above one names it. */
@@ -25,7 +32,7 @@ function separatorKey(items: (MenuItem | 'separator')[], index: number): string 
  * the focus goes back to the button when the menu closes, so it is never left on an item
  * that is no longer there.
  */
-export function Menu({ label, items, children = '⋯' }: MenuProps) {
+export function Menu({ label, items, children = '⋯', appearance = 'icon' }: MenuProps) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -59,14 +66,25 @@ export function Menu({ label, items, children = '⋯' }: MenuProps) {
         if (open && next !== null && !boxRef.current?.contains(next)) setOpen(false);
       }}
     >
-      <IconButton
-        label={label}
-        aria-expanded={open}
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-      >
-        {children}
-      </IconButton>
+      {appearance === 'button' ? (
+        <Button
+          aria-label={label}
+          aria-expanded={open}
+          ref={triggerRef}
+          onClick={() => setOpen(!open)}
+        >
+          {children}
+        </Button>
+      ) : (
+        <IconButton
+          label={label}
+          aria-expanded={open}
+          ref={triggerRef}
+          onClick={() => setOpen(!open)}
+        >
+          {children}
+        </IconButton>
+      )}
       {!open ? null : (
         <ul className="menu__list">
           {items.map((item, index) =>

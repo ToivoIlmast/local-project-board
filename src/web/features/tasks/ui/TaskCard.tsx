@@ -1,6 +1,7 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Task } from '../../../../contract/v1/index';
 import { Badge, Menu, type MenuItem } from '../../../shared/ui/index';
+import { hasOwnSettings } from '../model/taskWorkflow';
 
 export interface TaskCardProps {
   task: Task;
@@ -71,6 +72,11 @@ export const TaskCard = memo(function TaskCard({
             ⎇ {task.branch}
           </Badge>
         )}
+        {hasOwnSettings(task.workflow) ? (
+          <Badge tone="warning" title="This task has AI settings of its own">
+            ⚙ AI settings
+          </Badge>
+        ) : null}
         {busy ? <span className="card__busy">saving…</span> : null}
       </div>
     </li>

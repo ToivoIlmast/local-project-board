@@ -87,6 +87,7 @@ describe('the board client speaks the contract', () => {
       'GET /api/v1/reports': { json: [aReport()] },
       'GET /api/v1/reports/R1': { text: '<h1>Audit</h1>', contentType: 'text/html' },
       'DELETE /api/v1/reports/R1': { json: { deleted: true } },
+      'GET /api/v1/tasks/T1/handoff': { text: '# Task T1: x\n' },
       'GET /api/v1/git/status': { json: aGitStatus() },
       'GET /api/v1/git/commits?limit=10': { json: [] },
       'GET /api/v1/git/diff': { json: { text: '', truncated: false } },
@@ -104,6 +105,7 @@ describe('the board client speaks the contract', () => {
     await client.workflow();
     await client.updateWorkflow({ board: {}, statuses: {} });
     await client.taskWorkflow('T1');
+    await client.handoff('T1');
     await client.listDocuments('T1');
     await client.readDocument('T1', 'plan.md');
     await client.writeDocument('T1', 'plan.md', '# Plan\n');
@@ -317,5 +319,30 @@ describe('what the page is told when something goes wrong', () => {
     expect(error.code).toBe('NETWORK_ERROR');
     expect(error.status).toBe(0);
     expect(error.message).toMatch(/not answering|stopped/i);
+  });
+});
+
+describe('the handoff of a task', () => {
+  it('is the text the board answers with, unchanged, read without a token', async () => {
+    const text = '# Task T7: Ship it\n\n1. Do not push. _(source: this task)_\n\n---\n\n# API\n';
+    const { fake, client } = board(() => ({ text, contentType: 'text/markdown' }));
+
+    await expect(client.handoff('T7')).resolves.toBe(text);
+
+    expect(fake.calls.map((call) => `${call.method} ${call.url.slice(BASE.length)}`)).toEqual([
+      'GET /api/v1/tasks/T7/handoff',
+    ]);
+  });
+
+  it('says what the board said when there is no such task', async () => {
+    const { client } = board(() => ({
+      status: 404,
+      json: { error: { code: 'TASK_NOT_FOUND', message: 'There is no task T9.', details: {} } },
+    }));
+
+    await expect(client.handoff('T9')).rejects.toMatchObject({
+      status: 404,
+      code: 'TASK_NOT_FOUND',
+    });
   });
 });

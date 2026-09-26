@@ -1,4 +1,9 @@
-import type { WorkflowKey } from '../../../../contract/v1/index';
+import type {
+  BoardWorkflowKey,
+  WorkflowKey,
+  WorkflowSettings,
+  WorkflowSource,
+} from '../../../../contract/v1/index';
 
 /**
  * The words for every AI workflow setting, in one place: the page for the board and its
@@ -49,14 +54,38 @@ export const WORKFLOW_LABELS: Record<WorkflowKey, { label: string; description: 
   },
 };
 
-/** Where the value in effect comes from, for the sentence "In effect: on, from …". */
-export const SOURCE_LABELS = {
-  default: 'the default',
-  board: 'the board',
-  status: 'this column',
-} as const;
+/**
+ * Where the value in effect comes from, for the sentence "In effect: on, from …". A column is
+ * "this column" on the page of the columns, and it is named on the page of a task, where there
+ * is more than one column to mean.
+ */
+export function sourceLabel(source: WorkflowSource, column?: string): string {
+  switch (source) {
+    case 'default':
+      return 'the default';
+    case 'board':
+      return 'the board';
+    case 'status':
+      return column === undefined ? 'this column' : `the column ${column}`;
+    case 'task':
+      return 'this task';
+  }
+}
 
 /** Why a muted setting is muted; it is said in words, not only by how it is drawn. */
 export const INACTIVE_NOTE = `Not used while “${WORKFLOW_LABELS.editCode.label}” is off.`;
 
 export const onOff = (value: boolean): 'on' | 'off' => (value ? 'on' : 'off');
+
+/** What a board-only setting that has no value of its own means, in words. */
+const NO_VALUE: Record<BoardWorkflowKey, string> = {
+  startStatus: 'not changed',
+  finishStatus: 'not changed',
+  baseBranch: 'the main branch of the repository',
+  checkCommand: 'the pipeline of the project',
+};
+
+/** The value of a board-only setting as a person reads it: `null` is a meaning, not a blank. */
+export function boardValueText(key: BoardWorkflowKey, settings: WorkflowSettings): string {
+  return settings[key] ?? NO_VALUE[key];
+}

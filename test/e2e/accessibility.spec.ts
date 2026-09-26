@@ -22,6 +22,9 @@ for (const scheme of ['light', 'dark'] as const) {
         status: 'todo',
         labels: ['ui', 'a11y'],
         branch: 'task/T1-a11y',
+        // A task with settings of its own, one of them muting the rest: the AI block opened, with
+        // a muted setting in it, and a mark on the card.
+        workflow: { editCode: false, report: false },
         body: 'Some **bold** text, a [link](https://example.com) and `code`.\n\n```\nconst a = 1;\n```\n',
       },
     });
@@ -59,6 +62,10 @@ for (const scheme of ['light', 'dark'] as const) {
           await page.getByRole('button', { name: /^A task with/ }).click();
           await page.getByRole('button', { name: 'plan.md', exact: true }).click();
         },
+      ],
+      [
+        'the menu that sends a task to an AI',
+        () => page.getByRole('button', { name: 'Send to AI' }).click(),
       ],
       ['the task form', () => page.getByRole('button', { name: 'Edit', exact: true }).click()],
       [

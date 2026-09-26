@@ -1,6 +1,7 @@
 import type {
   BoardEvent,
   DocumentMeta,
+  EffectiveWorkflow,
   GitCommit,
   GitDiff,
   GitStatus,
@@ -10,6 +11,7 @@ import type {
   WorkflowOverrides,
   WorkflowState,
 } from '../../../src/contract/v1/index';
+import { generateHandoff } from '../../../src/contract/v1/index';
 import { rankForPosition } from '../../../src/core/rules/rank';
 import { defaultWorkflow, resolveWorkflow } from '../../../src/core/rules/workflow';
 import { ApiError, type BoardClient } from '../../../src/web/api/index';
@@ -106,6 +108,14 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     ...structuredClone(overrides),
   });
 
+  const effectiveOf = (task: Task): EffectiveWorkflow =>
+    resolveWorkflow(
+      defaultWorkflow(project.statuses),
+      overrides.board,
+      Object.hasOwn(overrides.statuses, task.status) ? overrides.statuses[task.status] : undefined,
+      task.workflow,
+    );
+
   const client: BoardClient = {
     project: () => record('project', () => ({ ...project })),
     instructions: () => record('instructions', () => options.instructions ?? '# API\n'),
@@ -180,17 +190,20 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         emit({ type: 'workflow.updated', workflow: state });
         return state;
       }),
-    taskWorkflow: (id) =>
-      record('taskWorkflow', () => {
+    taskWorkflow: (id) => record('taskWorkflow', () => effectiveOf(require(id))),
+    handoff: (id) =>
+      record('handoff', () => {
         const task = require(id);
-        return resolveWorkflow(
-          defaultWorkflow(project.statuses),
-          overrides.board,
-          Object.hasOwn(overrides.statuses, task.status)
-            ? overrides.statuses[task.status]
-            : undefined,
-          task.workflow,
-        );
+        // The real generator over the real effective settings: what the page copies is what an
+        // agent would be given, not a sentence made up for the test.
+        return generateHandoff({
+          task: structuredClone(task),
+          documents: [...documents.values()]
+            .filter((document) => document.meta.taskId === id)
+            .map((document) => document.meta),
+          effective: effectiveOf(task),
+          instructions: options.instructions ?? '# API\n',
+        });
       }),
 
     listDocuments: (taskId) =>

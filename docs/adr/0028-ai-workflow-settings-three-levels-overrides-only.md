@@ -187,10 +187,54 @@ does; there is no second model and nothing is stored in the browser.
   the board does not have is listed as a warning and kept in the form; the board refuses to save
   it (422 `UNKNOWN_STATUS`, message shown in the form), so the person removes it or picks a
   status.
-- **Not here:** a task's own overrides (T18) and `ai.rules`, which is configuration (ADR-0021,
-  "Rules of the agent"), not stored by the server and not part of the API; the panel only says
-  where it lives. The words of every setting are `WORKFLOW_LABELS` in the feature, for T18 to
-  reuse.
+- **Not here:** a task's own overrides (see the next section) and `ai.rules`, which is
+  configuration (ADR-0021, "Rules of the agent"), not stored by the server and not part of the
+  API; the panel only says where it lives. The words of every setting are `WORKFLOW_LABELS` in
+  the feature, which the block of a task reuses.
+
+## The AI block of a task (T18)
+
+The details of a task get a block "AI": what an agent will do on this task, the exceptions this
+task makes, and a menu that hands the task to an agent. It uses the routes of T14 and T15 as
+they are (`GET /tasks/:id/workflow`, `PATCH /tasks/:id`, `GET /tasks/:id/handoff`); nothing in the
+contract changed apart from the page's client getting `handoff(id)`.
+
+- **Two kinds of value, kept apart.** What is _in effect_ is only ever the board's answer
+  (`GET /tasks/:id/workflow`, with the source of each value and the `inactive` list): the page
+  does not run `resolveWorkflow`. What is _edited and stored_ is the task's own overrides. The
+  answer is asked for again whenever something it depends on changes — the task's status, its own
+  settings, the settings of the board and the columns (`workflow.updated`, `board.changed`) — and
+  while it is on its way the block says so instead of showing the answer to an earlier question.
+- **The one place the page works something out** is the text of the "inherit" choice, "Inherit
+  (now on, from the column todo)": what the task would have if it said nothing. The board cannot
+  answer that for a task that does say something, so it is taken from the board's overrides with
+  `effectiveFlag`, the function of the Settings panel that a test holds to `resolveWorkflow` for
+  every combination. It is never sent anywhere.
+- **Same three states as a column, one control.** Inherit, on, off — the `FlagChoice` of the
+  Settings panel, its words (`WORKFLOW_LABELS`, `sourceLabel`) and its draft (`useOverridesDraft`,
+  the hook the panel's form is made with). A task can only override the six on/off settings; the
+  four board-only ones are listed as in effect, with their source, and are changed in Settings.
+- **`PATCH` replaces the overrides of the task whole** (T14), so the draft is the whole object
+  and one changed setting sends the others the task already had. When nothing is left the page
+  sends `workflow: null`, never `{}`: `null` is how the board is told to remove the overrides,
+  and no `workflow` at all is what "no override" is. A stored `{}` is read as no override too.
+  "Reset to the settings of column …" sends `null` at once and drops what was typed.
+- **Nothing outside the task is touched.** The block never calls `PUT /workflow`; the board's
+  and the columns' overrides are the same bytes before and after (tests on a real board).
+- **Nothing is applied before the board answers**, and nothing typed is lost (ADR-0025, the same
+  rules as the panel): an error stays next to the form with the draft intact; a change made
+  elsewhere (`task.updated`) is taken silently by a block with nothing unsaved and reported, with
+  a button to load it, by one with changes; a save is recognised as one's own.
+- **Folded away when there is nothing to show:** a task with no overrides is one line, "Uses the
+  settings of column todo", and a button to open it. A task with overrides, or a block being
+  edited, is open. Folding away after the last override goes returns the focus to the button that
+  opens it. The card on the board carries a mark ("AI settings") when the task has overrides.
+- **Send to AI** is a menu whose entries are a list of `{ label, run(taskId) }`. The first is
+  "Copy handoff": the text of `GET /tasks/:id/handoff`, fetched when the entry is chosen — the
+  page composes nothing, so it is the text of the API and of `local-project-board handoff`, and
+  has no token (T15). A further way to send a task is one more entry in the list. The result is
+  announced in a polite live region; a failure of the board, or a browser that refuses the
+  clipboard, is said in words and copies nothing.
 
 ## Consequences
 
