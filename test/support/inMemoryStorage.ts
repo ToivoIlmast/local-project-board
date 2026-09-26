@@ -1,5 +1,5 @@
 import { BoardError } from '../../src/core/errors.js';
-import type { DocumentMeta, Report, Task } from '../../src/core/model/index.js';
+import type { DocumentMeta, Report, Task, WorkflowOverrides } from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
 import { REPORT_ID_PREFIX, allocateId } from '../../src/core/rules/ids.js';
@@ -12,6 +12,7 @@ export interface MemoryStore {
   tasks: Map<string, Task>;
   documents: Map<string, Map<string, { content: string; updatedAt: string }>>;
   reports: Map<string, { report: Report; content: string }>;
+  workflow: WorkflowOverrides;
   taskSequence: number;
   reportSequence: number;
 }
@@ -21,6 +22,7 @@ export function createMemoryStore(): MemoryStore {
     tasks: new Map(),
     documents: new Map(),
     reports: new Map(),
+    workflow: { board: {}, statuses: {} },
     taskSequence: 0,
     reportSequence: 0,
   };
@@ -83,6 +85,7 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         body: input.body,
         labels: [...input.labels],
         ...(input.branch === undefined ? {} : { branch: input.branch }),
+        ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
         createdAt: timestamp,
         updatedAt: timestamp,
         ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
@@ -93,12 +96,19 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
 
     updateTask: async (id, patch: TaskPatch) => {
       const task = requireTask(id);
-      const { branch, ...rest } = patch;
+      const { branch, workflow, ...rest } = patch;
       const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
       if (branch === null) delete updated.branch;
       else if (branch !== undefined) updated.branch = branch;
+      if (workflow === null) delete updated.workflow;
+      else if (workflow !== undefined) updated.workflow = { ...workflow };
       store.tasks.set(id, updated);
       return updated;
+    },
+
+    readWorkflow: async () => structuredClone(store.workflow),
+    writeWorkflow: async (workflow) => {
+      store.workflow = structuredClone(workflow);
     },
 
     deleteTask: async (id) => {

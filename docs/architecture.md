@@ -24,9 +24,9 @@ reference is [api.md](api.md), generated from the route table.
   is a plain import. See ADR-0006.
 
 `core` holds the model (`model/`), the pure rules (`rules/`: ids, statuses, ranks, document
-names, AI rules) and the services (`services/`) that implement the use cases on top of the
-ports. `contract/v1` holds the zod route table, the request and response schemas, and what is
-generated from them: [api.md](api.md) and the AI instructions (ADR-0005, ADR-0012).
+names, AI rules, workflow settings) and the services (`services/`) that implement the use cases
+on top of the ports. `contract/v1` holds the zod route table, the request and response schemas,
+and what is generated from them: [api.md](api.md) and the AI instructions (ADR-0005, ADR-0012).
 
 ## The server
 

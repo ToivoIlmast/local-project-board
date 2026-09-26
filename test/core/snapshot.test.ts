@@ -40,7 +40,7 @@ describe('createSnapshot', () => {
     const snapshot = await createSnapshot(storage, project);
 
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(snapshot.formatVersion).toBe(1);
+    expect(snapshot.formatVersion).toBe(2);
     expect(snapshot.project).toEqual(project);
     expect(snapshot.tasks).toEqual(await storage.listTasks());
     expect(snapshot.documents).toEqual([
@@ -56,7 +56,38 @@ describe('createSnapshot', () => {
     const storage = inMemoryStorage(createMemoryStore());
     await storage.init();
     const snapshot = await createSnapshot(storage, project);
-    expect(snapshot).toMatchObject({ tasks: [], documents: [], reports: [] });
+    expect(snapshot).toMatchObject({
+      workflow: { board: {}, statuses: {} },
+      tasks: [],
+      documents: [],
+      reports: [],
+    });
+  });
+
+  it('contains the workflow overrides of the board, its columns and its tasks (INVARIANT)', async () => {
+    const storage = inMemoryStorage(createMemoryStore());
+    await fill(storage);
+    const workflow = {
+      board: { push: false, checkCommand: 'npm test' },
+      statuses: { todo: { editCode: false } },
+    };
+    await storage.writeWorkflow(workflow);
+    await storage.updateTask('T2', { workflow: { commit: false } });
+
+    const snapshot = await createSnapshot(storage, project);
+
+    expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.workflow).toEqual(workflow);
+    expect(snapshot.tasks.find((t) => t.id === 'T2')?.workflow).toEqual({ commit: false });
+    expect(snapshot.tasks.find((t) => t.id === 'T1')).not.toHaveProperty('workflow');
+  });
+
+  it('holds overrides only: nothing the resolver computes (INVARIANT)', async () => {
+    const storage = inMemoryStorage(createMemoryStore());
+    await fill(storage);
+    await storage.writeWorkflow({ board: { push: true }, statuses: {} });
+    const snapshot = await createSnapshot(storage, project);
+    expect(JSON.stringify(snapshot.workflow)).toBe('{"board":{"push":true},"statuses":{}}');
   });
 
   it('does not change the board it exports (INVARIANT)', async () => {

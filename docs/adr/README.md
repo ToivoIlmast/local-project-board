@@ -29,3 +29,4 @@
 | 0025 | [The page mirrors the board, without optimistic updates](0025-the-page-mirrors-the-board-without-optimistic-updates.md)          | accepted |
 | 0026 | [AI workflow rules are configurable (ai.rules)](0026-ai-workflow-rules-are-configurable-ai-rules.md)                             | accepted |
 | 0027 | [README translations are checked against git history](0027-readme-translations-are-checked-against-git-history.md)               | accepted |
+| 0028 | [AI workflow settings: three levels, overrides only](0028-ai-workflow-settings-three-levels-overrides-only.md)                   | proposed |

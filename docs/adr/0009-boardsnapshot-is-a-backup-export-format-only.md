@@ -2,6 +2,8 @@
 
 Status: accepted (2026-09-21)
 
+Amended by ADR-0028: `formatVersion` is 2 since the snapshot carries the workflow overrides.
+
 ## Context
 
 `.board/` is untracked, so it needs a simple backup and export path.

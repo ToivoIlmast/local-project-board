@@ -3,15 +3,18 @@ import { documentNameSchema } from './document.js';
 import { projectSchema } from './project.js';
 import { reportSchema } from './report.js';
 import { isoDateTimeSchema, taskIdSchema, taskSchema } from './task.js';
+import { workflowOverridesSchema } from './workflow.js';
 
 /**
  * A portable backup/export of a whole board (ADR-0009).
  * Not a persistence model: the source of truth is .board/ on disk.
  */
 export const boardSnapshotSchema = z.strictObject({
-  formatVersion: z.literal(1),
+  formatVersion: z.literal(2),
   exportedAt: isoDateTimeSchema,
   project: projectSchema.pick({ name: true, statuses: true, idPrefix: true }),
+  /** Overrides of the board and its columns; the tasks carry their own (ADR-0028). */
+  workflow: workflowOverridesSchema,
   tasks: z.array(taskSchema),
   documents: z.array(
     z.strictObject({ taskId: taskIdSchema, name: documentNameSchema, content: z.string() }),

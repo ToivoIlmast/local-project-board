@@ -5,6 +5,9 @@ import {
   reportSchema,
   statusesSchema,
   taskSchema,
+  boardWorkflowSchema,
+  workflowFlagsSchema,
+  workflowOverridesSchema,
   type Task,
 } from '../../src/core/model/index.js';
 
@@ -24,6 +27,24 @@ describe('taskSchema', () => {
     expect(taskSchema.parse(task)).toEqual(task);
     const full = { ...task, branch: 'feat/x', extra: { estimate: 3, owner: { name: 'me' } } };
     expect(taskSchema.parse(full)).toEqual(full);
+  });
+
+  it('accepts partial workflow overrides and does not require them', () => {
+    expect(taskSchema.parse({ ...task, workflow: { push: true } }).workflow).toEqual({
+      push: true,
+    });
+    expect(taskSchema.parse({ ...task, workflow: {} }).workflow).toEqual({});
+    expect('workflow' in taskSchema.parse(task)).toBe(false);
+  });
+
+  it.each([
+    ['not a boolean', { push: 'yes' }],
+    ['a setting only the board has', { checkCommand: 'npm test' }],
+    ['an unknown setting', { allowSourceEdits: true }],
+  ])('rejects task workflow overrides that are %s', (_why, workflow) => {
+    const result = taskSchema.safeParse({ ...task, workflow });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path[0]).toBe('workflow');
   });
 
   it.each([
@@ -92,12 +113,80 @@ describe('projectSchema', () => {
   });
 });
 
+describe('workflowFlagsSchema', () => {
+  it('accepts any subset of the six boolean settings', () => {
+    expect(workflowFlagsSchema.parse({})).toEqual({});
+    const all = {
+      editCode: true,
+      branch: true,
+      checks: false,
+      commit: true,
+      push: false,
+      report: true,
+    };
+    expect(workflowFlagsSchema.parse(all)).toEqual(all);
+  });
+
+  it.each([{ push: 1 }, { push: null }, { push: 'true' }, { startStatus: 'todo' }, { nope: true }])(
+    'rejects %j',
+    (value) => {
+      expect(workflowFlagsSchema.safeParse(value).success).toBe(false);
+    },
+  );
+});
+
+describe('boardWorkflowSchema', () => {
+  it('adds the settings that only make sense for the whole board', () => {
+    const board = {
+      push: true,
+      startStatus: 'todo',
+      finishStatus: null,
+      baseBranch: 'develop',
+      checkCommand: 'npm test',
+    };
+    expect(boardWorkflowSchema.parse(board)).toEqual(board);
+  });
+
+  it.each([
+    { startStatus: '' },
+    { baseBranch: '' },
+    { checkCommand: '   ' },
+    { checkCommand: 5 },
+    { nope: true },
+  ])('rejects %j', (value) => {
+    expect(boardWorkflowSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe('workflowOverridesSchema', () => {
+  it('holds the board overrides and the overrides of each column', () => {
+    const workflow = {
+      board: { push: false, checkCommand: 'npm test' },
+      statuses: { backlog: { editCode: false } },
+    };
+    expect(workflowOverridesSchema.parse(workflow)).toEqual(workflow);
+  });
+
+  it('needs both parts and rejects anything else', () => {
+    expect(workflowOverridesSchema.safeParse({ board: {} }).success).toBe(false);
+    expect(workflowOverridesSchema.safeParse({ board: {}, statuses: {}, extra: 1 }).success).toBe(
+      false,
+    );
+    // A column cannot carry board-only settings.
+    expect(
+      workflowOverridesSchema.safeParse({ board: {}, statuses: { todo: { baseBranch: 'x' } } })
+        .success,
+    ).toBe(false);
+  });
+});
+
 describe('boardSnapshotSchema', () => {
   const snapshot = {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: task.createdAt,
     project: { name: 'dep-health', statuses: ['todo', 'done'], idPrefix: 'T' },
-    tasks: [task],
+    workflow: { board: { push: false }, statuses: { todo: { editCode: false } } },
+    tasks: [{ ...task, workflow: { push: true } }],
     documents: [{ taskId: 'T1', name: 'notes.md', content: '# Notes\n' }],
     reports: [
       { id: 'R1', title: 'Audit', format: 'html', createdAt: task.createdAt, content: '<p>x</p>' },
@@ -108,8 +197,16 @@ describe('boardSnapshotSchema', () => {
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 
-  it('accepts only format version 1', () => {
-    expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 2 }).success).toBe(false);
+  it('accepts only format version 2: the workflow settings changed the shape of version 1', () => {
+    expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 1 }).success).toBe(false);
+    expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 3 }).success).toBe(false);
+  });
+
+  it('carries the workflow overrides, and only overrides', () => {
+    const { workflow: _dropped, ...withoutWorkflow } = snapshot;
+    expect(boardSnapshotSchema.safeParse(withoutWorkflow).success).toBe(false);
+    const effective = { ...snapshot, workflow: { ...snapshot.workflow, sources: {}, values: {} } };
+    expect(boardSnapshotSchema.safeParse(effective).success).toBe(false);
   });
 
   it('rejects unsafe document names inside a snapshot', () => {
