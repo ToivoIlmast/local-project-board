@@ -4,3 +4,4 @@ export * from './project.js';
 export * from './report.js';
 export * from './snapshot.js';
 export * from './task.js';
+export * from './workflow.js';

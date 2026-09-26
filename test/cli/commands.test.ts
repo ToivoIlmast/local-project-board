@@ -175,7 +175,13 @@ describe('local-project-board export', () => {
 
     expect(run.exitCode).toBe(0);
     const snapshot = boardSnapshotSchema.parse(JSON.parse(run.out.join('\n')));
-    expect(snapshot).toMatchObject({ formatVersion: 1, tasks: [], documents: [], reports: [] });
+    expect(snapshot).toMatchObject({
+      formatVersion: 2,
+      workflow: { board: {}, statuses: {} },
+      tasks: [],
+      documents: [],
+      reports: [],
+    });
   });
 
   it('exports a board that is running, without disturbing it', async () => {

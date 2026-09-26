@@ -185,6 +185,109 @@ export function runStorageConformance(harness: StorageHarness): void {
       });
     });
 
+    describe('task workflow overrides', () => {
+      it('keeps the overrides it was given, and only those (INVARIANT)', async () => {
+        const created = await storage.createTask(newTask({ workflow: { push: true } }));
+        expect(created.workflow).toEqual({ push: true });
+        expect((await storage.getTask(created.id))?.workflow).toEqual({ push: true });
+        const reopened = await reopen(storage);
+        expect((await reopened.getTask(created.id))?.workflow).toEqual({ push: true });
+      });
+
+      it('has no workflow at all for a task that was created without one', async () => {
+        const created = await storage.createTask(newTask());
+        expect('workflow' in created).toBe(false);
+        expect('workflow' in ((await storage.getTask(created.id)) ?? {})).toBe(false);
+      });
+
+      it('replaces the whole set of overrides on update, like labels do', async () => {
+        const created = await storage.createTask(
+          newTask({ workflow: { push: true, checks: false } }),
+        );
+        const updated = await storage.updateTask(created.id, { workflow: { commit: false } });
+        expect(updated.workflow).toEqual({ commit: false });
+        expect((await storage.getTask(created.id))?.workflow).toEqual({ commit: false });
+      });
+
+      it('clears every override when the patch says null', async () => {
+        const created = await storage.createTask(newTask({ workflow: { push: true } }));
+        const updated = await storage.updateTask(created.id, { workflow: null });
+        expect('workflow' in updated).toBe(false);
+        expect('workflow' in ((await storage.getTask(created.id)) ?? {})).toBe(false);
+      });
+
+      it('leaves the overrides alone when the patch does not mention them', async () => {
+        const created = await storage.createTask(newTask({ workflow: { push: true } }));
+        const updated = await storage.updateTask(created.id, { title: 'Renamed' });
+        expect(updated.workflow).toEqual({ push: true });
+      });
+
+      it('keeps the overrides when the task moves to another column', async () => {
+        const created = await storage.createTask(newTask({ workflow: { push: true } }));
+        const updated = await storage.updateTask(created.id, { status: 'done', rank: 'a1' });
+        expect(updated.workflow).toEqual({ push: true });
+      });
+    });
+
+    describe('workflow overrides of the board and its columns', () => {
+      const workflow = {
+        board: { push: false, checkCommand: 'npm test', finishStatus: null },
+        statuses: { backlog: { editCode: false }, todo: { commit: false } },
+      };
+
+      it('is empty on a board that never had any, and that is not an error', async () => {
+        expect(await storage.readWorkflow()).toEqual({ board: {}, statuses: {} });
+        expect(await storage.readIssues()).toEqual([]);
+      });
+
+      it('writes and reads back exactly what it was given', async () => {
+        await storage.writeWorkflow(workflow);
+        expect(await storage.readWorkflow()).toEqual(workflow);
+      });
+
+      it('survives a reopen', async () => {
+        await storage.writeWorkflow(workflow);
+        const reopened = await reopen(storage);
+        expect(await reopened.readWorkflow()).toEqual(workflow);
+      });
+
+      it('replaces the previous overrides whole: a key that is gone stays gone', async () => {
+        await storage.writeWorkflow(workflow);
+        await storage.writeWorkflow({ board: { push: true }, statuses: {} });
+        expect(await storage.readWorkflow()).toEqual({ board: { push: true }, statuses: {} });
+      });
+
+      it('can be emptied again', async () => {
+        await storage.writeWorkflow(workflow);
+        await storage.writeWorkflow({ board: {}, statuses: {} });
+        expect(await storage.readWorkflow()).toEqual({ board: {}, statuses: {} });
+      });
+
+      it('does not hand out, or keep, the object it was given', async () => {
+        const given = structuredClone(workflow);
+        await storage.writeWorkflow(given);
+        given.board.push = true;
+        given.statuses.todo.commit = true;
+        const read = await storage.readWorkflow();
+        expect(read).toEqual(workflow);
+        read.board.checkCommand = 'changed';
+        expect(await storage.readWorkflow()).toEqual(workflow);
+      });
+
+      it('does not touch the tasks, and they do not touch it', async () => {
+        const created = await storage.createTask(newTask({ workflow: { push: true } }));
+        await storage.writeWorkflow(workflow);
+        expect(await storage.getTask(created.id)).toEqual(created);
+        await storage.updateTask(created.id, { title: 'Renamed' });
+        expect(await storage.readWorkflow()).toEqual(workflow);
+      });
+
+      it('reports no read problems for what it wrote itself', async () => {
+        await storage.writeWorkflow(workflow);
+        expect(await storage.readIssues()).toEqual([]);
+      });
+    });
+
     describe('documents', () => {
       let taskId: string;
 

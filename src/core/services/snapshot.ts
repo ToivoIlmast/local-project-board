@@ -32,9 +32,10 @@ export async function createSnapshot(
   }
 
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     project: { name: project.name, statuses: [...project.statuses], idPrefix: project.idPrefix },
+    workflow: await storage.readWorkflow(),
     tasks,
     documents,
     reports,

@@ -16,6 +16,7 @@ export function createStorage(config: AppConfig, options: StorageOptions): Stora
       return markdownStorage({
         root: options.root,
         idPrefix: config.tasks.idPrefix,
+        statuses: config.statuses,
         onExternalChange: options.onExternalChange,
       });
     default:

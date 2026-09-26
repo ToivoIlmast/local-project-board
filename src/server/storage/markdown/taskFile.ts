@@ -4,7 +4,17 @@ import { taskSchema, type Task } from '../../../core/model/index.js';
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
 /** Fields the board owns; anything else in the frontmatter is the user's and is kept as `extra`. */
-const KNOWN = ['id', 'title', 'status', 'rank', 'labels', 'branch', 'createdAt', 'updatedAt'];
+const KNOWN = [
+  'id',
+  'title',
+  'status',
+  'rank',
+  'labels',
+  'branch',
+  'workflow',
+  'createdAt',
+  'updatedAt',
+];
 
 export function serializeTask(task: Task): string {
   const { body, extra, ...fields } = task;

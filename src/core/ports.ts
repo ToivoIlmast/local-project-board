@@ -7,6 +7,8 @@ import type {
   GitStatus,
   Report,
   Task,
+  WorkflowFlagOverrides,
+  WorkflowOverrides,
 } from './model/index.js';
 
 /** A task as the caller describes it; the provider assigns the id and the timestamps. */
@@ -17,10 +19,14 @@ export interface NewTask {
   body: string;
   labels: string[];
   branch?: string | undefined;
+  workflow?: WorkflowFlagOverrides | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
-/** Only the given fields change. `branch: null` clears the branch. */
+/**
+ * Only the given fields change. `branch: null` clears the branch; `workflow: null` clears all of
+ * the task's workflow overrides, and a `workflow` object replaces them whole, as `labels` does.
+ */
 export interface TaskPatch {
   title?: string | undefined;
   status?: string | undefined;
@@ -28,6 +34,7 @@ export interface TaskPatch {
   body?: string | undefined;
   labels?: string[] | undefined;
   branch?: string | null | undefined;
+  workflow?: WorkflowFlagOverrides | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
@@ -54,7 +61,10 @@ export interface Storage {
   close(): Promise<void>;
 
   listTasks(): Promise<Task[]>;
-  /** What could not be read on the last scan. A file that is fixed stops being reported. */
+  /**
+   * What could not be read on the last scan, the workflow settings included. A file that is
+   * fixed stops being reported.
+   */
   readIssues(): Promise<ReadIssue[]>;
   getTask(id: string): Promise<Task | null>;
   /** Allocates the id atomically; an id is never reused (ADR-0020). */
@@ -62,6 +72,16 @@ export interface Storage {
   updateTask(id: string, patch: TaskPatch): Promise<Task>;
   /** Deletes the task and its documents. */
   deleteTask(id: string): Promise<void>;
+
+  /**
+   * The overrides of the board and its columns: only what was set, never the settings a task
+   * runs with (ADR-0028). No overrides is `{ board: {}, statuses: {} }`, not an error; so is
+   * a stored value that cannot be read, which `readIssues` reports instead. Every call reads
+   * the store afresh, and the caller gets its own copy.
+   */
+  readWorkflow(): Promise<WorkflowOverrides>;
+  /** Replaces the board's and the columns' overrides whole. The caller validates them. */
+  writeWorkflow(workflow: WorkflowOverrides): Promise<void>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string | null>;

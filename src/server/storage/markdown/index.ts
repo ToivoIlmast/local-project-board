@@ -1,17 +1,24 @@
 import { mkdir, readFile, readdir, rm, stat, watch, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BoardError } from '../../../core/errors.js';
-import type { DocumentMeta, Report, Task } from '../../../core/model/index.js';
+import type { DocumentMeta, Report, Task, WorkflowOverrides } from '../../../core/model/index.js';
 import type { NewReport, NewTask, ReadIssue, Storage, TaskPatch } from '../../../core/ports.js';
 import { documentFormat, isDocumentName } from '../../../core/rules/documentName.js';
 import { REPORT_ID_PREFIX, allocateId, isReportId, isTaskId } from '../../../core/rules/ids.js';
+import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
 import { parseTask, serializeTask } from './taskFile.js';
+import { parseWorkflow, serializeWorkflow } from './workflowFile.js';
 
 export interface MarkdownStorageOptions {
   /** The board root; the board itself lives in <root>/.board. */
   root: string;
   idPrefix?: string | undefined;
+  /**
+   * The configured statuses. When given, workflow overrides for a status that is not among them
+   * are reported by `readIssues`.
+   */
+  statuses?: readonly string[] | undefined;
   /** Called when the board changed outside the server; drives live updates, never correctness. */
   onExternalChange?: (() => void) | undefined;
 }
@@ -24,6 +31,8 @@ interface BoardState {
 
 const STATE_FILE = 'board.json';
 const TASK_FILE = 'task.md';
+const WORKFLOW_FILE = 'workflow.yaml';
+const NO_WORKFLOW: WorkflowOverrides = { board: {}, statuses: {} };
 
 /**
  * The default provider and the source of truth (ADR-0002). Every read goes to disk
@@ -116,6 +125,20 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     return task;
   }
 
+  /** `null` when there is no file: that is an empty set of overrides, not a problem. */
+  async function readWorkflowFile(): Promise<
+    { workflow: WorkflowOverrides } | { error: string } | null
+  > {
+    let text: string;
+    try {
+      text = await readFile(join(boardDir, WORKFLOW_FILE), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      return { error: `The file cannot be read: ${(error as Error).message}` };
+    }
+    return parseWorkflow(text);
+  }
+
   async function documentMeta(taskId: string, name: string): Promise<DocumentMeta> {
     const info = await stat(join(taskDir(taskId), name));
     return { taskId, name, size: info.size, updatedAt: info.mtime.toISOString() };
@@ -164,7 +187,29 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
           issues.push({ file: `tasks/${id}/${TASK_FILE}`, message: result.error });
         }
       }
+      const workflow = await readWorkflowFile();
+      if (workflow !== null && 'error' in workflow) {
+        issues.push({ file: WORKFLOW_FILE, message: workflow.error });
+      } else if (workflow !== null && options.statuses !== undefined) {
+        for (const message of findWorkflowIssues(workflow.workflow, options.statuses)) {
+          issues.push({ file: WORKFLOW_FILE, message });
+        }
+      }
       return issues;
+    },
+
+    async readWorkflow() {
+      const result = await readWorkflowFile();
+      // A file that cannot be used means defaults; `readIssues` says why.
+      return result !== null && 'workflow' in result
+        ? result.workflow
+        : structuredClone(NO_WORKFLOW);
+    },
+
+    writeWorkflow(workflow) {
+      return exclusive(() =>
+        writeFileAtomic(join(boardDir, WORKFLOW_FILE), serializeWorkflow(workflow)),
+      );
     },
 
     createTask(input: NewTask) {
@@ -180,6 +225,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
           body: input.body,
           labels: [...input.labels],
           ...(input.branch === undefined ? {} : { branch: input.branch }),
+          ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
           createdAt: timestamp,
           updatedAt: timestamp,
           ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
@@ -194,10 +240,12 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     updateTask(id, patch: TaskPatch) {
       return exclusive(async () => {
         const task = await requireTask(id);
-        const { branch, ...rest } = patch;
+        const { branch, workflow, ...rest } = patch;
         const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
         if (branch === null) delete updated.branch;
         else if (branch !== undefined) updated.branch = branch;
+        if (workflow === null) delete updated.workflow;
+        else if (workflow !== undefined) updated.workflow = { ...workflow };
         return saveTask(updated);
       });
     },
