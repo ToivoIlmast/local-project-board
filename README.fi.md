@@ -1,4 +1,4 @@
-<!-- Based on README.md @ bca4b1d98427a2d0ca344da0d0b9ee8cdc150467 -->
+<!-- Based on README.md @ c41cd88979d22f34397c04b7c8d70447644dda7b -->
 
 # local-project-board
 
@@ -57,10 +57,12 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
   ja jokaiselle sarakkeelle. Vain se, minkä muutat, tallennetaan tiedostoon
   `.board/workflow.yaml`; sarake voi yksinkertaisesti seurata taulua. Yksittäinen tehtävä voi myös
   poiketa: avaa se nähdäksesi, mistä kukin voimassa oleva arvo tulee, ohita yksi asetus tai palauta
-  tehtävä sarakkeensa asetuksiin.
-- **Lähetä tekoälylle.** Tehtävässä yksi valikko kopioi handoffin — tehtävän, sen dokumentit ja
-  asetusten edellyttämät vaiheet — valmiina liitettäväksi mille tahansa agentille. Siinä ei ole
-  tokenia. `npx local-project-board handoff <ID>` tulostaa saman tekstin.
+  tehtävä sarakkeensa asetuksiin. Lomakkeesta poistuttaessa tallentamattomat muutokset kysytään
+  ensin: Tallenna, Hylkää tai Peruuta.
+- **Lähetä tekoälylle.** Tehtävässä tai sen kortin valikossa yksi valinta kopioi handoffin —
+  tehtävän, sen dokumentit ja asetusten edellyttämät vaiheet — valmiina liitettäväksi mille
+  tahansa agentille. Siinä ei ole tokenia. `npx local-project-board handoff <ID>` tulostaa saman
+  tekstin.
 
 Tiedostot, joita taulu ei osaa lukea, näkyvät juuri sellaisina sarakkeiden yläpuolella — eivät
 koskaan tehtävinä, joiden arvot on keksitty.
