@@ -247,6 +247,137 @@ Response — 200, application/json:
 }
 ```
 
+### GET /api/v1/tasks/:id/workflow
+
+Read the settings a task runs with, the source of each and which are inactive
+
+Given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/workflow
+
+Response — 200, application/json:
+
+```json
+{
+  "values": {
+    "editCode": false,
+    "branch": true,
+    "checks": true,
+    "commit": true,
+    "push": false,
+    "report": true,
+    "startStatus": "in-progress",
+    "finishStatus": null,
+    "baseBranch": null,
+    "checkCommand": "npm test"
+  },
+  "sources": {
+    "editCode": "status",
+    "branch": "default",
+    "checks": "default",
+    "commit": "default",
+    "push": "board",
+    "report": "default",
+    "startStatus": "default",
+    "finishStatus": "default",
+    "baseBranch": "default",
+    "checkCommand": "board"
+  },
+  "inactive": [
+    "branch",
+    "checks",
+    "commit",
+    "push"
+  ]
+}
+```
+
+## AI workflow
+
+### GET /api/v1/workflow
+
+Read the AI workflow overrides of the board and its columns, with the defaults
+
+Given to AI agents in the generated instructions.
+
+Response — 200, application/json:
+
+```json
+{
+  "defaults": {
+    "editCode": true,
+    "branch": true,
+    "checks": true,
+    "commit": true,
+    "push": false,
+    "report": true,
+    "startStatus": "in-progress",
+    "finishStatus": null,
+    "baseBranch": null,
+    "checkCommand": null
+  },
+  "board": {
+    "push": false,
+    "checkCommand": "npm test"
+  },
+  "statuses": {
+    "backlog": {
+      "editCode": false
+    }
+  }
+}
+```
+
+### PUT /api/v1/workflow
+
+Replace the AI workflow overrides of the board and all its columns (last-write-wins)
+
+Not given to AI agents in the generated instructions.
+
+Request body:
+
+```json
+{
+  "board": {
+    "push": false,
+    "checkCommand": "npm test"
+  },
+  "statuses": {
+    "backlog": {
+      "editCode": false
+    }
+  }
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "defaults": {
+    "editCode": true,
+    "branch": true,
+    "checks": true,
+    "commit": true,
+    "push": false,
+    "report": true,
+    "startStatus": "in-progress",
+    "finishStatus": null,
+    "baseBranch": null,
+    "checkCommand": null
+  },
+  "board": {
+    "push": false,
+    "checkCommand": "npm test"
+  },
+  "statuses": {
+    "backlog": {
+      "editCode": false
+    }
+  }
+}
+```
+
 ## Documents
 
 ### GET /api/v1/tasks/:id/documents

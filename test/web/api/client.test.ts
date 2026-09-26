@@ -1,7 +1,15 @@
 import { routes } from '../../../src/contract/v1/index';
 import { ApiError, createBoardClient } from '../../../src/web/api/index';
 import { errorBody, fakeFetch, type Reply } from '../support/fetch';
-import { aDocument, aGitStatus, aProject, aReport, aTask } from '../support/fixtures';
+import {
+  aDocument,
+  aGitStatus,
+  aProject,
+  aReport,
+  aTask,
+  aWorkflow,
+  anEffectiveWorkflow,
+} from '../support/fixtures';
 
 const TOKEN = 'the-session-token';
 const BASE = 'http://127.0.0.1:7432';
@@ -69,6 +77,9 @@ describe('the board client speaks the contract', () => {
       'PATCH /api/v1/tasks/T1': { json: aTask({ id: 'T1' }) },
       'POST /api/v1/tasks/T1/move': { json: aTask({ id: 'T1' }) },
       'DELETE /api/v1/tasks/T1': { json: { deleted: true } },
+      'GET /api/v1/workflow': { json: aWorkflow() },
+      'PUT /api/v1/workflow': { json: aWorkflow() },
+      'GET /api/v1/tasks/T1/workflow': { json: anEffectiveWorkflow() },
       'GET /api/v1/tasks/T1/documents': { json: [aDocument()] },
       'GET /api/v1/tasks/T1/documents/plan.md': { text: '# Plan\n' },
       'PUT /api/v1/tasks/T1/documents/plan.md': { json: aDocument() },
@@ -90,6 +101,9 @@ describe('the board client speaks the contract', () => {
     await client.updateTask('T1', { title: 'Renamed' });
     await client.moveTask('T1', { status: 'done' });
     await client.deleteTask('T1');
+    await client.workflow();
+    await client.updateWorkflow({ board: {}, statuses: {} });
+    await client.taskWorkflow('T1');
     await client.listDocuments('T1');
     await client.readDocument('T1', 'plan.md');
     await client.writeDocument('T1', 'plan.md', '# Plan\n');
@@ -113,6 +127,67 @@ describe('the board client speaks the contract', () => {
       `${BASE}${'/api/v1'}${routes['reports.read'].path.replace(':id', 'R3')}`,
     );
     expect(client.eventsUrl()).toBe(`${BASE}/api/v1${routes['events.stream'].path}`);
+  });
+});
+
+describe('the workflow settings', () => {
+  it('reads the board’s overrides and a task’s effective settings from the routes of the contract', async () => {
+    const { fake, client } = board((url) =>
+      url.endsWith('/tasks/T7/workflow') ? { json: anEffectiveWorkflow() } : { json: aWorkflow() },
+    );
+
+    await client.workflow();
+    await client.taskWorkflow('T7');
+
+    expect(fake.calls.map((call) => `${call.method} ${call.url.slice(BASE.length)}`)).toEqual([
+      'GET /api/v1/workflow',
+      'GET /api/v1/tasks/T7/workflow',
+    ]);
+    // Reads need no token.
+    expect(fake.calls.some((call) => call.url.endsWith('/session'))).toBe(false);
+  });
+
+  it('sends the overrides exactly as given, with the token, and returns the answer', async () => {
+    const answer = aWorkflow({ board: { push: true }, statuses: { todo: { editCode: false } } });
+    const { fake, client } = board(() => ({ json: answer }));
+    const overrides = { board: { push: true }, statuses: { todo: { editCode: false } } };
+
+    expect(await client.updateWorkflow(overrides)).toEqual(answer);
+
+    const put = fake.calls.find((call) => call.method === 'PUT');
+    expect(put).toMatchObject({ url: `${BASE}/api/v1/workflow` });
+    expect(JSON.parse(put?.body ?? 'null')).toEqual(overrides);
+    expect(put?.headers['Authorization']).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('sends a task’s workflow with an ordinary update, and null to remove it', async () => {
+    const { fake, client } = board(() => ({ json: aTask({ id: 'T1' }) }));
+
+    await client.updateTask('T1', { workflow: { push: true } });
+    await client.updateTask('T1', { workflow: null });
+
+    const bodies = fake.calls.filter((call) => call.method === 'PATCH').map((c) => c.body);
+    expect(bodies).toEqual(['{"workflow":{"push":true}}', '{"workflow":null}']);
+  });
+
+  it('refuses to invent settings: an answer that is not the contract’s is an error (INVARIANT)', async () => {
+    const { client } = board(() => ({ json: { board: {}, statuses: {} } }));
+    await expect(client.workflow()).rejects.toMatchObject({ code: 'MALFORMED_RESPONSE' });
+
+    const bad = board(() => ({ json: { values: {}, sources: {}, inactive: [] } }));
+    await expect(bad.client.taskWorkflow('T1')).rejects.toMatchObject({
+      code: 'MALFORMED_RESPONSE',
+    });
+  });
+
+  it('hands an unknown status back as the board’s own error', async () => {
+    const { client } = board((_url, method) =>
+      method === 'PUT' ? { status: 422, json: errorBody('UNKNOWN_STATUS') } : undefined,
+    );
+
+    await expect(
+      client.updateWorkflow({ board: {}, statuses: { nope: {} } }),
+    ).rejects.toMatchObject({ status: 422, code: 'UNKNOWN_STATUS' });
   });
 });
 

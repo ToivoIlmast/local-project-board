@@ -71,6 +71,25 @@ const exampleTask = {
   updatedAt: '2026-09-21T11:30:00.000Z',
 };
 
+const exampleDefaults = {
+  editCode: true,
+  branch: true,
+  checks: true,
+  commit: true,
+  push: false,
+  report: true,
+  startStatus: 'in-progress',
+  finishStatus: null,
+  baseBranch: null,
+  checkCommand: null,
+};
+
+const exampleWorkflowState = {
+  defaults: exampleDefaults,
+  board: { push: false, checkCommand: 'npm test' },
+  statuses: { backlog: { editCode: false } },
+};
+
 const exampleDocument = {
   taskId: 'T12',
   name: 'plan.md',
@@ -210,6 +229,64 @@ export const routes = {
       response: exampleTask,
     },
     ai: { include: true },
+  }),
+
+  'tasks.workflow': route({
+    id: 'tasks.workflow',
+    method: 'GET',
+    path: '/tasks/:id/workflow',
+    summary: 'Read the settings a task runs with, the source of each and which are inactive',
+    params: taskParams,
+    response: json(s.effectiveWorkflowSchema),
+    example: {
+      params: { id: 'T12' },
+      response: {
+        values: { ...exampleDefaults, editCode: false, checkCommand: 'npm test' },
+        sources: {
+          editCode: 'status',
+          branch: 'default',
+          checks: 'default',
+          commit: 'default',
+          push: 'board',
+          report: 'default',
+          startStatus: 'default',
+          finishStatus: 'default',
+          baseBranch: 'default',
+          checkCommand: 'board',
+        },
+        inactive: ['branch', 'checks', 'commit', 'push'],
+      },
+    },
+    ai: { include: true },
+  }),
+
+  'workflow.get': route({
+    id: 'workflow.get',
+    method: 'GET',
+    path: '/workflow',
+    summary: 'Read the AI workflow overrides of the board and its columns, with the defaults',
+    response: json(s.workflowStateSchema),
+    example: { response: exampleWorkflowState },
+    ai: { include: true },
+  }),
+
+  'workflow.update': route({
+    id: 'workflow.update',
+    method: 'PUT',
+    path: '/workflow',
+    summary: 'Replace the AI workflow overrides of the board and all its columns (last-write-wins)',
+    request: s.replaceWorkflowRequestSchema,
+    response: json(s.workflowStateSchema),
+    example: {
+      body: {
+        board: { push: false, checkCommand: 'npm test' },
+        statuses: { backlog: { editCode: false } },
+      },
+      response: exampleWorkflowState,
+    },
+    // The Settings page sends the whole of it. An agent that rewrites the rules it works under
+    // is not what these settings are for; it reads them and, for its own task, patches the task.
+    ai: { include: false },
   }),
 
   'documents.list': route({

@@ -1,5 +1,6 @@
 import { BoardError } from '../errors.js';
 import type { Task } from '../model/task.js';
+import type { WorkflowFlagOverrides } from '../model/workflow.js';
 import type { EventSink, Storage } from '../ports.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import { assertKnownStatus } from '../rules/status.js';
@@ -17,6 +18,7 @@ export interface CreateTaskInput {
   body?: string | undefined;
   labels?: string[] | undefined;
   branch?: string | undefined;
+  workflow?: WorkflowFlagOverrides | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -25,6 +27,8 @@ export interface UpdateTaskInput {
   body?: string | undefined;
   labels?: string[] | undefined;
   branch?: string | null | undefined;
+  /** An object replaces the task's overrides whole; null removes them. */
+  workflow?: WorkflowFlagOverrides | null | undefined;
 }
 
 export interface MoveTaskInput extends Position {
@@ -71,6 +75,7 @@ export function createTaskService({ storage, events, statuses }: TaskServiceOpti
         body: input.body ?? '',
         labels: input.labels ?? [],
         branch: input.branch,
+        workflow: input.workflow,
       });
       events.publish({ type: 'task.created', task });
       return task;

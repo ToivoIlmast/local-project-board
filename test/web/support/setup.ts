@@ -1,15 +1,18 @@
 import { clearImmediate, clearInterval, setImmediate, setInterval } from 'node:timers';
 import { TextDecoder, TextEncoder } from 'node:util';
+import { deserialize, serialize } from 'node:v8';
 import '@testing-library/jest-dom';
 
 /**
  * A browser environment with the few Node globals a real server needs. The integration
  * tests run the board's own Express app in this process, and jsdom provides neither
- * `TextEncoder` (a real browser does) nor `setImmediate` (Node does).
+ * `TextEncoder` (a real browser does), nor `setImmediate` (Node does), nor `structuredClone`
+ * (which the markdown provider uses to hand out its own copy of the workflow settings).
  */
 const environment = globalThis as unknown as Record<string, unknown>;
 environment['TextEncoder'] ??= TextEncoder;
 environment['TextDecoder'] ??= TextDecoder;
+environment['structuredClone'] ??= <T>(value: T): T => deserialize(serialize(value)) as T;
 environment['setImmediate'] ??= setImmediate;
 environment['clearImmediate'] ??= clearImmediate;
 // The event stream keeps a Node timer it can `unref`; jsdom's would be a plain number.

@@ -6,6 +6,7 @@ import {
   createProjectService,
   createReportService,
   createTaskService,
+  createWorkflowService,
 } from '../../core/index.js';
 import { assertNoOrphanedStatuses } from '../../core/rules/status.js';
 import { createEventBus } from '../events/index.js';
@@ -61,6 +62,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
     const git = gitReader({ root });
     const context = {
       tasks: createTaskService({ storage, events, statuses: config.statuses }),
+      workflow: createWorkflowService({ storage, events, statuses: config.statuses }),
       documents: createDocumentService({ storage, events }),
       reports: createReportService({ storage, events }),
       project: createProjectService({

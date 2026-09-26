@@ -135,6 +135,11 @@ describe('the session token', () => {
       board.agent().patch(`${API}/tasks/${id}`).send({ title: 'x' }),
       board.agent().post(`${API}/tasks/${id}/move`).send({ status: 'done' }),
       board.agent().put(`${API}/tasks/${id}/documents/plan.md`).send({ content: 'x' }),
+      board
+        .agent()
+        .patch(`${API}/tasks/${id}`)
+        .send({ workflow: { push: true } }),
+      board.agent().put(`${API}/workflow`).send({ board: {}, statuses: {} }),
       board.agent().delete(`${API}/tasks/${id}`),
       board.agent().post(`${API}/reports`).send({ title: 'x', format: 'md', content: 'x' }),
     ]) {
@@ -144,6 +149,8 @@ describe('the session token', () => {
     }
 
     expect((await board.storage.listTasks()).map((task) => task.title)).toEqual(['a']);
+    expect((await board.storage.getTask(id))?.workflow).toBeUndefined();
+    expect(await board.storage.readWorkflow()).toEqual({ board: {}, statuses: {} });
     expect(await board.storage.listReports()).toEqual([]);
   });
 

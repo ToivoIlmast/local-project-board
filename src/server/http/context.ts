@@ -3,6 +3,7 @@ import type {
   ProjectService,
   ReportService,
   TaskService,
+  WorkflowService,
 } from '../../core/index.js';
 import type { GitReader } from '../../core/ports.js';
 import type { EventStream } from './sse.js';
@@ -21,6 +22,7 @@ export interface SessionInfo {
  */
 export interface BoardContext {
   tasks: TaskService;
+  workflow: WorkflowService;
   documents: DocumentService;
   reports: ReportService;
   project: ProjectService;

@@ -1,7 +1,7 @@
 import { subscribeToBoard } from '../../../src/web/api/events';
 import type { BoardEvent } from '../../../src/contract/v1/index';
 import { fakeEventSource, type FakeEventSource } from '../support/eventSource';
-import { aTask } from '../support/fixtures';
+import { aTask, aWorkflow } from '../support/fixtures';
 
 function subscription() {
   const events: BoardEvent[] = [];
@@ -38,6 +38,20 @@ describe('the board’s event stream', () => {
 
     expect(statuses).toEqual(['connecting', 'live']);
     expect(events).toEqual([{ type: 'task.created', task }]);
+  });
+
+  it('understands that the workflow settings changed, and refuses a frame with the wrong shape', () => {
+    const { source, events } = subscription();
+    const workflow = aWorkflow({ board: { push: true } });
+
+    source.open();
+    source.message(JSON.stringify({ type: 'workflow.updated', workflow }));
+    // Overrides without the defaults are not the state the board publishes.
+    source.message(
+      JSON.stringify({ type: 'workflow.updated', workflow: { board: {}, statuses: {} } }),
+    );
+
+    expect(events).toEqual([{ type: 'workflow.updated', workflow }]);
   });
 
   it('ignores a frame that is not a board event (INVARIANT: no invented state)', () => {

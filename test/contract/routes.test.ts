@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  createTaskRequestSchema,
+  updateTaskRequestSchema,
+  workflowOverridesSchema,
+  workflowStateSchema,
   API_BASE_PATH,
   API_VERSION,
   parseBody,
@@ -147,5 +151,65 @@ describe('response media types', () => {
     expect(routes['instructions.get'].response.media).toBe('text/markdown');
     expect(routes['events.stream'].response.media).toBe('text/event-stream');
     expect(routes['tasks.list'].response.media).toBe('application/json');
+  });
+});
+
+describe('the workflow routes (T14)', () => {
+  it('are in the table, and only there: three routes, no `effective` of the board', () => {
+    const workflow = routeList.filter((route) => route.path.includes('workflow'));
+
+    expect(workflow.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
+      'GET /tasks/:id/workflow',
+      'GET /workflow',
+      'PUT /workflow',
+    ]);
+    expect(routeList.some((route) => route.path.includes('effective'))).toBe(false);
+  });
+
+  it('answer the state of the board, and the effective settings of a task', () => {
+    expect(routes['workflow.get'].response.schema).toBe(workflowStateSchema);
+    expect(routes['workflow.update'].response.schema).toBe(workflowStateSchema);
+    expect(routes['tasks.workflow'].response.media).toBe('application/json');
+  });
+
+  it('take overrides as a request, never the state or the effective settings (INVARIANT)', () => {
+    const request = routes['workflow.update'].request;
+    expect(request).toBe(workflowOverridesSchema);
+
+    const state = routes['workflow.get'].example.response;
+    expect(request?.safeParse(state).success).toBe(false);
+    expect(request?.safeParse(routes['tasks.workflow'].example.response).success).toBe(false);
+    const { defaults: _defaults, ...overrides } = state as Record<string, unknown>;
+    expect(request?.safeParse(overrides).success).toBe(true);
+  });
+
+  it('need both sections: a request that omits one does not silently wipe it', () => {
+    const request = routes['workflow.update'].request;
+    expect(request?.safeParse({ board: {} }).success).toBe(false);
+    expect(request?.safeParse({ statuses: {} }).success).toBe(false);
+    expect(request?.safeParse({ board: {}, statuses: {} }).success).toBe(true);
+  });
+
+  it('let a task carry only the settings a column may have, and clear them with null', () => {
+    expect(
+      createTaskRequestSchema.safeParse({ title: 'x', workflow: { push: true } }).success,
+    ).toBe(true);
+    expect(createTaskRequestSchema.safeParse({ title: 'x', workflow: null }).success).toBe(false);
+    expect(updateTaskRequestSchema.safeParse({ workflow: null }).success).toBe(true);
+    expect(updateTaskRequestSchema.safeParse({ workflow: { push: true } }).success).toBe(true);
+    expect(updateTaskRequestSchema.safeParse({ workflow: {} }).success).toBe(true);
+    for (const workflow of [{ startStatus: 'todo' }, { values: {} }, { push: 1 }, []]) {
+      expect(updateTaskRequestSchema.safeParse({ workflow }).success).toBe(false);
+    }
+  });
+
+  it('give the agent the routes it reads with, and not the one that replaces the rules it works under', () => {
+    expect(routes['workflow.get'].ai.include).toBe(true);
+    expect(routes['tasks.workflow'].ai.include).toBe(true);
+    expect(routes['workflow.update'].ai.include).toBe(false);
+  });
+
+  it('say in the summary of PUT that it replaces everything', () => {
+    expect(routes['workflow.update'].summary).toMatch(/replace/i);
   });
 });

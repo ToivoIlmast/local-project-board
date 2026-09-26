@@ -8,7 +8,7 @@ import {
   type BoardState,
 } from '../../../src/web/api/store';
 import { fakeBoard } from '../support/fakeBoard';
-import { aDocument, aProject, aReport, aTask } from '../support/fixtures';
+import { aDocument, aProject, aReport, aTask, aWorkflow } from '../support/fixtures';
 
 const state = (overrides: Partial<BoardState> = {}): BoardState => ({
   ...emptyState(),
@@ -133,6 +133,27 @@ describe('what an event does to the board the page is showing', () => {
     const before = state({ tasks: [aTask()] });
 
     expect(applyEvent(before, { type: 'board.changed' })).toEqual(before);
+  });
+});
+
+describe('the workflow settings the board shows', () => {
+  it('replaces them the moment the board says they changed (idempotent)', () => {
+    const workflow = aWorkflow({ board: { push: true } });
+
+    let next = applyEvent(state(), { type: 'workflow.updated', workflow });
+    next = applyEvent(next, { type: 'workflow.updated', workflow });
+
+    expect(next.workflow).toEqual(workflow);
+  });
+
+  it('keeps everything else as it was', () => {
+    const before = state({ tasks: [aTask()], reports: [aReport()] });
+
+    const next = applyEvent(before, { type: 'workflow.updated', workflow: aWorkflow() });
+
+    expect(next.tasks).toBe(before.tasks);
+    expect(next.reports).toBe(before.reports);
+    expect(next.project).toBe(before.project);
   });
 });
 
@@ -297,6 +318,91 @@ describe('the store', () => {
     await store.handleEvent({ type: 'board.changed' });
 
     expect(board.calls).toEqual(expect.arrayContaining(['project', 'listTasks', 'listReports']));
+  });
+
+  it('reads the workflow settings with the board', async () => {
+    const board = fakeBoard({ workflow: { board: { push: true }, statuses: {} } });
+    const store = createBoardStore(board.client);
+
+    await store.load();
+
+    expect(board.calls).toContain('workflow');
+    expect(store.getState().workflow).toMatchObject({ board: { push: true }, statuses: {} });
+    expect(store.getState().workflow?.defaults.push).toBe(false);
+  });
+
+  it('reads them again when something changed on disk, so a hand edit of workflow.yaml shows', async () => {
+    const board = fakeBoard();
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.workflow.board = { push: true };
+
+    await store.handleEvent({ type: 'board.changed' });
+
+    expect(store.getState().workflow?.board).toEqual({ push: true });
+  });
+
+  it('shows new settings only when the server has answered, not before (INVARIANT)', async () => {
+    const board = fakeBoard();
+    const store = createBoardStore(board.client);
+    await store.load();
+    const release = board.hold('updateWorkflow');
+
+    const saving = store.updateWorkflow({ board: { push: true }, statuses: {} });
+    await Promise.resolve();
+    expect(store.getState().workflow?.board).toEqual({});
+
+    release();
+    await saving;
+    expect(store.getState().workflow?.board).toEqual({ push: true });
+  });
+
+  it('keeps what it showed when the board refuses the settings', async () => {
+    const board = fakeBoard({ workflow: { board: { push: true }, statuses: {} } });
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.fail('updateWorkflow', new ApiError(422, 'UNKNOWN_STATUS', 'Unknown status "nope".'));
+
+    await expect(
+      store.updateWorkflow({ board: {}, statuses: { nope: { push: true } } }),
+    ).rejects.toMatchObject({ code: 'UNKNOWN_STATUS' });
+
+    expect(store.getState().workflow?.board).toEqual({ push: true });
+    expect(board.workflow.board).toEqual({ push: true });
+  });
+
+  it('takes the state once when the answer and the event both arrive', async () => {
+    const board = fakeBoard();
+    const store = createBoardStore(board.client);
+    await store.load();
+    const seen: unknown[] = [];
+    store.subscribe(() => seen.push(store.getState().workflow?.board));
+
+    await store.updateWorkflow({ board: { push: true }, statuses: {} });
+    await store.handleEvent({
+      type: 'workflow.updated',
+      workflow: aWorkflow({ board: { push: true } }),
+    });
+
+    expect(new Set(seen.map((board) => JSON.stringify(board)))).toEqual(
+      new Set([JSON.stringify({ push: true })]),
+    );
+  });
+
+  it('does not put back settings that a read which began before a change had seen (INVARIANT)', async () => {
+    const board = fakeBoard();
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.calls.length = 0;
+    const release = board.hold('gitStatus');
+    const reading = store.load();
+    while (!board.calls.includes('gitStatus')) await Promise.resolve();
+
+    await store.updateWorkflow({ board: { push: true }, statuses: {} });
+    release();
+    await reading;
+
+    expect(store.getState().workflow?.board).toEqual({ push: true });
   });
 
   it('does not put back what a read that began before a change had seen (INVARIANT)', async () => {

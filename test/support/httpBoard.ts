@@ -10,6 +10,7 @@ import {
   createProjectService,
   createReportService,
   createTaskService,
+  createWorkflowService,
 } from '../../src/core/index.js';
 import type { EventSink, GitReader, Storage } from '../../src/core/ports.js';
 import { closeServer } from '../../src/server/cli/listen.js';
@@ -91,6 +92,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
   const git = options.git ?? nullGitReader();
   const context: BoardContext = {
     tasks: createTaskService({ storage, events: sink, statuses }),
+    workflow: createWorkflowService({ storage, events: sink, statuses }),
     documents: createDocumentService({ storage, events: sink }),
     reports: createReportService({ storage, events: sink }),
     project: createProjectService({

@@ -7,8 +7,11 @@ import type {
   Project,
   Report,
   Task,
+  WorkflowOverrides,
+  WorkflowState,
 } from '../../../src/contract/v1/index';
 import { rankForPosition } from '../../../src/core/rules/rank';
+import { defaultWorkflow, resolveWorkflow } from '../../../src/core/rules/workflow';
 import { ApiError, type BoardClient } from '../../../src/web/api/index';
 import { aGitStatus, aProject } from './fixtures';
 
@@ -17,6 +20,8 @@ export interface FakeBoardOptions {
   tasks?: Task[];
   reports?: Report[];
   git?: GitStatus;
+  /** The overrides the board already has; none by default. */
+  workflow?: WorkflowOverrides;
   instructions?: string;
   commits?: GitCommit[];
   /** Documents already on the board, as an agent would have left them. */
@@ -34,6 +39,8 @@ export interface FakeBoard {
   documents: Map<string, { meta: DocumentMeta; content: string }>;
   project: Project;
   git: GitStatus;
+  /** The overrides of the board and its columns, as the server would store them. */
+  workflow: WorkflowOverrides;
   /** Make the next call to one method fail, as a real board would. */
   fail(method: keyof BoardClient, error: ApiError): void;
   /** Hold the next call to one method open, to see what the page shows meanwhile. */
@@ -51,6 +58,9 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   const tasks: Task[] = [...(options.tasks ?? [])];
   const reports: Report[] = [...(options.reports ?? [])];
   const documents = new Map<string, { meta: DocumentMeta; content: string }>();
+  const overrides: WorkflowOverrides = structuredClone(
+    options.workflow ?? { board: {}, statuses: {} },
+  );
   const listeners: ((event: BoardEvent) => void)[] = [];
   const calls: string[] = [];
   const failures = new Map<string, ApiError>();
@@ -91,6 +101,11 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
 
   const key = (taskId: string, name: string): string => `${taskId}/${name}`;
 
+  const workflowState = (): WorkflowState => ({
+    defaults: defaultWorkflow(project.statuses),
+    ...structuredClone(overrides),
+  });
+
   const client: BoardClient = {
     project: () => record('project', () => ({ ...project })),
     instructions: () => record('instructions', () => options.instructions ?? '# API\n'),
@@ -113,6 +128,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           body: input.body ?? '',
           labels: input.labels ?? [],
           ...(input.branch === undefined ? {} : { branch: input.branch }),
+          ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
           createdAt: NOW,
           updatedAt: NOW,
         };
@@ -123,10 +139,12 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     updateTask: (id, patch) =>
       record('updateTask', () => {
         const task = require(id);
-        const { branch, ...rest } = patch;
+        const { branch, workflow, ...rest } = patch;
         Object.assign(task, rest, { updatedAt: NOW });
         if (branch === null) delete task.branch;
         else if (branch !== undefined) task.branch = branch;
+        if (workflow === null) delete task.workflow;
+        else if (workflow !== undefined) task.workflow = { ...workflow };
         emit({ type: 'task.updated', task: { ...task } });
         return { ...task };
       }),
@@ -151,6 +169,28 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           1,
         );
         emit({ type: 'task.deleted', taskId: id });
+      }),
+
+    workflow: () => record('workflow', workflowState),
+    updateWorkflow: (next) =>
+      record('updateWorkflow', () => {
+        overrides.board = structuredClone(next.board);
+        overrides.statuses = structuredClone(next.statuses);
+        const state = workflowState();
+        emit({ type: 'workflow.updated', workflow: state });
+        return state;
+      }),
+    taskWorkflow: (id) =>
+      record('taskWorkflow', () => {
+        const task = require(id);
+        return resolveWorkflow(
+          defaultWorkflow(project.statuses),
+          overrides.board,
+          Object.hasOwn(overrides.statuses, task.status)
+            ? overrides.statuses[task.status]
+            : undefined,
+          task.workflow,
+        );
       }),
 
     listDocuments: (taskId) =>
@@ -220,6 +260,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     documents,
     project,
     git: options.git ?? aGitStatus(),
+    workflow: overrides,
     fail: (method, error) => failures.set(method, error),
     hold(method) {
       let release = (): void => undefined;

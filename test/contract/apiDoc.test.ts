@@ -41,7 +41,7 @@ describe('renderApiDoc', () => {
 
   it('marks each route as given to, or withheld from, AI agents', () => {
     const hidden = routeList.filter((r) => !r.ai.include).map((r) => r.id);
-    expect(hidden.sort()).toEqual(['events.stream', 'instructions.get']);
+    expect(hidden.sort()).toEqual(['events.stream', 'instructions.get', 'workflow.update']);
     for (const route of routeList) {
       expect(generated).toContain(
         route.ai.include
