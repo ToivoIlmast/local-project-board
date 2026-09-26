@@ -1,5 +1,6 @@
 export { Badge, type BadgeProps } from './Badge';
 export { Button, type ButtonProps } from './Button';
+export { Checkbox, type CheckboxProps } from './Checkbox';
 export { ConfirmDialog } from './ConfirmDialog';
 export { EmptyState } from './EmptyState';
 export { ErrorState } from './ErrorState';
@@ -9,6 +10,6 @@ export { Input, Textarea } from './Input';
 export { Menu, type MenuItem } from './Menu';
 export { Modal } from './Modal';
 export { Panel } from './Panel';
-export { Select } from './Select';
+export { Select, type SelectOption } from './Select';
 export { Spinner } from './Spinner';
 export { Text } from './Text';

@@ -4,12 +4,13 @@ import { Board, BoardHeader, ReadIssues, type MoveIntent } from '../features/boa
 import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
 import { ReportsPanel } from '../features/reports/index';
+import { SettingsPanel } from '../features/settings/index';
 import { TaskDetails, TaskDialog } from '../features/tasks/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
 import { useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
-type Panel = 'reports' | 'git' | 'instructions';
+type Panel = 'reports' | 'git' | 'instructions' | 'settings';
 
 /**
  * The whole board in one screen: columns on the left, whatever is being looked at on the
@@ -121,6 +122,8 @@ export function BoardPage() {
           <GitPanel onClose={() => setPanel(null)} />
         ) : panel === 'instructions' ? (
           <InstructionsPanel onClose={() => setPanel(null)} />
+        ) : panel === 'settings' ? (
+          <SettingsPanel onClose={() => setPanel(null)} />
         ) : null}
       </div>
 

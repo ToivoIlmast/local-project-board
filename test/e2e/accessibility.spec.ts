@@ -34,6 +34,16 @@ for (const scheme of ['light', 'dark'] as const) {
       body: { title: 'Dependency audit', format: 'html', content: '<h1>Audit</h1>' },
     });
 
+    // Settings with something in every state: a column that mutes the settings that need code,
+    // and a board that sets a text and a status.
+    await board.api('/api/v1/workflow', {
+      method: 'PUT',
+      body: {
+        board: { push: true, checkCommand: 'npm test', finishStatus: 'done' },
+        statuses: { backlog: { editCode: false }, todo: { commit: false } },
+      },
+    });
+
     const screens: [string, () => Promise<void>][] = [
       [
         'the board',
@@ -68,6 +78,7 @@ for (const scheme of ['light', 'dark'] as const) {
       ],
       ['the git panel', () => page.getByRole('button', { name: 'Git', exact: true }).click()],
       ['the AI instructions', () => page.getByRole('button', { name: 'AI instructions' }).click()],
+      ['the settings', () => page.getByRole('button', { name: 'Settings' }).click()],
       [
         'a task that is not there',
         async () => {

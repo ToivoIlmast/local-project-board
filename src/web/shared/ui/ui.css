@@ -370,3 +370,37 @@ body {
   font-size: 15px;
   margin: 16px 0 6px;
 }
+
+/* Muted is not faded: faded text would not keep its contrast. A dashed rule says "no effect now". */
+.field--muted,
+.check--muted {
+  padding-left: 8px;
+  border-left: 2px dashed var(--border-control);
+}
+
+.field--muted .input {
+  border-style: dashed;
+}
+
+.check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.check input {
+  margin: 0;
+}
+
+.check label {
+  font-size: 13px;
+}
+
+.check__hint {
+  grid-column: 2;
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}

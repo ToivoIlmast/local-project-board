@@ -225,3 +225,60 @@ test('a task opened while the board is down gets its documents when the board is
   await expect(page.getByText(/is not answering/)).toHaveCount(0);
   await expect(documents.getByText('Loading documents…')).toHaveCount(0);
 });
+
+test('the AI workflow settings are changed with the keyboard and are what the board stored', async ({
+  page,
+  board,
+}) => {
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Settings' }).focus();
+  await page.keyboard.press('Enter');
+  const panel = page.getByRole('complementary', { name: 'Settings' });
+  await expect(panel).toBeFocused();
+
+  // The board group first: a checkbox with the keyboard, then the text fields, in reading order.
+  const boardGroup = panel.getByRole('group', { name: 'Board' });
+  await boardGroup.getByRole('checkbox', { name: 'Push' }).focus();
+  await page.keyboard.press('Space');
+  await expect(boardGroup.getByRole('checkbox', { name: 'Push' })).toBeChecked();
+  await boardGroup.getByLabel('Check command').focus();
+  await page.keyboard.type('npm test');
+
+  // A column, through its select, without the mouse.
+  await panel
+    .getByRole('group', { name: 'Column backlog' })
+    .getByLabel('Edit code')
+    .selectOption('Off');
+  await expect(
+    panel.getByRole('group', { name: 'Column backlog' }).getByLabel('Push'),
+  ).toHaveAccessibleDescription(/Not used while “Edit code” is off/);
+
+  await boardGroup.getByLabel('Check command').focus();
+  await page.keyboard.press('Enter');
+  await expect(panel.getByText('Saved.')).toBeVisible();
+
+  // The board stored overrides and nothing else.
+  const stored = (await board.api('/api/v1/workflow')) as Record<string, unknown>;
+  expect(stored).toMatchObject({
+    board: { push: true, checkCommand: 'npm test' },
+    statuses: { backlog: { editCode: false } },
+  });
+
+  // A reload shows what is written.
+  await page.reload();
+  const again = page.getByRole('complementary', { name: 'Settings' });
+  await expect(again.getByRole('checkbox', { name: 'Push' })).toBeChecked();
+  await expect(again.getByLabel('Check command')).toHaveValue('npm test');
+  await expect(
+    again.getByRole('group', { name: 'Column backlog' }).getByLabel('Edit code'),
+  ).toHaveValue('off');
+
+  // Somebody else changes it through the API: a form with nothing unsaved follows.
+  await board.api('/api/v1/workflow', {
+    method: 'PUT',
+    body: { board: { baseBranch: 'develop' }, statuses: {} },
+  });
+  await expect(again.getByLabel('Base branch')).toHaveValue('develop');
+  await expect(again.getByRole('checkbox', { name: 'Push' })).not.toBeChecked();
+});
