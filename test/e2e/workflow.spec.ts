@@ -1,4 +1,12 @@
+import { execFile } from 'node:child_process';
+import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './board';
+
+const run = promisify(execFile);
+const CLI = fileURLToPath(new URL('../../bin/board.js', import.meta.url));
 
 test('a developer opens the board and works on a task', async ({ page, board }) => {
   await page.goto(board.url);
@@ -392,4 +400,63 @@ test('the handoff is copied from the menu of a card, and is the one the board se
   expect(copied).toContain('Push your commits to the remote. _(source: this task)_');
   // Nothing was opened by it.
   await expect(page.getByRole('complementary')).toHaveCount(0);
+});
+
+test('Send to AI → Claude Code: the command on the clipboard and the launcher give Claude the same prompt for the same task', async ({
+  page,
+  board,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Ship it', status: 'todo' } });
+  await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Not this', status: 'todo' } });
+  await page.goto(board.url);
+  await page.getByRole('button', { name: 'Ship it' }).click();
+  const details = page.getByRole('complementary', { name: 'Task T1' });
+
+  // From the keyboard, like the other entries of the menu.
+  await details.getByRole('button', { name: 'Send to AI' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Claude Code — copy command' }).focus();
+  await page.keyboard.press('Enter');
+
+  await expect(details.getByText(/Command for Claude Code copied/)).toBeVisible();
+  await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();
+  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  const prompt = /^claude "([^"]+)"$/.exec(copied)?.[1] ?? '';
+  expect(prompt).toBe(
+    `Work on task T1 of the local board: read GET ${board.url.replace(/\/$/, '').replace('localhost', '127.0.0.1')}/api/v1/tasks/T1/handoff and follow it.`,
+  );
+
+  // The address in the prompt is the board's own: what an agent reads there is this task's handoff.
+  const url = /read GET (\S+) and follow it/.exec(prompt)?.[1] ?? '';
+  expect(await (await fetch(url)).text()).toContain('# Task T1: Ship it');
+
+  // The launcher, in the project, starts a `claude` (a stand-in: the real one is never run by
+  // a test) with exactly that prompt, in the project.
+  const bin = join(board.root, 'fake-bin');
+  await mkdir(bin);
+  const log = join(board.root, 'claude-call.json');
+  await writeFile(
+    join(bin, 'claude'),
+    `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(log)}, ` +
+      'JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }));\n',
+  );
+  await chmod(join(bin, 'claude'), 0o755);
+
+  await run(process.execPath, [CLI, 'claude', 'T1'], {
+    cwd: board.root,
+    env: { ...process.env, PATH: bin, XDG_CONFIG_HOME: join(board.root, 'no-user-config') },
+  });
+
+  const call = JSON.parse(await readFile(log, 'utf8')) as { argv: string[]; cwd: string };
+  expect(call.argv).toEqual([prompt]);
+  expect(call.cwd).toBe(await realpath(board.root));
+  // The token of this run is in neither the command nor the arguments.
+  const runtime = JSON.parse(
+    await readFile(join(board.root, '.board', 'runtime.json'), 'utf8'),
+  ) as {
+    token: string;
+  };
+  expect(copied + JSON.stringify(call)).not.toContain(runtime.token);
 });

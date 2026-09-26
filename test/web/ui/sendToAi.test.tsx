@@ -1,10 +1,10 @@
 import { jest } from '@jest/globals';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Task } from '../../../src/contract/v1/index';
+import { claudeCodeCommand, type Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { BoardProvider } from '../../../src/web/api/react';
-import { SendToAi } from '../../../src/web/features/tasks/index';
+import { SendToAi, type AgentTarget } from '../../../src/web/features/tasks/index';
 import { aTask } from '../support/fixtures';
 import { fakeBoard, type FakeBoardOptions } from '../support/fakeBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
@@ -205,17 +205,20 @@ describe('the menu grows without being rebuilt', () => {
     return { board, user };
   }
 
-  it('has only the copy of the handoff by default: it works for any agent', async () => {
+  it('has the copy of the handoff first and Claude Code after it by default (T19)', async () => {
     const { user } = renderMenu(undefined);
 
     await user.click(screen.getByRole('button', { name: 'Send to AI' }));
 
-    expect(screen.getAllByRole('button', { name: /handoff|Claude/ })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Copy handoff' })).toBeInTheDocument();
+    const names = within(screen.getByRole('list'))
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    // The copy is for any agent and stays first; Claude Code is the one integration so far.
+    expect(names).toEqual(['Copy handoff', 'Claude Code — copy command']);
   });
 
   it('shows a target that another task adds, after the copy, and runs it for this task', async () => {
-    const run = jest.fn<(taskId: string) => Promise<string | void>>().mockResolvedValue(undefined);
+    const run = jest.fn<AgentTarget['run']>().mockResolvedValue(undefined);
     const { user } = renderMenu([{ label: 'Claude Code', run }]);
 
     await user.click(screen.getByRole('button', { name: 'Send to AI' }));
@@ -226,7 +229,11 @@ describe('the menu grows without being rebuilt', () => {
 
     await user.click(screen.getByRole('button', { name: 'Claude Code' }));
 
-    expect(run).toHaveBeenCalledWith('T1');
+    // A target is given the task, and what a menu lets it use: the clipboard and the board.
+    expect(run).toHaveBeenCalledWith('T1', {
+      copy: expect.any(Function),
+      boardUrl: 'http://127.0.0.1:7432',
+    });
   });
 
   it('says what went wrong when a target fails', async () => {
@@ -239,5 +246,104 @@ describe('the menu grows without being rebuilt', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The agent did not start.');
     await act(async () => undefined);
+  });
+});
+
+describe('Send to AI → Claude Code (T19)', () => {
+  const claudeItem = () => screen.getByRole('button', { name: 'Claude Code — copy command' });
+
+  async function copyClaudeCommand(rendered: RenderedBoard): Promise<void> {
+    await rendered.user.click(sendMenu());
+    await rendered.user.click(claudeItem());
+  }
+
+  it('copies the command that starts Claude Code on this task, the one the prompt function makes (INVARIANT)', async () => {
+    const rendered = await openTask();
+
+    await copyClaudeCommand(rendered);
+
+    // The page is served from the board, so its own address is the board's address.
+    const expected = claudeCodeCommand('T1', 'http://127.0.0.1:7432');
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(expected));
+    expect(expected).toMatch(/^claude "Work on task T1 of the local board: read GET /);
+    expect(expected).toContain('/api/v1/tasks/T1/handoff');
+    expect(
+      await within(details()).findByText(/Command for Claude Code copied\. Paste it/),
+    ).toBeVisible();
+  });
+
+  it('copies the command of the task whose details are open, not of another', async () => {
+    const rendered = await renderBoard({
+      tasks: [todo(), aTask({ id: 'T2', title: 'Other', status: 'todo', rank: 'a1' })],
+    });
+    await rendered.user.click(screen.getByRole('button', { name: 'Other' }));
+    await screen.findByRole('complementary', { name: 'Task T2' });
+
+    await rendered.user.click(
+      within(screen.getByRole('complementary', { name: 'Task T2' })).getByRole('button', {
+        name: 'Send to AI',
+      }),
+    );
+    await rendered.user.click(claudeItem());
+
+    await waitFor(async () =>
+      expect(await navigator.clipboard.readText()).toBe(
+        claudeCodeCommand('T2', 'http://127.0.0.1:7432'),
+      ),
+    );
+    expect(await navigator.clipboard.readText()).not.toContain('T1');
+  });
+
+  it('carries no token and does not even ask the board for one, nor for the handoff itself (INVARIANT)', async () => {
+    const rendered = await openTask();
+    const before = [...rendered.board.calls];
+
+    await copyClaudeCommand(rendered);
+    await within(details()).findByText(/Command for Claude Code copied/);
+
+    // The agent reads the handoff itself, live; the page only tells it where.
+    expect(rendered.board.calls.slice(before.length)).toEqual([]);
+    expect(await navigator.clipboard.readText()).not.toMatch(/token|bearer|authorization/i);
+  });
+
+  it('leaves Copy handoff as it was: the text of the handoff, on the clipboard, as before', async () => {
+    const rendered = await openTask({ tasks: [todo({ body: 'Do the thing.' })] });
+
+    await copyClaudeCommand(rendered);
+    await within(details()).findByText(/Command for Claude Code copied/);
+    await copyHandoff(rendered);
+
+    const expected = await rendered.board.client.handoff('T1');
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(expected));
+    expect(await within(details()).findByText('Handoff copied to the clipboard.')).toBeVisible();
+  });
+
+  it('says so when the browser does not let the page write to the clipboard, and does not claim to have copied', async () => {
+    const rendered = await openTask();
+    const write = jest
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockRejectedValueOnce(new Error('denied'));
+
+    await copyClaudeCommand(rendered);
+
+    expect(await within(details()).findByRole('alert')).toHaveTextContent(
+      /could not write to the clipboard/i,
+    );
+    expect(within(details()).queryByText(/Command for Claude Code copied/)).not.toBeInTheDocument();
+    write.mockRestore();
+  });
+
+  it('is reached from the keyboard like the other entries', async () => {
+    const rendered = await openTask();
+
+    sendMenu().focus();
+    await rendered.user.keyboard('{Enter}');
+    await rendered.user.tab();
+    await rendered.user.tab();
+    expect(claudeItem()).toHaveFocus();
+    await rendered.user.keyboard('{Enter}');
+
+    expect(await within(details()).findByText(/Command for Claude Code copied/)).toBeVisible();
+    expect(sendMenu()).toHaveFocus();
   });
 });

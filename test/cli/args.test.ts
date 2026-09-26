@@ -42,6 +42,19 @@ describe('the command line', () => {
     expect(() => parseCliArgs(['handoff', 'T1', '--out', 'x'])).toThrow(/export/);
   });
 
+  it('takes a task id for the claude command, and nothing else (T19)', () => {
+    expect(parseCliArgs(['claude', 'T19'])).toEqual({ command: 'claude', id: 'T19' });
+    // As for the handoff: the id is passed on as written, and validated before anything starts.
+    expect(parseCliArgs(['claude', 'banana'])).toEqual({ command: 'claude', id: 'banana' });
+    expect(() => parseCliArgs(['claude'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['claude'])).toThrow(/id of a task/);
+    expect(() => parseCliArgs(['claude', 'T1', 'T2'])).toThrow('Unexpected argument: T2');
+    expect(() => parseCliArgs(['claude', 'T1', '--port', '8080'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['claude', 'T1', '--out', 'x'])).toThrow(/export/);
+    // Nothing of the launcher is configurable: the flags of claude are the user's own business.
+    expect(() => parseCliArgs(['claude', 'T1', '--model', 'opus'])).toThrow(UsageError);
+  });
+
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });
@@ -71,6 +84,7 @@ describe('the command line', () => {
       'local-project-board',
       'instructions',
       'handoff <id>',
+      'claude <id>',
       'export',
       '--port',
       '--no-open',

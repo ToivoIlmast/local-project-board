@@ -1,4 +1,4 @@
-<!-- Based on README.md @ c41cd88979d22f34397c04b7c8d70447644dda7b -->
+<!-- Based on README.md @ ad52a0d2dae16ea3784281585f09ea7d7c248cb4 -->
 
 # local-project-board
 
@@ -28,6 +28,7 @@ webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk uta
 | -------------------------------------- | ------------------------------------------------------- |
 | `npx local-project-board`              | Startar tavlan                                          |
 | `npx local-project-board instructions` | Skriver ut API-instruktionerna att ge till en AI-agent  |
+| `npx local-project-board claude <ID>`  | Startar Claude Code på en uppgift, i den här terminalen |
 | `npx local-project-board export`       | Skriver ut en ögonblicksbild (`--out <fil>` sparar den) |
 
 Flaggor: `--port <nummer>` (porten du anger måste vara ledig, annars stannar tavlan med ett fel),
@@ -61,7 +62,8 @@ på.
 - **Skicka till AI.** I en uppgift, eller i menyn på dess kort, kopierar ett val handoffen —
   uppgiften, dess dokument och de steg som inställningarna kräver — redo att klistra in i vilken
   agent som helst. Den innehåller ingen token. `npx local-project-board handoff <ID>` skriver ut
-  samma text.
+  samma text. Det andra valet, **Claude Code — kopiera kommando**, kopierar den enda rad som
+  startar Claude Code på uppgiften; se [Claude Code](#claude-code).
 
 Filer som tavlan inte kan läsa visas som just det, ovanför kolumnerna — aldrig som uppgifter med
 påhittade värden.
@@ -131,6 +133,38 @@ spara rapporter.
 
 Den fullständiga ruttreferensen — varje rutt, även de som den här texten utelämnar, varje felkod och
 mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
+
+## Claude Code
+
+```bash
+npx local-project-board claude T13
+```
+
+startar Claude Code på uppgift `T13`, i terminalen där du skrev det och i projektets rot: tavlan
+tillfrågas om uppgiften finns, och `claude` startas med en kort prompt som pekar på uppgiftens
+levande handoff (`GET /api/v1/tasks/T13/handoff`). Claude läser den själv, så den ser alltid
+inställningarna som de är nu, och följer dess steg: en gren, arbetet, kontrollerna, en commit, en
+`report.md`. Kommandot slutar med sessionens slutkod.
+
+I webbläsaren lägger **Skicka till AI → Claude Code — kopiera kommando** samma start på
+urklippet:
+`claude "Work on task T13 of the local board: read GET http://127.0.0.1:7432/api/v1/tasks/T13/handoff and follow it."`.
+Klistra in det i en terminal i projektet.
+
+Bra att veta:
+
+- Tavlan måste köra (`npx local-project-board`, i en annan terminal) och `claude` måste finnas i
+  din PATH. Annars säger kommandot vilket av dem som saknas, och startar ingenting.
+- Tavlan startar aldrig `claude` själv: en server som kör program skulle göra sin token till en
+  rätt att köra kod på din maskin, och den har ingen terminal att ge ett interaktivt program
+  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)).
+- Modellen, behörighetsläget och resten är dina egna Claude Code-inställningar; tavlan skickar
+  inga. Det finns ingen token i prompten eller i argumenten.
+- Claude måste göra HTTP-anrop till `127.0.0.1` — den använder `curl` via sitt Bash-verktyg — och
+  Claude Code frågar som standard om lov för det. Tillåt `Bash(curl *)` för sessionen, eller i
+  dina Claude Code-inställningar om du inte vill ha frågor.
+- Sessionen arbetar i din utcheckning av projektet, så grenen den skapar är den som är utcheckad
+  efteråt. Ett arbetsträd för varje uppgift är inte gjort än.
 
 ## Principer
 

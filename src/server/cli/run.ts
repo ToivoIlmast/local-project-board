@@ -1,5 +1,6 @@
 import { parseCliArgs, USAGE, UsageError } from './args.js';
 import { resolveBoard } from './board.js';
+import { launchClaude } from './claude.js';
 import { exportBoard } from './export.js';
 import { printHandoff } from './handoff.js';
 import { printInstructions } from './instructions.js';
@@ -16,7 +17,8 @@ export interface CliEnvironment {
 }
 
 export interface CliResult {
-  exitCode: 0 | 1;
+  /** 0 or 1 for the board's own commands; `claude` ends as the session did. */
+  exitCode: number;
   /** Present when the command left a server running; the caller stops it on a signal. */
   stop?: (() => Promise<void>) | undefined;
 }
@@ -43,6 +45,11 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
         // The command line parser does not let a handoff without an id get this far.
         await printHandoff(board, args.id as string, environment.write);
         return { exitCode: 0 };
+      case 'claude':
+        // Nothing but a session can end this command, and it ends as the session did.
+        return {
+          exitCode: await launchClaude(board, args.id as string, { env: environment.env }),
+        };
       case 'export':
         await exportBoard(board, { out: args.out, write: environment.write });
         return { exitCode: 0 };

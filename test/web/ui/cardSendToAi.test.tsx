@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { jest } from '@jest/globals';
 import { screen, waitFor, within } from '@testing-library/react';
-import type { Task } from '../../../src/contract/v1/index';
+import { claudeCodeCommand, type Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
@@ -125,5 +125,29 @@ describe('"Send to AI" in the menu of a card', () => {
       .sort();
 
     expect(callers).toEqual(['src/web/features/tasks/model/useSendToAi.ts']);
+  });
+});
+
+describe('"Send to AI → Claude Code" in the menu of a card (T19)', () => {
+  it('copies the command for the task of that card, and says so on that card', async () => {
+    const rendered = await renderBoard({ tasks: seed() });
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Actions for T2' }));
+    await rendered.user.click(
+      screen.getByRole('button', { name: 'Send to AI: Claude Code — copy command' }),
+    );
+
+    await waitFor(async () =>
+      expect(await navigator.clipboard.readText()).toBe(
+        claudeCodeCommand('T2', 'http://127.0.0.1:7432'),
+      ),
+    );
+    expect(
+      await within(cardOf('Other task')).findByText(/Command for Claude Code copied/),
+    ).toBeVisible();
+    expect(
+      within(cardOf('Ship it')).queryByText(/Command for Claude Code/),
+    ).not.toBeInTheDocument();
+    expect(rendered.board.calls).not.toContain('handoff');
   });
 });

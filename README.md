@@ -26,6 +26,7 @@ in your browser. No sign-up, no account, no database, no network beyond your own
 | -------------------------------------- | --------------------------------------------------------- |
 | `npx local-project-board`              | Start the board                                           |
 | `npx local-project-board instructions` | Print the API instructions to hand to an AI agent         |
+| `npx local-project-board claude <ID>`  | Start Claude Code on a task, in this terminal             |
 | `npx local-project-board export`       | Print a snapshot of the board (`--out <file>` to save it) |
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
@@ -58,7 +59,9 @@ whatever you are looking at.
   Discard or Cancel.
 - **Send to AI.** In a task, or in the menu of its card, one entry copies the handoff — the task,
   its documents and the steps its settings call for — ready to paste into any agent. It holds no
-  token. `npx local-project-board handoff <ID>` prints the same text.
+  token. `npx local-project-board handoff <ID>` prints the same text. The second entry,
+  **Claude Code — copy command**, copies the one line that starts Claude Code on that task; see
+  [Claude Code](#claude-code).
 
 Files the board cannot read are shown as exactly that, above the columns — never as tasks with
 invented values.
@@ -127,6 +130,37 @@ documents and store reports.
 
 The full route reference — every route, including the ones this text leaves out, every error code
 and media type — is [docs/api.md](docs/api.md), generated from the same route table.
+
+## Claude Code
+
+```bash
+npx local-project-board claude T13
+```
+
+starts Claude Code on task `T13`, in the terminal you typed it in and in the root of the project:
+the board is asked that the task exists, and `claude` is started with one short prompt that points
+at the live handoff of the task (`GET /api/v1/tasks/T13/handoff`). Claude reads it itself, so it
+always sees the settings as they are now, and follows its steps: a branch, the work, the checks, a
+commit, a `report.md`. The command ends with the exit code of the session.
+
+In the browser, **Send to AI → Claude Code — copy command** puts the same start on the clipboard:
+`claude "Work on task T13 of the local board: read GET http://127.0.0.1:7432/api/v1/tasks/T13/handoff and follow it."`.
+Paste it in a terminal in the project.
+
+What to know:
+
+- The board must be running (`npx local-project-board`, in another terminal), and `claude` must be
+  in your PATH. Otherwise the command says which of the two is missing, and starts nothing.
+- The board never starts `claude` itself: a server that runs programs would turn its token into
+  the right to run code on your machine, and it has no terminal to give an interactive program
+  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)).
+- The model, the permission mode and the rest are your own Claude Code settings; the board passes
+  none. There is no token in the prompt or in the arguments.
+- Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and
+  Claude Code asks for permission for that by default. Allow `Bash(curl *)` for the session, or in
+  your Claude Code settings if you want no questions.
+- The session works in your checkout of the project, so the branch it creates is the branch that
+  is checked out afterwards. A worktree for each task is not done yet.
 
 ## Principles
 
