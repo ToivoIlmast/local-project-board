@@ -299,6 +299,28 @@ describe('the store', () => {
     expect(board.calls).toEqual(expect.arrayContaining(['project', 'listTasks', 'listReports']));
   });
 
+  it('does not put back what a read that began before a change had seen (INVARIANT)', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1', status: 'todo' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.calls.length = 0;
+    // The read has the task in "todo" and waits for git, as a slow `git status` makes it.
+    const release = board.hold('gitStatus');
+    const reading = store.load();
+    while (!board.calls.includes('gitStatus')) await Promise.resolve();
+
+    await store.moveTask('T1', { status: 'done' });
+    const shown: string[] = [];
+    store.subscribe(() => shown.push(store.getState().tasks[0]?.status ?? 'gone'));
+    release();
+    await reading;
+
+    // The move is what the board said last; the older answer must not show, not even for a
+    // moment, or the card is taken out of the page and the focus goes with it.
+    expect(shown).not.toContain('todo');
+    expect(store.getState().tasks[0]?.status).toBe('done');
+  });
+
   it('reads the documents of a task once and keeps them live', async () => {
     const board = fakeBoard({ tasks: [aTask({ id: 'T1' })] });
     const store = createBoardStore(board.client);
