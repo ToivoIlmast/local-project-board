@@ -48,3 +48,35 @@ directory with that prompt. It takes the model and the permissions from the user
 - The agent needs a way to make HTTP requests to `127.0.0.1` (Claude Code's `curl` through its
   Bash tool asks for permission by default).
 - On Windows only a `claude.exe` is found: a `.cmd` cannot be started without a shell.
+
+## Amendment (T27, 2026-09-26): Send to AI starts the session through a runner
+
+The copied command left the click without an effect: nothing connected "Send to AI → Claude Code"
+in the page to a process on the machine, so the person still had to paste. The decision above
+stands — the server starts nothing — and the gap is closed by a process the person starts:
+
+- **`local-project-board claude --wait`** is a runner. It checks `claude` in the PATH and the
+  running board before it waits (so the board never promises a start that cannot happen), then
+  waits on **`GET /api/v1/runs`**: an SSE stream that only the holder of the session token may
+  open, and that carries nothing but run requests.
+- **`POST /api/v1/tasks/:id/run`** with `{"agent":"claude-code"}` is what the page sends. The body
+  names an agent from a closed list of one; there is no field for a program, an argument, a
+  prompt or a directory, and unknown fields are refused. The board checks that the task exists
+  and hands `{type: "run.requested", taskId, agent}` to **exactly one** waiting runner, ending that
+  runner's stream. No runner → `409 NO_AGENT_RUNNER`, with the two commands that help. Nothing on
+  the board changes. Both routes are left out of the agents' instructions.
+- The runner starts the session exactly as `claude <ID>` does — `startSession`: `claude` with the
+  one prompt argument, no flags (so no `--continue` or `--resume`: every start is a new session),
+  in the project root, with its terminal — and waits again when the session ends. While a session
+  runs it is not waiting, so a second click is refused instead of queued. After a restart of the
+  board it finds the board again through `runtime.json`.
+- The page composes no prompt any more: `claudeCodePrompt` has one caller, the CLI.
+- **The result comes back through the API every agent already uses:** the task field `aiRun`
+  (`agent`, `state`, `checks`, `commit`, `startedAt`, `finishedAt`; the branch stays
+  `task.branch`, the report stays `report.md`) is written with `PATCH /tasks/:id`, and the handoff
+  tells every agent to record its run. It is the agent's self-report; the page shows it as such.
+  The card line and the check of `commit` against git are left to T20.
+
+What this costs: a second terminal with the runner, started by hand once. What it does not change:
+the server has no module that can start a process (a test lists the ones that can: the CLI's
+`claude.ts` and `openBrowser.ts`, and the read-only git reader).

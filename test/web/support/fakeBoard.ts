@@ -43,6 +43,8 @@ export interface FakeBoard {
   git: GitStatus;
   /** The overrides of the board and its columns, as the server would store them. */
   workflow: WorkflowOverrides;
+  /** What was handed to a waiting runner, oldest first: the board of these tests always has one. */
+  runs: { taskId: string; agent: string }[];
   /** Make the next call to one method fail, as a real board would. */
   fail(method: keyof BoardClient, error: ApiError): void;
   /** Hold the next call to one method open, to see what the page shows meanwhile. */
@@ -65,6 +67,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   );
   const listeners: ((event: BoardEvent) => void)[] = [];
   const calls: string[] = [];
+  const runs: { taskId: string; agent: string }[] = [];
   const failures = new Map<string, ApiError>();
   const gates = new Map<string, Promise<void>>();
   let sequence = tasks.length;
@@ -149,8 +152,10 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     updateTask: (id, patch) =>
       record('updateTask', () => {
         const task = require(id);
-        const { branch, workflow, ...rest } = patch;
+        const { branch, workflow, aiRun, ...rest } = patch;
         Object.assign(task, rest, { updatedAt: NOW });
+        if (aiRun === null) delete task.aiRun;
+        else if (aiRun !== undefined) task.aiRun = { ...aiRun };
         if (branch === null) delete task.branch;
         else if (branch !== undefined) task.branch = branch;
         if (workflow === null) delete task.workflow;
@@ -191,6 +196,12 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         return state;
       }),
     taskWorkflow: (id) => record('taskWorkflow', () => effectiveOf(require(id))),
+    runTask: (id, agent) =>
+      record('runTask', () => {
+        require(id);
+        runs.push({ taskId: id, agent });
+        return { taskId: id, agent };
+      }),
     handoff: (id) =>
       record('handoff', () => {
         const task = require(id);
@@ -274,6 +285,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     project,
     git: options.git ?? aGitStatus(),
     workflow: overrides,
+    runs,
     fail: (method, error) => failures.set(method, error),
     hold(method) {
       let release = (): void => undefined;

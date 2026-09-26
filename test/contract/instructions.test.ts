@@ -48,6 +48,9 @@ describe('generated AI instructions', () => {
     expect(excluded.map((r) => r.id).sort()).toEqual([
       'events.stream',
       'instructions.get',
+      // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).
+      'runs.stream',
+      'tasks.run',
       'workflow.update',
     ]);
     for (const route of excluded) expect(instructions).not.toContain(endpoint(route));

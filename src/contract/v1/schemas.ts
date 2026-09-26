@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
-import { taskSchema } from '../../core/model/task.js';
+import { aiRunSchema } from '../../core/model/aiRun.js';
+import { taskIdSchema, taskSchema } from '../../core/model/task.js';
 import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
 /**
@@ -8,6 +9,7 @@ import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/w
  * duplicating it would only create drift. A v2 contract may diverge; v1 does not.
  */
 export {
+  aiRunSchema,
   documentMetaSchema,
   documentNameSchema,
   effectiveWorkflowSchema,
@@ -34,6 +36,7 @@ export { boardEventSchema } from '../../core/events.js';
  * never has to reach into the domain model for the shape of an answer (§20).
  */
 export type {
+  AiRun,
   DocumentMeta,
   EffectiveWorkflow,
   GitBranch,
@@ -82,6 +85,8 @@ export const updateTaskRequestSchema = z
     branch: z.string().min(1).nullable().optional(),
     /** An object replaces the task's overrides whole, as `labels` does; null removes them all. */
     workflow: workflowFlagsSchema.nullable().optional(),
+    /** The agent's report of its run (T27); an object replaces it whole, null removes it. */
+    aiRun: aiRunSchema.nullable().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');
 
@@ -110,6 +115,25 @@ export const createReportRequestSchema = z.strictObject({
 export const deletedSchema = z.strictObject({ deleted: z.literal(true) });
 
 /**
+ * The agent that Send to AI can start. One, so far: a registry waits for a second real agent
+ * (ADR-0029). What is sent is its name; which program that is, the runner alone decides.
+ */
+const agentSchema = z.literal('claude-code');
+
+/** "Start this agent on this task": a name, never a program, an argument or a prompt (T27). */
+export const runTaskRequestSchema = z.strictObject({ agent: agentSchema });
+
+/** The request was handed to a runner; the session is its business from here on. */
+export const runStartedSchema = z.strictObject({ taskId: taskIdSchema, agent: agentSchema });
+
+/** What a waiting runner receives on `GET /runs`, and nothing else ever. */
+export const runRequestSchema = z.strictObject({
+  type: z.literal('run.requested'),
+  taskId: taskIdSchema,
+  agent: agentSchema,
+});
+
+/**
  * What the board tells its own page about this run. The token is the whole of it: the page
  * must not learn anything about the machine it runs on, and the token must never be put in
  * the HTML instead (ADR-0008, owner's decision of 2026-09-23).
@@ -130,6 +154,8 @@ export const TRANSPORT_ERROR_CODES = [
   'METHOD_NOT_ALLOWED',
   'PAYLOAD_TOO_LARGE',
   'INTERNAL_ERROR',
+  /** Send to AI found nothing waiting to start the agent (T27). */
+  'NO_AGENT_RUNNER',
 ] as const;
 
 export const errorCodeSchema = z.enum([...BOARD_ERROR_CODES, ...TRANSPORT_ERROR_CODES]);
@@ -151,5 +177,8 @@ export type ReplaceWorkflowRequest = z.infer<typeof replaceWorkflowRequestSchema
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type RunTaskRequest = z.infer<typeof runTaskRequestSchema>;
+export type RunStarted = z.infer<typeof runStartedSchema>;
+export type RunRequest = z.infer<typeof runRequestSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

@@ -10,8 +10,9 @@ const BOARD_ADDRESS = /^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/;
  * line and never has to be quoted (T19). There is no token in it: the handoff says how to ask
  * the board for one.
  *
- * Both the command that the page copies and the launcher of the CLI use this one function. The
- * id and the address are checked, because the text is put inside double quotes of a shell.
+ * The CLI is the only user: `claude <ID>` and the runner of `claude --wait`, which Send to AI
+ * in the page reaches through the board (T27). The id and the address are checked all the
+ * same, so that nothing but a task id and the loopback board ever gets into a command line.
  */
 export function claudeCodePrompt(taskId: string, boardUrl: string): string {
   if (!isTaskId(taskId)) throw new Error(`"${taskId}" is not a task id.`);
@@ -22,9 +23,4 @@ export function claudeCodePrompt(taskId: string, boardUrl: string): string {
     `Work on task ${taskId} of the local board: ` +
     `read GET ${boardUrl}${API_BASE_PATH}/tasks/${taskId}/handoff and follow it.`
   );
-}
-
-/** The line to paste into a terminal in the project: `claude` with that prompt. */
-export function claudeCodeCommand(taskId: string, boardUrl: string): string {
-  return `claude "${claudeCodePrompt(taskId, boardUrl)}"`;
 }

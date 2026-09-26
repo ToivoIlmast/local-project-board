@@ -6,6 +6,7 @@ import type {
   WorkflowService,
 } from '../../core/index.js';
 import type { GitReader } from '../../core/ports.js';
+import type { RunDispatch } from './runs.js';
 import type { EventStream } from './sse.js';
 
 /** What this run of the server knows about itself; two routes hand it out, nothing else. */
@@ -40,4 +41,6 @@ export interface BoardContext {
  */
 export interface RouteContext extends BoardContext {
   session: SessionInfo;
+  /** The runners waiting for Send to AI; state of this server, never of the board (T27). */
+  runs: RunDispatch;
 }

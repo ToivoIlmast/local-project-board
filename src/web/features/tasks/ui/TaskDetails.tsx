@@ -5,6 +5,7 @@ import { formatDate } from '../../../shared/lib/format';
 import { Markdown } from '../../../shared/lib/Markdown';
 import { Badge, Button, Field, Panel, Select, Text } from '../../../shared/ui/index';
 import { TaskDocuments } from '../../documents/index';
+import { TaskAiRun } from './TaskAiRun';
 import { TaskAiSettings } from './TaskAiSettings';
 
 export interface TaskDetailsProps {
@@ -68,6 +69,7 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       </div>
 
       <TaskAiSettings task={task} />
+      <TaskAiRun task={task} />
 
       <div className="panel__body">
         {task.body.trim() === '' ? (

@@ -1,4 +1,6 @@
-import { API_BASE_PATH, claudeCodeCommand, claudeCodePrompt } from '../../src/contract/v1/index.js';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { API_BASE_PATH, claudeCodePrompt } from '../../src/contract/v1/index.js';
 
 const BOARD = 'http://127.0.0.1:7432';
 
@@ -18,8 +20,25 @@ describe('the prompt that starts Claude Code on a task (T19)', () => {
     expect(claudeCodePrompt('T13', BOARD)).toBe(prompt);
   });
 
-  it('is the same on the copied command line and in the launcher: one function decides', () => {
-    expect(claudeCodeCommand('T13', BOARD)).toBe(`claude "${claudeCodePrompt('T13', BOARD)}"`);
+  it('is made by the CLI only: the page asks the board and composes no prompt (T27)', () => {
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name)) files.push(path);
+      }
+    };
+    walk(join(process.cwd(), 'src'));
+
+    const callers = files
+      .filter((file) => !file.endsWith(join('contract', 'v1', 'claudeCode.ts')))
+      .filter((file) => file.endsWith('index.ts') === false)
+      .filter((file) => /claudeCodePrompt\(/.test(readFileSync(file, 'utf8')))
+      .map((file) => file.slice(process.cwd().length + 1))
+      .sort();
+
+    expect(callers).toEqual(['src/server/cli/claude.ts']);
   });
 
   it('is safe inside double quotes for every id it accepts', () => {
@@ -31,7 +50,6 @@ describe('the prompt that starts Claude Code on a task (T19)', () => {
   it('refuses an id that is not a task id: it is never put into a command line (INVARIANT)', () => {
     for (const id of ['', 'banana', 'T1; rm -rf /', 'T1 "x"', '$(id)', 'T0', 't1', 'T1\nT2']) {
       expect(() => claudeCodePrompt(id, BOARD)).toThrow(/task id/);
-      expect(() => claudeCodeCommand(id, BOARD)).toThrow(/task id/);
     }
   });
 

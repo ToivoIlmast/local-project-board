@@ -53,7 +53,7 @@ interface StepContext<K extends StepKey> {
 type Renderers = { [K in StepKey]: (context: StepContext<K>) => string };
 
 const tasks = (facts: WorkflowFacts): string => `${API_BASE_PATH}/tasks/${facts.taskId}`;
-const patch = (facts: WorkflowFacts, body: Record<string, string>): string =>
+const patch = (facts: WorkflowFacts, body: Record<string, unknown>): string =>
   `\`PATCH ${tasks(facts)}\` with \`${JSON.stringify(body)}\``;
 
 /**
@@ -125,11 +125,22 @@ const STEPS: Renderers = {
       : `When you are done, move the task to \`${value}\`: ${patch(facts, { status: value })}.`,
 };
 
-/** What an agent never does, whatever is configured: these are not settings (ADR-0028). */
-const RULES: readonly string[] = [
-  'Never merge a branch, into any branch.',
-  'Never write the session token into a file of the project, a task, a document or a report.',
-  'When you are done, stop and wait for the review; do not start another task.',
+/**
+ * What an agent always does and never does, whatever is configured: these are not settings
+ * (ADR-0028). Reporting the run is one of them: an analysis is a run as much as a change is,
+ * and the board shows what the agent said about it (T27, the model of T20).
+ */
+const RULES: readonly ((facts: WorkflowFacts) => string)[] = [
+  (facts) =>
+    'Record your run in the task, for the board to show it: when you start, ' +
+    `${patch(facts, { aiRun: { agent: '<your name>', state: 'working', startedAt: '<now>' } })}; ` +
+    'when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or ' +
+    '`needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last ' +
+    'commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, ' +
+    'like `2026-09-26T10:00:00Z`.',
+  () => 'Never merge a branch, into any branch.',
+  () => 'Never write the session token into a file of the project, a task, a document or a report.',
+  () => 'When you are done, stop and wait for the review; do not start another task.',
 ];
 
 const STEP_KEYS = Object.keys(STEPS) as StepKey[];
@@ -177,7 +188,7 @@ export function workflowSteps(effective: EffectiveWorkflow, facts: WorkflowFacts
     if (off) origin.push('inactive: editCode is off');
     return { key, text: `${text} _(${origin.join('; ')})_` };
   });
-  return [...steps, ...RULES.map((text): WorkflowStep => ({ key: null, text }))];
+  return [...steps, ...RULES.map((rule): WorkflowStep => ({ key: null, text: rule(facts) }))];
 }
 
 /** The steps as a numbered markdown list, one line each. */

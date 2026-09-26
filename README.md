@@ -22,12 +22,13 @@ npx local-project-board
 The board starts on `http://127.0.0.1:7432/` (the next free port if that one is taken) and opens
 in your browser. No sign-up, no account, no database, no network beyond your own machine.
 
-| Command                                | What it does                                              |
-| -------------------------------------- | --------------------------------------------------------- |
-| `npx local-project-board`              | Start the board                                           |
-| `npx local-project-board instructions` | Print the API instructions to hand to an AI agent         |
-| `npx local-project-board claude <ID>`  | Start Claude Code on a task, in this terminal             |
-| `npx local-project-board export`       | Print a snapshot of the board (`--out <file>` to save it) |
+| Command                                 | What it does                                              |
+| --------------------------------------- | --------------------------------------------------------- |
+| `npx local-project-board`               | Start the board                                           |
+| `npx local-project-board instructions`  | Print the API instructions to hand to an AI agent         |
+| `npx local-project-board claude <ID>`   | Start Claude Code on a task, in this terminal             |
+| `npx local-project-board claude --wait` | Start Claude Code here on each task sent from the board   |
+| `npx local-project-board export`        | Print a snapshot of the board (`--out <file>` to save it) |
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
 `--no-open` (do not open a browser), `--help`.
@@ -60,8 +61,11 @@ whatever you are looking at.
 - **Send to AI.** In a task, or in the menu of its card, one entry copies the handoff — the task,
   its documents and the steps its settings call for — ready to paste into any agent. It holds no
   token. `npx local-project-board handoff <ID>` prints the same text. The second entry,
-  **Claude Code — copy command**, copies the one line that starts Claude Code on that task; see
-  [Claude Code](#claude-code).
+  **Claude Code**, starts Claude Code on that task in the terminal where
+  `npx local-project-board claude --wait` runs; see [Claude Code](#claude-code).
+- **AI run.** What the last agent on a task reported about its run — which agent, how it went,
+  the checks, its commit, when it started and finished — is shown in the task, marked as the
+  agent's own word: the board does not check it.
 
 Files the board cannot read are shown as exactly that, above the columns — never as tasks with
 invented values.
@@ -133,19 +137,26 @@ and media type — is [docs/api.md](docs/api.md), generated from the same route 
 
 ## Claude Code
 
+Start a runner once, in a terminal in the project, next to the running board:
+
+```bash
+npx local-project-board claude --wait
+```
+
+From then on **Send to AI → Claude Code** in a task (or in the menu of its card) starts Claude Code
+on that task in that terminal. When the session ends, the runner waits for the next task. Without
+a runner, typing
+
 ```bash
 npx local-project-board claude T13
 ```
 
-starts Claude Code on task `T13`, in the terminal you typed it in and in the root of the project:
-the board is asked that the task exists, and `claude` is started with one short prompt that points
-at the live handoff of the task (`GET /api/v1/tasks/T13/handoff`). Claude reads it itself, so it
-always sees the settings as they are now, and follows its steps: a branch, the work, the checks, a
-commit, a `report.md`. The command ends with the exit code of the session.
-
-In the browser, **Send to AI → Claude Code — copy command** puts the same start on the clipboard:
-`claude "Work on task T13 of the local board: read GET http://127.0.0.1:7432/api/v1/tasks/T13/handoff and follow it."`.
-Paste it in a terminal in the project.
+starts the same session on task `T13` directly. Either way `claude` is started in the root of the
+project, as a new session, with one short prompt that points at the live handoff of the task
+(`GET /api/v1/tasks/T13/handoff`). Claude reads it itself, so it always sees the task, the settings
+as they are now and the API instructions, and follows its steps: a branch, the work, the checks, a
+commit, a `report.md`, and its run recorded in the task (`aiRun`), which the page shows as
+**AI run**.
 
 What to know:
 
@@ -153,7 +164,12 @@ What to know:
   in your PATH. Otherwise the command says which of the two is missing, and starts nothing.
 - The board never starts `claude` itself: a server that runs programs would turn its token into
   the right to run code on your machine, and it has no terminal to give an interactive program
-  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)).
+  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)). The
+  page only asks the board to hand the task to the runner you started; the runner decides what
+  runs.
+- One session at a time: while a session runs, **Send to AI → Claude Code** says that nothing is
+  waiting, and starts nothing. So does it when no runner is started; it then tells you the two
+  commands above.
 - The model, the permission mode and the rest are your own Claude Code settings; the board passes
   none. There is no token in the prompt or in the arguments.
 - Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and

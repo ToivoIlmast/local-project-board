@@ -13,6 +13,8 @@ export interface ParsedArgs {
   out?: string;
   /** Only for handoff and claude: the task, as it was typed; the board says whether it exists. */
   id?: string;
+  /** Only for claude, instead of an id: wait for Send to AI in the board (T27). */
+  wait?: boolean;
 }
 
 export const USAGE = [
@@ -23,6 +25,8 @@ export const USAGE = [
   '  instructions           print the API instructions for an AI agent',
   '  handoff <id>           print everything an AI agent needs to work on a task',
   '  claude <id>            start Claude Code on a task, in this terminal',
+  '  claude --wait          start Claude Code in this terminal on each task sent from the',
+  '                         board with Send to AI → Claude Code, one after another',
   '  export                 print a snapshot of the board',
   '',
   'Options:',
@@ -55,6 +59,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         port: { type: 'string' },
         'no-open': { type: 'boolean' },
         out: { type: 'string' },
+        wait: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
     });
@@ -69,15 +74,26 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   const [name, ...rest] = positionals;
   const command: Command = name === undefined ? 'serve' : asCommand(name);
-  // The commands that take a positional argument take the task they are about.
-  const takesId = command === 'handoff' || command === 'claude';
+  const wait = values.wait === true;
+  if (wait && command !== 'claude') {
+    throw new UsageError('The --wait flag belongs to the claude command.');
+  }
+  // The commands that take a positional argument take the task they are about; a runner that
+  // waits is told its tasks by the board, one at a time.
+  const takesId = command === 'handoff' || (command === 'claude' && !wait);
   const [id, ...extra] = takesId ? rest : [undefined, ...rest];
   if (takesId && id === undefined) {
     throw new UsageError(
       `The ${command} command needs the id of a task, for example: ${command} T1`,
     );
   }
-  if (extra.length > 0) throw new UsageError(`Unexpected argument: ${extra[0]}`);
+  if (extra.length > 0) {
+    throw new UsageError(
+      wait
+        ? `claude --wait takes no task: the board sends them. Unexpected argument: ${extra[0]}`
+        : `Unexpected argument: ${extra[0]}`,
+    );
+  }
 
   if (values.out !== undefined && command !== 'export') {
     throw new UsageError('The --out flag belongs to the export command.');
@@ -92,6 +108,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(values['no-open'] === true ? { open: false } : {}),
     ...(values.out === undefined ? {} : { out: values.out }),
     ...(id === undefined ? {} : { id }),
+    ...(wait ? { wait } : {}),
   };
 }
 

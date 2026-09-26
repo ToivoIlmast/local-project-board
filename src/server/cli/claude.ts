@@ -7,6 +7,7 @@ import { claudeCodePrompt } from '../../contract/v1/index.js';
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
 import { findRunningBoard, get } from './running.js';
+import type { RuntimeState } from './runtime.js';
 
 /** The one program this command starts. It is never taken from the command line (T19). */
 const PROGRAM = 'claude';
@@ -35,28 +36,51 @@ export async function launchClaude(
   }
 
   const running = await findRunningBoard(board.root);
-  if (running === undefined) {
-    throw new Error(
-      'The board is not running for this project, so Claude Code would have no handoff to read. ' +
-        'Start it in another terminal with `npx local-project-board` and try again.',
-    );
-  }
+  if (running === undefined) throw boardNotRunning();
   const answer = await get(running, `/tasks/${id}`);
   if (answer === undefined) {
     throw new Error('The board did not answer. Is it still running? Try again in a moment.');
   }
   if (!answer.ok) throw new Error(await boardMessage(answer));
 
-  const program = await findExecutable(PROGRAM, environment.env);
+  const program = await findClaude(environment.env);
+  return startSession(program, id, running, board.root, environment.env);
+}
+
+/**
+ * The one way a session of Claude Code starts, for `claude <ID>` and for the runner of
+ * `claude --wait` alike: `claude` with one argument, the prompt that points at the live handoff
+ * of this task, in the root of the project, in this terminal. No flag, so no `--continue` and
+ * no `--resume`: every start is a session of its own (T19, T27).
+ */
+export function startSession(
+  program: string,
+  id: string,
+  board: RuntimeState,
+  root: string,
+  env: NodeJS.ProcessEnv,
+): Promise<number> {
+  const prompt = claudeCodePrompt(id, board.url.replace(/\/+$/, ''));
+  return run(program, [prompt], root, env);
+}
+
+/** `claude` as the PATH finds it, or the reason there is none, in words a user can act on. */
+export async function findClaude(env: NodeJS.ProcessEnv): Promise<string> {
+  const program = await findExecutable(PROGRAM, env);
   if (program === undefined) {
     throw new Error(
       'Claude Code was not found: there is no `claude` in the PATH. Install it and try again, ' +
         'or give another agent the text of "Send to AI → Copy handoff" in the board.',
     );
   }
+  return program;
+}
 
-  const prompt = claudeCodePrompt(id, running.url.replace(/\/+$/, ''));
-  return run(program, [prompt], board.root, environment.env);
+export function boardNotRunning(): Error {
+  return new Error(
+    'The board is not running for this project, so Claude Code would have no handoff to read. ' +
+      'Start it in another terminal with `npx local-project-board` and try again.',
+  );
 }
 
 /** The board says what is wrong in its own words; a board that says nothing is quoted by status. */

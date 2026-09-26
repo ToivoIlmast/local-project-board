@@ -229,6 +229,53 @@ export function runStorageConformance(harness: StorageHarness): void {
       });
     });
 
+    describe('the run of an agent on a task (aiRun, T27)', () => {
+      const working = {
+        agent: 'claude-code',
+        state: 'working' as const,
+        startedAt: '2026-09-26T10:00:00.000Z',
+      };
+      const finished = {
+        ...working,
+        state: 'finished' as const,
+        checks: 'passed' as const,
+        commit: '9f1c1a2',
+        finishedAt: '2026-09-26T11:00:00.000Z',
+      };
+
+      it('has no run for a task no agent has reported on', async () => {
+        const created = await storage.createTask(newTask());
+        expect('aiRun' in created).toBe(false);
+      });
+
+      it('keeps the run an agent reported, whole, across a reopen (INVARIANT)', async () => {
+        const created = await storage.createTask(newTask());
+        const updated = await storage.updateTask(created.id, { aiRun: finished });
+        expect(updated.aiRun).toEqual(finished);
+        const reopened = await reopen(storage);
+        expect((await reopened.getTask(created.id))?.aiRun).toEqual(finished);
+        // It is a field of the board, not something the user wrote next to it.
+        expect((await reopened.getTask(created.id))?.extra).toBeUndefined();
+      });
+
+      it('replaces the run whole: nothing of the last report lingers in the next', async () => {
+        const created = await storage.createTask(newTask());
+        await storage.updateTask(created.id, { aiRun: finished });
+        const updated = await storage.updateTask(created.id, { aiRun: working });
+        expect(updated.aiRun).toEqual(working);
+        expect((await storage.getTask(created.id))?.aiRun).toEqual(working);
+      });
+
+      it('forgets the run when the patch says null, and keeps it when the patch is silent', async () => {
+        const created = await storage.createTask(newTask());
+        await storage.updateTask(created.id, { aiRun: working });
+        expect((await storage.updateTask(created.id, { title: 'Renamed' })).aiRun).toEqual(working);
+        const cleared = await storage.updateTask(created.id, { aiRun: null });
+        expect('aiRun' in cleared).toBe(false);
+        expect('aiRun' in ((await storage.getTask(created.id)) ?? {})).toBe(false);
+      });
+    });
+
     describe('workflow overrides of the board and its columns', () => {
       const workflow = {
         board: { push: false, checkCommand: 'npm test', finishStatus: null },

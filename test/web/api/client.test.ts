@@ -346,3 +346,37 @@ describe('the handoff of a task', () => {
     });
   });
 });
+
+describe('starting an agent on a task (T27)', () => {
+  it('posts the task and the name of the agent, with the token, and nothing else (INVARIANT)', async () => {
+    const { fake, client } = board((url, method) =>
+      method === 'POST' && url === `${BASE}/api/v1/tasks/T7/run`
+        ? { json: { taskId: 'T7', agent: 'claude-code' } }
+        : undefined,
+    );
+
+    await expect(client.runTask('T7', 'claude-code')).resolves.toEqual({
+      taskId: 'T7',
+      agent: 'claude-code',
+    });
+
+    const call = fake.calls.find((recorded) => recorded.url.endsWith('/run'));
+    expect(call?.method).toBe('POST');
+    expect(call?.headers['Authorization']).toBe(`Bearer ${TOKEN}`);
+    // No program, no argument, no prompt: the runner decides what starts (ADR-0029).
+    expect(JSON.parse(call?.body ?? '')).toEqual({ agent: 'claude-code' });
+  });
+
+  it('says what the board said when nothing waits to start it', async () => {
+    const { client } = board(() => ({
+      status: 409,
+      json: errorBody('NO_AGENT_RUNNER', 'Nothing is waiting to start Claude Code.'),
+    }));
+
+    await expect(client.runTask('T7', 'claude-code')).rejects.toMatchObject({
+      status: 409,
+      code: 'NO_AGENT_RUNNER',
+      message: 'Nothing is waiting to start Claude Code.',
+    });
+  });
+});

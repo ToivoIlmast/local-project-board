@@ -12,6 +12,7 @@ const KNOWN = [
   'labels',
   'branch',
   'workflow',
+  'aiRun',
   'createdAt',
   'updatedAt',
 ];

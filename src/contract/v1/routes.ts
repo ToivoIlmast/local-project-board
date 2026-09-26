@@ -279,6 +279,24 @@ export const routes = {
     ai: { include: true },
   }),
 
+  'tasks.run': route({
+    id: 'tasks.run',
+    method: 'POST',
+    path: '/tasks/:id/run',
+    summary:
+      'Hand a task to the runner waiting in a terminal of the project, which starts the agent on it',
+    params: taskParams,
+    request: s.runTaskRequestSchema,
+    response: json(s.runStartedSchema),
+    example: {
+      params: { id: 'T12' },
+      body: { agent: 'claude-code' },
+      response: { taskId: 'T12', agent: 'claude-code' },
+    },
+    // Send to AI in the page. An agent at work does not start other agents.
+    ai: { include: false },
+  }),
+
   'workflow.get': route({
     id: 'workflow.get',
     method: 'GET',
@@ -496,6 +514,17 @@ export const routes = {
     response: { schema: s.boardEventSchema, media: 'text/event-stream' },
     example: { response: { type: 'task.updated', task: exampleTask } },
     // Agents poll the resources they changed; a stream is of no use to them.
+    ai: { include: false },
+  }),
+
+  'runs.stream': route({
+    id: 'runs.stream',
+    method: 'GET',
+    path: '/runs',
+    summary:
+      'Wait for Send to AI (SSE, with the token): one request, then the stream ends; the CLI runner uses it',
+    response: { schema: s.runRequestSchema, media: 'text/event-stream' },
+    example: { response: { type: 'run.requested', taskId: 'T12', agent: 'claude-code' } },
     ai: { include: false },
   }),
 

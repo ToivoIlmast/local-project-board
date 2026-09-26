@@ -41,9 +41,12 @@ export function createV1Router(context: RouteContext, options: RouterOptions = {
   for (const route of routeList) {
     // A stream is not a body: it is answered by the SSE serializer, not by a handler.
     if (route.response.media === 'text/event-stream') {
+      const heartbeat = { heartbeatMs: options.sseHeartbeatMs };
       router[verb(route.method)](
         route.path,
-        createEventStreamHandler(context.events, { heartbeatMs: options.sseHeartbeatMs }),
+        route.id === 'runs.stream'
+          ? context.runs.handler(context.session.token, heartbeat)
+          : createEventStreamHandler(context.events, heartbeat),
       );
       remember(route);
       continue;
