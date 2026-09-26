@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 44c044f85409d4dd65ce986da8c6b88e410e1f79 -->
+<!-- Based on README.md @ c41cd88979d22f34397c04b7c8d70447644dda7b -->
 
 # local-project-board
 
@@ -54,7 +54,14 @@ på.
   bort och redo att klistra in.
 - **Inställningar.** Hur en agent arbetar med en uppgift — ändra filer, arbeta i en egen gren,
   köra kontrollerna, committa, pusha, skriva en rapport — för hela tavlan och för varje kolumn.
-  Bara det du ändrar sparas, i `.board/workflow.yaml`; en kolumn kan helt enkelt följa tavlan.
+  Bara det du ändrar sparas, i `.board/workflow.yaml`; en kolumn kan helt enkelt följa tavlan. En
+  enskild uppgift kan också avvika: öppna den för att se varifrån varje gällande värde kommer,
+  åsidosätt en inställning eller skicka tillbaka uppgiften till sin kolumns inställningar. Att
+  lämna ett formulär med osparade ändringar frågar först: Spara, Förkasta eller Avbryt.
+- **Skicka till AI.** I en uppgift, eller i menyn på dess kort, kopierar ett val handoffen —
+  uppgiften, dess dokument och de steg som inställningarna kräver — redo att klistra in i vilken
+  agent som helst. Den innehåller ingen token. `npx local-project-board handoff <ID>` skriver ut
+  samma text.
 
 Filer som tavlan inte kan läsa visas som just det, ovanför kolumnerna — aldrig som uppgifter med
 påhittade värden.

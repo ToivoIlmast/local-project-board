@@ -6,7 +6,7 @@ import {
 } from '../../../../contract/v1/index';
 import { Checkbox, Field, Input, Select, type SelectOption } from '../../../shared/ui/index';
 import { effectiveFlag, inactiveFlags, setBoardFlag, setBoardValue } from '../model/draft';
-import { INACTIVE_NOTE, SOURCE_LABELS, WORKFLOW_LABELS, onOff } from '../model/labels';
+import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
 
 export interface BoardSettingsProps {
   overrides: WorkflowOverrides;
@@ -28,7 +28,7 @@ export function BoardSettings({ overrides, defaults, statuses, onChange }: Board
         const muted = inactive.includes(key);
         const hint = [
           WORKFLOW_LABELS[key].description,
-          `In effect: ${onOff(value)}, from ${SOURCE_LABELS[source]}.`,
+          `In effect: ${onOff(value)}, from ${sourceLabel(source)}.`,
           muted ? INACTIVE_NOTE : undefined,
         ]
           .filter(Boolean)

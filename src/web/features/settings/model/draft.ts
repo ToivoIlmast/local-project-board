@@ -29,7 +29,7 @@ function columnOf(overrides: WorkflowOverrides, status: string): WorkflowFlagOve
   return Object.hasOwn(overrides.statuses, status) ? (overrides.statuses[status] ?? {}) : {};
 }
 
-/** Where a value in effect comes from; a task is not edited on this page. */
+/** Where a value in effect comes from on the page of the board and its columns. */
 export type Source = 'default' | 'board' | 'status';
 
 export interface Effective {
@@ -99,15 +99,27 @@ export function setBoardValue(
   };
 }
 
-/** One flag of one column; `'inherit'` takes the key out, and a column left empty with it. */
+/**
+ * One flag of a set of overrides — a column's or a task's; `'inherit'` takes the key out, so
+ * what the level below says applies again. A value that is off is a value and stays.
+ */
+export function setFlag(
+  flags: WorkflowFlagOverrides,
+  key: WorkflowFlag,
+  value: boolean | 'inherit',
+): WorkflowFlagOverrides {
+  const { [key]: _old, ...rest } = flags;
+  return value === 'inherit' ? rest : { ...rest, [key]: value };
+}
+
+/** One flag of one column; a column left empty by it is dropped. */
 export function setColumnFlag(
   overrides: WorkflowOverrides,
   status: string,
   key: WorkflowFlag,
   value: boolean | 'inherit',
 ): WorkflowOverrides {
-  const { [key]: _old, ...rest } = columnOf(overrides, status);
-  const next: WorkflowFlagOverrides = value === 'inherit' ? rest : { ...rest, [key]: value };
+  const next = setFlag(columnOf(overrides, status), key, value);
   const { [status]: _column, ...others } = overrides.statuses;
   return {
     ...overrides,

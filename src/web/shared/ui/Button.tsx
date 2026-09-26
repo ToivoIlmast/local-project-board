@@ -1,9 +1,10 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'plain' | 'quiet' | 'danger';
   size?: 'normal' | 'small';
   children: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** Every button on the board is this one: one place decides what a button looks like. */

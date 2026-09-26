@@ -187,10 +187,81 @@ does; there is no second model and nothing is stored in the browser.
   the board does not have is listed as a warning and kept in the form; the board refuses to save
   it (422 `UNKNOWN_STATUS`, message shown in the form), so the person removes it or picks a
   status.
-- **Not here:** a task's own overrides (T18) and `ai.rules`, which is configuration (ADR-0021,
-  "Rules of the agent"), not stored by the server and not part of the API; the panel only says
-  where it lives. The words of every setting are `WORKFLOW_LABELS` in the feature, for T18 to
-  reuse.
+- **Not here:** a task's own overrides (see the next section) and `ai.rules`, which is
+  configuration (ADR-0021, "Rules of the agent"), not stored by the server and not part of the
+  API; the panel only says where it lives. The words of every setting are `WORKFLOW_LABELS` in
+  the feature, which the block of a task reuses.
+
+## The AI block of a task (T18)
+
+The details of a task get a block "AI": what an agent will do on this task, the exceptions this
+task makes, and a menu that hands the task to an agent. It uses the routes of T14 and T15 as
+they are (`GET /tasks/:id/workflow`, `PATCH /tasks/:id`, `GET /tasks/:id/handoff`); nothing in the
+contract changed apart from the page's client getting `handoff(id)`.
+
+- **Two kinds of value, kept apart.** What is _in effect_ is only ever the board's answer
+  (`GET /tasks/:id/workflow`, with the source of each value and the `inactive` list): the page
+  does not run `resolveWorkflow`. What is _edited and stored_ is the task's own overrides. The
+  answer is asked for again whenever something it depends on changes — the task's status, its own
+  settings, the settings of the board and the columns (`workflow.updated`, `board.changed`) — and
+  while it is on its way the block says so instead of showing the answer to an earlier question.
+- **The one place the page works something out** is the text of the "inherit" choice, "Inherit
+  (now on, from the column todo)": what the task would have if it said nothing. The board cannot
+  answer that for a task that does say something, so it is taken from the board's overrides with
+  `effectiveFlag`, the function of the Settings panel that a test holds to `resolveWorkflow` for
+  every combination. It is never sent anywhere.
+- **Same three states as a column, one control.** Inherit, on, off — the `FlagChoice` of the
+  Settings panel, its words (`WORKFLOW_LABELS`, `sourceLabel`) and its draft (`useOverridesDraft`,
+  the hook the panel's form is made with). A task can only override the six on/off settings; the
+  four board-only ones are listed as in effect, with their source, and are changed in Settings.
+- **`PATCH` replaces the overrides of the task whole** (T14), so the draft is the whole object
+  and one changed setting sends the others the task already had. When nothing is left the page
+  sends `workflow: null`, never `{}`: `null` is how the board is told to remove the overrides,
+  and no `workflow` at all is what "no override" is. A stored `{}` is read as no override too.
+  "Reset to the settings of column …" sends `null` at once and drops what was typed.
+- **Nothing outside the task is touched.** The block never calls `PUT /workflow`; the board's
+  and the columns' overrides are the same bytes before and after (tests on a real board).
+- **Nothing is applied before the board answers**, and nothing typed is lost (ADR-0025, the same
+  rules as the panel): an error stays next to the form with the draft intact; a change made
+  elsewhere (`task.updated`) is taken silently by a block with nothing unsaved and reported, with
+  a button to load it, by one with changes; a save is recognised as one's own.
+- **Folded away when there is nothing to show:** a task with no overrides is one line, "Uses the
+  settings of column todo", and a button to open it. A task with overrides, or a block being
+  edited, is open. Folding away after the last override goes returns the focus to the button that
+  opens it. The card on the board carries a mark ("AI settings") when the task has overrides.
+- **Send to AI** is a menu whose entries are a list of `{ label, run(taskId) }` (`AGENT_TARGETS`). The details of a task and its card on the board both use `useSendToAi`,
+  the one place that asks for the handoff (a test fails if any other file calls it); the card
+  offers the entries as "Send to AI: …" and says what came of it on the card. The first is
+  "Copy handoff": the text of `GET /tasks/:id/handoff`, fetched when the entry is chosen — the
+  page composes nothing, so it is the text of the API and of `local-project-board handoff`, and
+  has no token (T15). A further way to send a task is one more entry in the list. The result is
+  announced in a polite live region; a failure of the board, or a browser that refuses the
+  clipboard, is said in words and copies nothing.
+
+## Leaving a form with unsaved changes (T18)
+
+Closing a panel, opening another task or another panel used to throw a form's changes away
+without a word. The Settings panel (T17) and the block of a task (T18) now share one mechanism,
+so they behave and read the same.
+
+- **One registry, one question.** A form that can hold changes tells the page what it holds
+  (`useUnsavedChanges`: `dirty`, `what`, `save`, `discard`, an optional `note`); every way out
+  of the panel goes through `useLeaveGuard` in `BoardPage`. If no form is dirty the way out is
+  taken at once — no question. Otherwise one dialog asks, Save, Discard or Cancel, in that
+  order, with the focus on Save (the choice that loses nothing).
+- **Save** saves every form that is dirty, and only then goes on. If the board refuses, nothing
+  closes and nothing is lost: the dialog stays with the board's message, the form keeps its draft
+  (and shows the same error), and the person can retry, discard or cancel. **Discard** drops the
+  draft (to what the board says now, if it was changed elsewhere meanwhile) and goes on.
+  **Cancel**, Escape and the ✕ of the dialog stay where they are, with the focus back on what was
+  pressed. While a save is on its way the dialog cannot be dismissed.
+- **What is not a way out:** opening the task that is already open, and deleting the task that is
+  open (it is already asked about, and there is nothing left to save to).
+- **Where it does not reach:** the browser's back button changes the address without asking,
+  and this page cannot stop it. Closing or reloading the tab is held by the browser's own
+  question (`beforeunload`) while something is unsaved; that question cannot offer Save.
+- If the settings were also changed elsewhere, the dialog says that Save replaces that change
+  (last-write-wins, ADR-0018) — the same warning the form shows.
 
 ## Consequences
 

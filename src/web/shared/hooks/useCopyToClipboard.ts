@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react';
 
 /** Copy, and say so. Without a clipboard the button says what happened instead of lying. */
 export function useCopyToClipboard(): {
-  copy: (text: string) => Promise<void>;
+  /** Resolves to whether the text is on the clipboard now. */
+  copy: (text: string) => Promise<boolean>;
   state: 'idle' | 'copied' | 'failed';
 } {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -11,8 +12,10 @@ export function useCopyToClipboard(): {
     try {
       await navigator.clipboard.writeText(text);
       setState('copied');
+      return true;
     } catch {
       setState('failed');
+      return false;
     }
   }, []);
 

@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import type { WorkflowOverrides, WorkflowState } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
 import { Button, Text } from '../../../shared/ui/index';
 import { orphanStatuses } from '../model/draft';
 import { WORKFLOW_LABELS } from '../model/labels';
@@ -23,6 +24,15 @@ export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) 
   const form = useWorkflowDraft(workflow);
   const saving = useAsyncAction(async () => {
     await form.save(onSave);
+  });
+  useUnsavedChanges({
+    dirty: form.dirty,
+    what: 'the AI workflow settings of the board and its columns',
+    note: form.changedElsewhere
+      ? 'These settings were also changed elsewhere; saving replaces that change.'
+      : undefined,
+    save: () => saving.attempt(),
+    discard: form.discard,
   });
   const orphans = orphanStatuses(form.draft, statuses);
   const hasOrphans = orphans.columns.length > 0 || orphans.board.length > 0;

@@ -282,3 +282,114 @@ test('the AI workflow settings are changed with the keyboard and are what the bo
   await expect(again.getByLabel('Base branch')).toHaveValue('develop');
   await expect(again.getByRole('checkbox', { name: 'Push' })).not.toBeChecked();
 });
+
+test('the AI settings of a task are changed with the keyboard, and the handoff copied is what the board serves', async ({
+  page,
+  board,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await board.api('/api/v1/workflow', {
+    method: 'PUT',
+    body: { board: { push: false }, statuses: { todo: { report: false } } },
+  });
+  await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Ship it', status: 'todo' } });
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Ship it' }).focus();
+  await page.keyboard.press('Enter');
+  const task = page.getByRole('complementary', { name: 'Task T1' });
+  await expect(task).toBeFocused();
+  const ai = task.getByRole('region', { name: 'AI' });
+
+  // A task with nothing of its own is one line, and the handoff is one menu away.
+  await expect(ai).toContainText('Uses the settings of column todo');
+  await ai.getByRole('button', { name: 'Customize for this task' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(ai.getByLabel('Push')).toHaveAccessibleDescription(
+    'In effect: off, from the board.',
+  );
+  await expect(ai.getByLabel('Write a report')).toHaveAccessibleDescription(
+    'In effect: off, from the column todo.',
+  );
+
+  // One setting, chosen without the mouse and saved with the keyboard.
+  await ai.getByLabel('Push').focus();
+  await ai.getByLabel('Push').selectOption('On');
+  // A select does not submit a form: the way on is Tab, past the last setting, to Save.
+  await page.keyboard.press('Tab');
+  await expect(ai.getByLabel('Write a report')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(ai.getByRole('button', { name: 'Save' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(ai.getByText('Saved.')).toBeVisible();
+  await expect(ai.getByLabel('Push')).toHaveAccessibleDescription('In effect: on, from this task.');
+
+  // The task stored its override; the board and the column are what they were.
+  const stored = (await board.api('/api/v1/tasks/T1')) as { workflow?: unknown };
+  expect(stored.workflow).toEqual({ push: true });
+  expect(await board.api('/api/v1/workflow')).toMatchObject({
+    board: { push: false },
+    statuses: { todo: { report: false } },
+  });
+  await expect(
+    page.getByRole('region', { name: /^todo/ }).getByTitle('This task has AI settings of its own'),
+  ).toBeVisible();
+
+  // The handoff that is copied is the one the board serves, with this override in it.
+  await ai.getByRole('button', { name: 'Send to AI' }).focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(ai.getByText('Handoff copied to the clipboard.')).toBeVisible();
+  await expect(ai.getByRole('button', { name: 'Send to AI' })).toBeFocused();
+  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  const served = await (
+    await fetch(`${board.url.replace(/\/$/, '')}/api/v1/tasks/T1/handoff`)
+  ).text();
+  expect(copied).toBe(served);
+  expect(copied).toContain('Push your commits to the remote. _(source: this task)_');
+
+  // Back to what the column and the board say, with one button; the focus is not lost.
+  await ai.getByRole('button', { name: 'Reset to the settings of column todo' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(ai).toContainText('Uses the settings of column todo');
+  await expect(ai.getByRole('button', { name: 'Customize for this task' })).toBeFocused();
+  expect(
+    ((await board.api('/api/v1/tasks/T1')) as { workflow?: unknown }).workflow,
+  ).toBeUndefined();
+
+  // Somebody changes the task through the API: the block follows.
+  await board.api('/api/v1/tasks/T1', { method: 'PATCH', body: { workflow: { checks: false } } });
+  await expect(ai.getByLabel('Run the checks')).toHaveValue('off');
+});
+
+test('the handoff is copied from the menu of a card, and is the one the board serves', async ({
+  page,
+  board,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Ship it', status: 'todo', workflow: { push: true } },
+  });
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Actions for T1' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Send to AI: Copy handoff' }).focus();
+  await page.keyboard.press('Enter');
+
+  const card = page.getByRole('button', { name: 'Ship it' }).locator('xpath=ancestor::li');
+  await expect(card.getByText('Handoff copied to the clipboard.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Actions for T1' })).toBeFocused();
+  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  const served = await (
+    await fetch(`${board.url.replace(/\/$/, '')}/api/v1/tasks/T1/handoff`)
+  ).text();
+  expect(copied).toBe(served);
+  expect(copied).toContain('Push your commits to the remote. _(source: this task)_');
+  // Nothing was opened by it.
+  await expect(page.getByRole('complementary')).toHaveCount(0);
+});

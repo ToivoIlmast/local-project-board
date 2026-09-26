@@ -52,7 +52,13 @@ whatever you are looking at.
   away and ready to paste.
 - **Settings.** How an agent works on a task — change files, work in a branch, run the checks,
   commit, push, write a report — for the whole board and for each column. Only what you change is
-  stored, in `.board/workflow.yaml`; a column can simply follow the board.
+  stored, in `.board/workflow.yaml`; a column can simply follow the board. A single task can
+  differ too: open it to see where each value in effect comes from, override one setting, or send
+  the task back to its column's settings. Leaving a form with unsaved changes asks first: Save,
+  Discard or Cancel.
+- **Send to AI.** In a task, or in the menu of its card, one entry copies the handoff — the task,
+  its documents and the steps its settings call for — ready to paste into any agent. It holds no
+  token. `npx local-project-board handoff <ID>` prints the same text.
 
 Files the board cannot read are shown as exactly that, above the columns — never as tasks with
 invented values.

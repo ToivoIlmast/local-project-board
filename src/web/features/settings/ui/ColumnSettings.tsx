@@ -3,7 +3,7 @@ import {
   type WorkflowOverrides,
   type WorkflowSettings,
 } from '../../../../contract/v1/index';
-import { Button, Field, Select, type SelectOption } from '../../../shared/ui/index';
+import { Button } from '../../../shared/ui/index';
 import {
   effectiveFlag,
   inactiveFlags,
@@ -11,7 +11,8 @@ import {
   setColumnFlag,
   type Effective,
 } from '../model/draft';
-import { INACTIVE_NOTE, SOURCE_LABELS, WORKFLOW_LABELS, onOff } from '../model/labels';
+import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
+import { FlagChoice } from './FlagChoice';
 
 export interface ColumnSettingsProps {
   status: string;
@@ -19,8 +20,6 @@ export interface ColumnSettingsProps {
   defaults: WorkflowSettings;
   onChange: (change: (current: WorkflowOverrides) => WorkflowOverrides) => void;
 }
-
-const INHERIT = 'inherit';
 
 /**
  * One column: each of the six flags is "as the board" (and what that is now), on, or off. What
@@ -38,39 +37,24 @@ export function ColumnSettings({ status, overrides, defaults, onChange }: Column
         const board = effectiveFlag(overrides, defaults, key);
         const { value, source }: Effective = effectiveFlag(overrides, defaults, key, status);
         const muted = inactive.includes(key);
-        const options: SelectOption[] = [
-          { value: INHERIT, label: `Same as the board (now ${onOff(board.value)})` },
-          { value: 'on', label: 'On' },
-          { value: 'off', label: 'Off' },
-        ];
         const hint = [
-          `In effect: ${onOff(value)}, from ${SOURCE_LABELS[source]}.`,
+          `In effect: ${onOff(value)}, from ${sourceLabel(source)}.`,
           muted ? INACTIVE_NOTE : undefined,
         ]
           .filter(Boolean)
           .join(' ');
         return (
-          <Field key={key} label={WORKFLOW_LABELS[key].label} hint={hint} muted={muted}>
-            {(id, hintId) => (
-              <Select
-                id={id}
-                aria-describedby={hintId}
-                options={options}
-                value={own === undefined ? INHERIT : own ? 'on' : 'off'}
-                onChange={(event) => {
-                  const chosen = event.target.value;
-                  onChange((current) =>
-                    setColumnFlag(
-                      current,
-                      status,
-                      key,
-                      chosen === INHERIT ? INHERIT : chosen === 'on',
-                    ),
-                  );
-                }}
-              />
-            )}
-          </Field>
+          <FlagChoice
+            key={key}
+            flag={key}
+            own={own}
+            inheritLabel={`Same as the board (now ${onOff(board.value)})`}
+            hint={hint}
+            muted={muted}
+            onChange={(chosen) =>
+              onChange((current) => setColumnFlag(current, status, key, chosen))
+            }
+          />
         );
       })}
     </fieldset>

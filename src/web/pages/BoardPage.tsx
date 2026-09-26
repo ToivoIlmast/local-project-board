@@ -7,6 +7,7 @@ import { ReportsPanel } from '../features/reports/index';
 import { SettingsPanel } from '../features/settings/index';
 import { TaskDetails, TaskDialog } from '../features/tasks/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
+import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedChanges';
 import { useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
@@ -14,10 +15,20 @@ type Panel = 'reports' | 'git' | 'instructions' | 'settings';
 
 /**
  * The whole board in one screen: columns on the left, whatever is being looked at on the
- * right. What is open lives in the address bar, so a reload lands where you were.
+ * right. What is open lives in the address bar, so a reload lands where you were. A form in the
+ * panel that holds changes is asked about before the panel is left (`UnsavedChangesProvider`).
  */
 export function BoardPage() {
+  return (
+    <UnsavedChangesProvider>
+      <BoardScreen />
+    </UnsavedChangesProvider>
+  );
+}
+
+function BoardScreen() {
   const { state, store } = useBoard();
+  const leave = useLeaveGuard();
   const [openTaskId, setOpenTaskId] = useSearchParam('task');
   const [panel, setPanel] = useSearchParam('panel');
   const [creating, setCreating] = useState<{ status?: string | undefined } | null>(null);
@@ -41,14 +52,24 @@ export function BoardPage() {
 
   const task = state.tasks.find((candidate) => candidate.id === openTaskId);
   const editing = state.tasks.find((candidate) => candidate.id === editingId);
+  // Every way out of the panel goes through `leave`: it asks if a form in the panel holds
+  // changes, and goes straight on if not. Looking at what is already open is not a way out.
   const show = (next: Panel): void => {
-    setOpenTaskId(null);
-    setPanel(next);
+    if (openTaskId === null && panel === next) return;
+    leave(() => {
+      setOpenTaskId(null);
+      setPanel(next);
+    });
   };
   const open = (id: string): void => {
-    setPanel(null);
-    setOpenTaskId(id);
+    const go = (): void => {
+      setPanel(null);
+      setOpenTaskId(id);
+    };
+    if (id === openTaskId) go();
+    else leave(go);
   };
+  const closePanel = (): void => leave(() => setPanel(null));
   const move = (id: string, intent: MoveIntent): void => {
     store.moveTask(id, intent).catch((error: Error) => setNotice(error.message));
   };
@@ -105,7 +126,7 @@ export function BoardPage() {
             statuses={project.statuses}
             onEdit={() => setEditingId(task.id)}
             onDelete={() => setDeletingId(task.id)}
-            onClose={() => setOpenTaskId(null)}
+            onClose={() => leave(() => setOpenTaskId(null))}
           />
         ) : openTaskId !== null ? (
           <Panel label="Task">
@@ -117,13 +138,13 @@ export function BoardPage() {
             />
           </Panel>
         ) : panel === 'reports' ? (
-          <ReportsPanel onClose={() => setPanel(null)} />
+          <ReportsPanel onClose={closePanel} />
         ) : panel === 'git' ? (
-          <GitPanel onClose={() => setPanel(null)} />
+          <GitPanel onClose={closePanel} />
         ) : panel === 'instructions' ? (
-          <InstructionsPanel onClose={() => setPanel(null)} />
+          <InstructionsPanel onClose={closePanel} />
         ) : panel === 'settings' ? (
-          <SettingsPanel onClose={() => setPanel(null)} />
+          <SettingsPanel onClose={closePanel} />
         ) : null}
       </div>
 

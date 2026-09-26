@@ -421,3 +421,86 @@
   padding: 8px 0 16px;
   background: var(--surface);
 }
+
+/* The AI block of a task: a title with its menu, a line that says what applies, the exceptions. */
+.ai {
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.ai__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.ai__title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+
+.send-ai__done,
+.send-ai__error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.send-ai__error {
+  color: var(--danger);
+}
+
+/* An empty live region stays in the page so that it is announced, and takes no room. */
+.send-ai__done:empty {
+  flex-basis: 0;
+  width: 0;
+  height: 0;
+}
+
+.ai__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ai__values {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.ai__value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 2px 0;
+}
+
+.ai__value dt {
+  font-weight: 600;
+}
+
+.ai__value dd {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* What came of "Send to AI" in the menu of a card; empty, it takes no room. */
+.card__note {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.card__note:empty {
+  margin: 0;
+}
+
+.card__note--error {
+  color: var(--danger);
+}

@@ -51,6 +51,8 @@ export interface BoardClient {
   updateWorkflow(overrides: BodyOf<'workflow.update'>): Promise<WorkflowState>;
   /** What one task runs with and where each value comes from; computed by the board, not stored. */
   taskWorkflow(id: string): Promise<EffectiveWorkflow>;
+  /** The text to give an agent for one task: the task, the steps its settings call for, the API. */
+  handoff(id: string): Promise<string>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string>;
@@ -152,6 +154,7 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     workflow: () => call('workflow.get', {}),
     updateWorkflow: (body) => call('workflow.update', { body }),
     taskWorkflow: (id) => call('tasks.workflow', { params: { id } }),
+    handoff: (id) => call('tasks.handoff', { params: { id } }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),
     readDocument: (id, name) => call('documents.read', { params: { id, name } }),
