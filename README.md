@@ -71,7 +71,6 @@ tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
 ai:
-  allowSourceEdits: false
   rules:
     - Never delete a task without asking first.
     - Ask before renaming a status.
@@ -83,12 +82,18 @@ Settings are read from the flags first, then `BOARD_PORT`, `BOARD_OPEN`, `BOARD_
 value that is out of range stops the board with a message naming the key and where it came from.
 Removing a status that tasks still use also stops the board, rather than hiding those tasks.
 
-`ai.rules` is the "## Rules" section of the AI instructions below — what an agent must not
-violate about the mechanics of the API. The board ships with a small built-in default; setting
-`ai.rules` in either config file replaces that whole list, it does not add to it. The rules a
-board actually hands out right now are always the ones `npx local-project-board instructions`
-prints — including the built-in defaults when nothing overrides them — so this file never needs
-to repeat them.
+`ai.rules` are your project's own conventions for an agent — what no setting expresses, such as
+the language of comments or the style of commit messages. The AI instructions below list them
+under "Project rules", after the rules of the API. Those are always there: `ai.rules` adds to them
+and cannot remove or replace one, and an empty list adds nothing. A layer's list replaces the
+list of the layer below it, as every list in this file does. What an agent may do on a task —
+change files, work in a branch, run the checks, commit, push, write a report — is not for
+`ai.rules`: those are the AI workflow settings, stored in `.board/workflow.yaml` and answered by
+`GET /api/v1/workflow`; `npx local-project-board handoff <id>` prints the steps that apply to one
+task. Whether an agent may change files is the setting `editCode`; the old `ai.allowSourceEdits`
+never had an effect and is gone, so a config that still has it stops the board with a message
+saying so. What a board hands out right now is always what `npx local-project-board instructions`
+prints, so this file never needs to repeat the rules.
 
 ## While it runs
 

@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { API_RULES } from '../../src/contract/v1/index.js';
 import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js';
 import { cli, stopBoards } from '../support/cli.js';
 import { freePort, releasePorts } from '../support/ports.js';
@@ -157,9 +158,12 @@ describe('local-project-board handoff <id>', () => {
       expect(run.out.join('\n')).toContain('<session token>');
     });
 
-    it('follows the ai.rules of board.config.yaml', async () => {
+    it('follows the ai.rules of board.config.yaml, next to the API rules and not among the steps', async () => {
       const { root, stop } = await boardWithTask();
       await stop();
+      const stepsOf = (text: string): string =>
+        /## How to work on this task\n([\s\S]*?)\n---\n/.exec(text)?.[1] ?? '';
+      const before = (await cli(['handoff', 'T1'], { cwd: root })).out.join('\n');
       await writeYaml(
         root,
         'board.config.yaml',
@@ -168,7 +172,13 @@ describe('local-project-board handoff <id>', () => {
 
       const run = await cli(['handoff', 'T1'], { cwd: root });
 
-      expect(run.out.join('\n')).toContain('- Ask before renaming a task.');
+      const text = run.out.join('\n');
+      expect(text).toContain('- Ask before renaming a task.');
+      for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
+      // The rule is in the general instructions, after the steps; the steps are what they were.
+      expect(stepsOf(text)).not.toBe('');
+      expect(stepsOf(text)).toBe(stepsOf(before));
+      expect(text.indexOf('Ask before renaming')).toBeGreaterThan(text.indexOf('\n---\n'));
     });
 
     it('is the same text as the running board gives, apart from the origin (INVARIANT)', async () => {

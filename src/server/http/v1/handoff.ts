@@ -16,8 +16,8 @@ export interface HandoffSource {
   /** Where the board answers; the instructions quote it. */
   baseUrl: string;
   board: BoardFacts;
-  /** ai.rules from the configuration. */
-  rules: readonly string[];
+  /** ai.rules from the configuration: the project's own rules, added to the API's. */
+  projectRules: readonly string[];
 }
 
 /**
@@ -31,7 +31,7 @@ export interface HandoffSource {
 export async function composeHandoff(
   { tasks, documents, workflow }: HandoffServices,
   id: string,
-  { baseUrl, board, rules }: HandoffSource,
+  { baseUrl, board, projectRules }: HandoffSource,
 ): Promise<string> {
   const task = await tasks.get(id);
   const [attached, effective] = await Promise.all([documents.list(id), workflow.forTask(id)]);
@@ -39,6 +39,6 @@ export async function composeHandoff(
     task,
     documents: attached,
     effective,
-    instructions: generateInstructions({ baseUrl, board, rules }),
+    instructions: generateInstructions({ baseUrl, board, projectRules }),
   });
 }

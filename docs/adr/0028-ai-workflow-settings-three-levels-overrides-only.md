@@ -120,13 +120,41 @@ by hand into a task any more, and there is no second set of rules next to the se
   token into a file, a task, a document or a report, stop and wait for the review. That the
   branch is not committed to is part of the branch step, because it only holds when there is one.
 - `GET /instructions` gets a short section, "Working on a task": read the handoff before
-  starting. It repeats no step. `ai.rules` is untouched (T16).
+  starting. It repeats no step.
 - **Branch name.** `taskBranchName(id, title)` in `core/rules` is `task/<ID>-<slug>`. The slug
   is the Latin words of the title, lower-cased, at most 40 characters cut at a word; accents are
   dropped and no other script is transliterated, so a Cyrillic title gives only its Latin words
   and a title without any gives `task/<ID>`. A branch the task already records is used instead.
 - **Language.** The text is English, like the rest of the instructions; the body of the task is
   copied as it was written. The two are not mixed by translating anything.
+
+## Rules of the agent (T16)
+
+This supersedes ADR-0026. `ai.rules` replaced a built-in list as a whole, so a project that added
+one line of its own silently took the API's rules away from the agent (against ADR-0005), and
+nothing kept it from writing "create a branch" there, a second answer to what the settings say.
+Three things describe what an agent does, and each has one place:
+
+- **API rules** — facts about the contract (JSON, unknown fields are rejected, `move` by
+  neighbours, document names, limits). `API_RULES` in `contract/v1/instructions.ts`, next to the
+  route table it describes (ADR-0026 said so; T12 had put the constant in `core/rules`, which
+  the config no longer needs). They are always in the instructions and nothing overrides them.
+  None is about how to work: a test rejects the words of the settings in them.
+- **Project rules** — `ai.rules`, a list of strings, default `[]`: conventions that no setting
+  expresses (the language of comments, the style of commit messages). They are added after the
+  API rules under "### Project rules", never in place of them; an empty list leaves the
+  subsection out, and a line that is exactly an API rule is not said twice. Between config layers
+  the list is replaced whole (ADR-0021), which now only ever replaces the project's own lines.
+  Nothing parses them: a rule that contradicts a step is a mistake in the project's text, and the
+  subsection tells the agent that they replace neither the API rules nor the steps. No merge
+  by key, no ids: a list of strings, added at the end.
+- **How to work** — the settings, through `resolveWorkflow` and `renderWorkflowSteps`, and
+  nowhere else. Whether files may be changed is `editCode` alone.
+
+`ai.allowSourceEdits` is removed. Nothing read it, and its default (`false`) is the opposite of
+`editCode` (`true`), so keeping it beside the setting would show a ban that never applied. A
+config that still has it stops the board with an issue that names `editCode` and
+`.board/workflow.yaml`, like any other invalid key (ADR-0021); it is not silently ignored.
 
 ## Consequences
 
@@ -140,3 +168,5 @@ by hand into a task any more, and there is no second set of rules next to the se
 - A change made directly to `.board/workflow.yaml` is seen on the next request; the watcher
   already reports it to open pages as a board change.
 - The number 0027 that the task text names was taken by the README translation check meanwhile.
+- A board whose config copied the eight built-in rules to add its own keeps working: the copies
+  are not repeated. One that wrote its own instead of them now has the API rules as well.

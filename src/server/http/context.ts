@@ -29,7 +29,7 @@ export interface BoardContext {
   git: GitReader;
   /** What the open clients are told about; the services publish, this only hands out. */
   events: EventStream;
-  /** ai.rules from this board's configuration; the instructions route's "## Rules". */
+  /** ai.rules from this board's configuration: the project's rules that "## Rules" adds. */
   ai: { rules: readonly string[] };
 }
 

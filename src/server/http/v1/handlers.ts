@@ -67,7 +67,7 @@ export const handlers: Handlers = {
         baseUrl: context.session.baseUrl,
         token: context.session.token,
         board: boardFacts(project),
-        rules: context.ai.rules,
+        projectRules: context.ai.rules,
       }),
       media: 'text/markdown',
     };
@@ -91,7 +91,7 @@ export const handlers: Handlers = {
     text: await composeHandoff(context, params.id, {
       baseUrl: context.session.baseUrl,
       board: boardFacts(await context.project.read()),
-      rules: context.ai.rules,
+      projectRules: context.ai.rules,
     }),
     media: 'text/markdown',
   }),

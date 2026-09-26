@@ -1,8 +1,27 @@
-import { DEFAULT_AI_RULES } from '../../core/rules/aiRules.js';
 import { API_BASE_PATH, routeList, type Route } from './routes.js';
 import { errorCodeSchema } from './schemas.js';
 
-export { DEFAULT_AI_RULES };
+/**
+ * What an agent must not violate about the mechanics of the API: facts about the contract, so
+ * they live next to the route table they describe (ADR-0005). They are always in the
+ * instructions and nothing overrides them — a project adds its own rules after them
+ * (`projectRules`), it does not replace these (ADR-0028). How to work on a task — branch,
+ * checks, commit, push, report, whether to edit code — is not here: that is the settings, and
+ * `renderWorkflowSteps` is the only place that says it.
+ */
+export const API_RULES: readonly string[] = [
+  'Requests and responses are JSON, except where a route says otherwise.',
+  'Unknown fields are rejected, so send exactly what a route describes.',
+  'A task carries its own markdown in `body`; there is no separate route for it.',
+  'To reorder a task or put it in another column, use the move route with the ids of its ' +
+    'neighbours (`before`, `after`). The board computes the position; never invent one.',
+  'A document name is a plain file name ending in `.md` or `.html`. No directories, and ' +
+    '`task.md` is reserved by the board itself.',
+  'A report is markdown or HTML. HTML is shown in a sandbox with no network access, so put ' +
+    'the styles and the data inside the file and load nothing from the internet.',
+  'Documents and reports are text of at most a million characters; this is not a file store.',
+  'Deleting a task deletes its documents with it, and its id is not given to another task.',
+];
 
 /** What the board itself is called and what a task on it may say; read at generation time. */
 export interface BoardFacts {
@@ -18,8 +37,12 @@ export interface InstructionsOptions {
   token?: string | undefined;
   /** The live board, so an agent does not have to guess a status or an id. */
   board?: BoardFacts | undefined;
-  /** What "## Rules" tells the agent; defaults to DEFAULT_AI_RULES (overridable: ai.rules). */
-  rules?: readonly string[] | undefined;
+  /**
+   * The project's own conventions (`ai.rules`), listed after `API_RULES` in a subsection of
+   * their own. They only add: the API rules are always there, and none, an empty list or only
+   * copies of the API rules leaves the subsection out.
+   */
+  projectRules?: readonly string[] | undefined;
 }
 
 const TOKEN_PLACEHOLDER = '<session token>';
@@ -52,7 +75,7 @@ export function generateInstructions({
   baseUrl,
   token,
   board,
-  rules,
+  projectRules,
 }: InstructionsOptions): string {
   const api = `${baseUrl}${API_BASE_PATH}`;
   const lines: string[] = [
@@ -108,7 +131,21 @@ export function generateInstructions({
     'The steps are decided there, per task; they are not repeated here.',
   );
 
-  lines.push('', '## Rules', '', ...(rules ?? DEFAULT_AI_RULES).map((rule) => `- ${rule}`));
+  lines.push('', '## Rules', '', ...API_RULES.map((rule) => `- ${rule}`));
+  // A project that copied the API rules into its own list (the way to keep them, before they
+  // were fixed) does not get them twice: a line that is exactly one of them is already said.
+  const added = (projectRules ?? []).filter((rule) => !API_RULES.includes(rule.trim()));
+  if (added.length > 0) {
+    lines.push(
+      '',
+      '### Project rules',
+      '',
+      "Conventions of this project. They add to the rules above and to the steps of a task's " +
+        'handoff; they replace neither.',
+      '',
+      ...added.map((rule) => `- ${rule}`),
+    );
+  }
 
   // `ai.include` is the only thing that decides what an agent is told about: a resource the
   // route table grows is documented under a heading of its own rather than silently dropped.

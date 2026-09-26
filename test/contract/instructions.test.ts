@@ -1,12 +1,14 @@
 import {
   API_BASE_PATH,
-  DEFAULT_AI_RULES,
+  API_RULES,
   errorResponseSchema,
   generateInstructions,
   routeList,
   routes,
+  workflowSteps,
   type Route,
 } from '../../src/contract/v1/index.js';
+import { defaultWorkflow, resolveWorkflow } from '../../src/core/index.js';
 
 const BOARD = { name: 'dep-health', statuses: ['backlog', 'todo', 'done'], idPrefix: 'T' };
 
@@ -71,12 +73,12 @@ describe('generated AI instructions', () => {
     const custom = generateInstructions({
       baseUrl: 'http://127.0.0.1:7432',
       board: BOARD,
-      rules: ['Ask before renaming a task.'],
+      projectRules: ['Ask before renaming a task.'],
     });
     const empty = generateInstructions({
       baseUrl: 'http://127.0.0.1:7432',
       board: BOARD,
-      rules: [],
+      projectRules: [],
     });
 
     for (const text of [custom, empty]) expect(text).toContain('## Working on a task');
@@ -137,31 +139,127 @@ describe('generated AI instructions', () => {
     expect(instructions).toMatch(/sandbox/i);
   });
 
-  it('lists every default rule when none is configured (INVARIANT)', () => {
-    expect(DEFAULT_AI_RULES.length).toBeGreaterThan(0);
-    for (const rule of DEFAULT_AI_RULES) expect(instructions).toContain(`- ${rule}`);
-  });
+  describe('the rules: what the API needs, and what a project adds (T16)', () => {
+    const generate = (projectRules?: readonly string[]): string =>
+      generateInstructions({ baseUrl: 'http://127.0.0.1:7432', board: BOARD, projectRules });
 
-  it('uses the configured rules instead of the defaults, and only those', () => {
-    const custom = generateInstructions({
-      baseUrl: 'http://127.0.0.1:7432',
-      board: BOARD,
-      rules: ['Never delete a task without asking first.', 'Ask before changing branch.'],
-    });
-    expect(custom).toContain(
-      '## Rules\n\n- Never delete a task without asking first.\n' + '- Ask before changing branch.',
-    );
-    for (const rule of DEFAULT_AI_RULES) expect(custom).not.toContain(rule);
-  });
+    /** The bullets of "## Rules" itself, without the subsection that follows them. */
+    const apiSection = (text: string): string =>
+      /\n## Rules\n([\s\S]*?)(?:\n### Project rules\n|\n## )/.exec(text)?.[1] ?? '';
+    const projectSection = (text: string): string | undefined =>
+      /\n### Project rules\n([\s\S]*?)\n## /.exec(text)?.[1];
 
-  it('treats an empty rules list as no rules at all, rather than falling back to defaults', () => {
-    const empty = generateInstructions({
-      baseUrl: 'http://127.0.0.1:7432',
-      board: BOARD,
-      rules: [],
+    it('lists every API rule when the project adds none (INVARIANT)', () => {
+      expect(API_RULES.length).toBeGreaterThan(0);
+      for (const rule of API_RULES) expect(instructions).toContain(`- ${rule}`);
     });
-    expect(empty).not.toMatch(/## Rules\n\n- /);
-    for (const rule of DEFAULT_AI_RULES) expect(empty).not.toContain(rule);
+
+    it('lists every API rule whatever the project adds: a list cannot replace them (INVARIANT)', () => {
+      const projectRules = [
+        [],
+        ['Ask before renaming a task.'],
+        // A project that copies a built-in rule, or contradicts one, still leaves them all.
+        [...API_RULES],
+        ['Unknown fields are fine.', 'Invent a position for a task if you like.'],
+      ];
+      for (const rules of [undefined, ...projectRules]) {
+        const text = generate(rules);
+        expect(apiSection(text)).toBe(`\n${API_RULES.map((rule) => `- ${rule}`).join('\n')}\n`);
+      }
+    });
+
+    it('puts the rules of the project after the API rules, in a subsection of their own', () => {
+      const text = generate(['Never delete a task without asking first.', 'Ask before X.']);
+
+      expect(text).toContain(
+        '\n### Project rules\n\n' +
+          'Conventions of this project. They add to the rules above and to the steps of a ' +
+          "task's handoff; they replace neither.\n\n" +
+          '- Never delete a task without asking first.\n- Ask before X.\n',
+      );
+      const rules = text.indexOf('## Rules');
+      const last = text.lastIndexOf(`- ${API_RULES.at(-1)}`);
+      expect(rules).toBeGreaterThan(-1);
+      expect(text.indexOf('### Project rules')).toBeGreaterThan(last);
+      // The project's rules come before the routes, where an agent reads rules.
+      expect(text.indexOf('### Project rules')).toBeLessThan(text.indexOf('## Board'));
+    });
+
+    it('does not say an API rule twice when a project copied it into its own list', () => {
+      // What ADR-0026 made the way to keep the built-in rules while adding one's own.
+      const text = generate([...API_RULES, 'Ask before renaming a task.']);
+
+      for (const rule of API_RULES) expect(text.split(`- ${rule}`)).toHaveLength(2);
+      expect(projectSection(text)).toContain('- Ask before renaming a task.');
+      // A list of nothing but copies is no project rules at all.
+      expect(generate([...API_RULES])).toBe(generate([]));
+      expect(generate([...API_RULES])).not.toContain('### Project rules');
+    });
+
+    it('says each rule of the project once, and does not turn it into an API rule', () => {
+      const text = generate(['Ask before renaming a task.']);
+
+      expect(text.match(/Ask before renaming a task\./g)).toHaveLength(1);
+      expect(apiSection(text)).not.toContain('Ask before renaming');
+    });
+
+    it('has no subsection for an empty list, and none when the option is left out', () => {
+      for (const text of [generate([]), generate(undefined), instructions]) {
+        expect(text).not.toContain('### Project rules');
+        expect(text).not.toContain('Conventions of this project');
+        // The API rules end where the routes begin; nothing is left dangling.
+        expect(projectSection(text)).toBeUndefined();
+      }
+      expect(generate([])).toBe(generate(undefined));
+    });
+
+    it('documents the same routes whatever the project adds', () => {
+      expect(documented(generate(['Ask before renaming a task.']))).toEqual(
+        documented(instructions),
+      );
+    });
+
+    it('is a subsection of "## Rules": it is not a second list of the same kind', () => {
+      const headings: string[] = generate(['x']).match(/^#{2,3} .*$/gm) ?? [];
+      const rules = headings.indexOf('## Rules');
+      expect(headings.slice(rules, rules + 2)).toEqual(['## Rules', '### Project rules']);
+    });
+
+    describe('no rule about how to work is written here (INVARIANT)', () => {
+      // Branch, checks, commit, push, report and editing code belong to the settings and to
+      // the handoff that `renderWorkflowSteps` writes (ADR-0028); a rule about them here would
+      // be a second source of the same thing.
+      const WORKFLOW_WORDS =
+        /\b(branch(es)?|commit(s|ted)?|push(es|ed)?|merge[sd]?|checks?|tests?|pipeline|lint|source|edit(s|ing)?|repository|git)\b|report\.md/i;
+
+      it.each(API_RULES.map((rule) => [rule]))('%s', (rule) => {
+        expect(rule).not.toMatch(WORKFLOW_WORDS);
+      });
+
+      it('does not repeat a step or a rule of the handoff anywhere in the instructions', () => {
+        const effective = resolveWorkflow(
+          defaultWorkflow(BOARD.statuses),
+          {},
+          undefined,
+          undefined,
+        );
+        const steps = workflowSteps(effective, {
+          taskId: 'T1',
+          status: 'todo',
+          branch: 'task/T1',
+        });
+        expect(steps.length).toBeGreaterThan(0);
+        // What the text says of itself, before it documents the routes: the example answer of
+        // the handoff route quotes a handoff, and that is the route's, not a rule.
+        const own = instructions.slice(0, instructions.indexOf('\n## Board\n'));
+        expect(own).toContain('## Rules');
+        for (const step of steps) {
+          // Without the "(source: ...)" note that the handoff adds to each step.
+          const text = step.text.replace(/ _\(.*\)_$/, '');
+          expect(own).not.toContain(text);
+        }
+      });
+    });
   });
 
   it('describes the error format and every code the board can answer with', () => {

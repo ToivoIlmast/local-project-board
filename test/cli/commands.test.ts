@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DEFAULT_AI_RULES } from '../../src/contract/v1/index.js';
+import { API_RULES } from '../../src/contract/v1/index.js';
 import { boardSnapshotSchema } from '../../src/core/model/snapshot.js';
 import { readRuntime, runtimePath, type RuntimeState } from '../../src/server/cli/runtime.js';
 import { cli, deadPid, stopBoards } from '../support/cli.js';
@@ -60,7 +60,7 @@ describe('local-project-board instructions', () => {
     expect(await readRuntime(root)).toEqual({ kind: 'missing' });
   });
 
-  it('follows the ai.rules of board.config.yaml, not the built-in defaults', async () => {
+  it('adds the ai.rules of board.config.yaml to the API rules, never in place of them (INVARIANT)', async () => {
     const root = await tmpDir();
     await writeYaml(
       root,
@@ -72,8 +72,36 @@ describe('local-project-board instructions', () => {
 
     expect(run.exitCode).toBe(0);
     const text = run.out.join('\n');
+    expect(text).toContain('### Project rules');
     expect(text).toContain('- Ask before renaming a task.');
-    for (const rule of DEFAULT_AI_RULES) expect(text).not.toContain(rule);
+    for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
+  });
+
+  it('gives the API rules and no project rules to a board that configures none', async () => {
+    const root = await tmpDir();
+
+    const run = await cli(['instructions'], { cwd: root });
+
+    const text = run.out.join('\n');
+    for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
+    expect(text).not.toContain('### Project rules');
+  });
+
+  it('refuses the removed ai.allowSourceEdits and says what to use instead, and starts nothing', async () => {
+    const root = await tmpDir();
+    await writeYaml(root, 'board.config.yaml', 'ai:\n  allowSourceEdits: false\n');
+
+    for (const args of [['instructions'], ['handoff', 'T1'], ['--no-open']]) {
+      const run = await cli(args, { cwd: root });
+
+      expect(run.exitCode).toBe(1);
+      const text = run.err.join('\n');
+      expect(text).toContain('config.ai.allowSourceEdits');
+      expect(text).toContain('editCode');
+      expect(text).toContain('.board/workflow.yaml');
+      expect(text).toContain('board.config.yaml');
+    }
+    expect(await readRuntime(root)).toEqual({ kind: 'missing' });
   });
 
   it('does not take the word of a runtime file whose board is gone (INVARIANT)', async () => {

@@ -1,6 +1,6 @@
 import {
   API_BASE_PATH as API,
-  DEFAULT_AI_RULES,
+  API_RULES,
   errorResponseSchema,
   routeList,
   routes,
@@ -67,20 +67,36 @@ describe('GET /api/v1/instructions', () => {
     }
   });
 
-  it('follows the ai.rules this board is configured with, not the built-in defaults', async () => {
+  it('adds the ai.rules this board is configured with after the API rules, never instead of them (INVARIANT)', async () => {
     const custom = await createTestBoard({ rules: ['Never delete a task without asking first.'] });
     try {
       const text = (await custom.get(`${API}/instructions`).expect(200)).text;
-      expect(text).toContain('## Rules\n\n- Never delete a task without asking first.');
-      for (const rule of DEFAULT_AI_RULES) expect(text).not.toContain(rule);
+      expect(text).toContain('### Project rules');
+      expect(text).toContain('- Never delete a task without asking first.');
+      expect(text.indexOf('### Project rules')).toBeGreaterThan(
+        text.indexOf(`- ${API_RULES.at(-1)}`),
+      );
+      for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
     } finally {
       await custom.close();
     }
   });
 
-  it('lists the built-in default rules when the board is not configured with its own', async () => {
+  it('lists the API rules and no project rules when the board is not configured with any', async () => {
     const response = await board.get(`${API}/instructions`).expect(200);
-    for (const rule of DEFAULT_AI_RULES) expect(response.text).toContain(`- ${rule}`);
+    for (const rule of API_RULES) expect(response.text).toContain(`- ${rule}`);
+    expect(response.text).not.toContain('### Project rules');
+  });
+
+  it('keeps the API rules for a board whose ai.rules is an empty list', async () => {
+    const custom = await createTestBoard({ rules: [] });
+    try {
+      const text = (await custom.get(`${API}/instructions`).expect(200)).text;
+      for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
+      expect(text).not.toContain('### Project rules');
+    } finally {
+      await custom.close();
+    }
   });
 
   it('documents every route an agent may use and no route it may not', async () => {
