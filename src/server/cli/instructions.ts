@@ -20,7 +20,7 @@ export async function printInstructions(
     generateInstructions({
       baseUrl: `http://127.0.0.1:${board.config.server.port}`,
       board: boardFacts(board.config),
-      rules: board.config.ai.rules,
+      projectRules: board.config.ai.rules,
     }).trimEnd(),
   );
 }

@@ -1,4 +1,4 @@
-<!-- Based on README.md @ c27751963a16197a42ea305ce499057bfb35e9dd -->
+<!-- Based on README.md @ b00a923d6b329e3572cebf3241f3a755e837e71e -->
 
 # local-project-board
 
@@ -72,7 +72,6 @@ tasks: { idPrefix: T }
 storage: { provider: markdown }
 server: { port: 7432, open: true }
 ai:
-  allowSourceEdits: false
   rules:
     - Ta aldrig bort en uppgift utan att fråga först.
     - Fråga innan du byter namn på en status.
@@ -85,11 +84,19 @@ nyckel eller ett värde utanför det tillåtna stoppar tavlan med ett meddelande
 och varifrån den kom. Att ta bort en status som uppgifter fortfarande använder stoppar också
 tavlan, i stället för att dölja de uppgifterna.
 
-`ai.rules` är avsnittet "## Rules" i AI-instruktionerna nedan — det en agent inte får bryta mot
-när det gäller API:ets mekanik. Tavlan levereras med en liten inbyggd standard; sätter du `ai.rules`
-i någon av konfigurationsfilerna ersätts hela listan, den utökas inte. Reglerna som en tavla delar ut
-just nu är alltid de som `npx local-project-board instructions` skriver ut — även de inbyggda
-standardreglerna när inget åsidosätter dem — så den här filen behöver aldrig upprepa dem.
+`ai.rules` är ditt projekts egna konventioner för en agent — sådant som ingen inställning uttrycker,
+till exempel kommentarernas språk eller stilen på commit-meddelanden. AI-instruktionerna nedan
+listar dem under "Project rules", efter API:ets regler. De reglerna finns alltid med: `ai.rules`
+lägger till och kan varken ta bort eller ersätta någon, och en tom lista lägger inte till något. Ett
+lagers lista ersätter listan i lagret under, som alla listor i den här filen. Vad en agent får göra
+med en uppgift — ändra filer, arbeta i en egen gren, köra kontrollerna, checka in, pusha, skriva en
+rapport — hör inte hemma i `ai.rules`: det är AI workflow-inställningarna, som sparas i
+`.board/workflow.yaml` och som `GET /api/v1/workflow` svarar med; `npx local-project-board handoff
+<id>` skriver ut stegen som gäller för en uppgift. Om en agent får ändra filer avgör inställningen
+`editCode`; den gamla `ai.allowSourceEdits` hade aldrig någon effekt och är borttagen, så en
+konfiguration som fortfarande har den stoppar tavlan med ett meddelande om det. Det en tavla delar
+ut just nu är alltid det `npx local-project-board instructions` skriver ut, så den här filen behöver
+aldrig upprepa reglerna.
 
 ## Medan den kör
 

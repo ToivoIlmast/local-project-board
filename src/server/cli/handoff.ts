@@ -53,7 +53,7 @@ async function composeOffline(board: ResolvedBoard, id: string): Promise<string>
       {
         baseUrl: `http://127.0.0.1:${config.server.port}`,
         board: boardFacts(config),
-        rules: config.ai.rules,
+        projectRules: config.ai.rules,
       },
     );
     return text.trimEnd();

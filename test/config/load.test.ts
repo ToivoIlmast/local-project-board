@@ -1,5 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DEFAULT_AI_RULES } from '../../src/contract/v1/index.js';
 import { ConfigError, loadConfig } from '../../src/server/config/index.js';
 import { cleanTmpDirs, tmpDir, writeYaml } from '../support/tmp.js';
 
@@ -25,8 +25,15 @@ describe('defaults', () => {
       tasks: { idPrefix: 'T' },
       storage: { provider: 'markdown' },
       server: { port: 7432, open: true },
-      ai: { allowSourceEdits: false, rules: [...DEFAULT_AI_RULES] },
+      // The rules of the project are its own: the board ships none (the API's are not config).
+      ai: { rules: [] },
     });
+  });
+
+  it('has no source-edit setting: that is the workflow setting editCode (INVARIANT)', async () => {
+    const config = await load({});
+    expect(Object.keys(config.ai)).toEqual(['rules']);
+    expect(config).not.toHaveProperty('workflow');
   });
 
   it('names the board after its directory', async () => {
@@ -86,7 +93,7 @@ describe('precedence: CLI > env > board.config.yaml > user config > defaults', (
     expect((await load({ root })).statuses).toEqual(['todo', 'done']);
   });
 
-  it('overrides ai.rules without dropping allowSourceEdits (the rest of the section)', async () => {
+  it('reads the rules of the project as they are written', async () => {
     const root = await tmpDir();
     await writeYaml(
       root,
@@ -94,10 +101,15 @@ describe('precedence: CLI > env > board.config.yaml > user config > defaults', (
       'ai:\n  rules:\n    - Never delete a task without asking first.\n',
     );
     const config = await load({ root });
-    expect(config.ai).toEqual({
-      allowSourceEdits: false,
-      rules: ['Never delete a task without asking first.'],
-    });
+    expect(config.ai).toEqual({ rules: ['Never delete a task without asking first.'] });
+  });
+
+  it('accepts an empty list of rules, and an ai section without any', async () => {
+    for (const yaml of ['ai:\n  rules: []\n', 'ai: {}\n']) {
+      const root = await tmpDir();
+      await writeYaml(root, 'board.config.yaml', yaml);
+      expect((await load({ root })).ai).toEqual({ rules: [] });
+    }
   });
 
   it('lets the user config set rules that board.config.yaml then replaces wholesale', async () => {
@@ -118,12 +130,11 @@ describe('precedence: CLI > env > board.config.yaml > user config > defaults', (
     await writeYaml(
       root,
       'board.config.yaml',
-      'project:\n  name: dep-health\ntasks:\n  idPrefix: F\nstatuses: [todo, done]\nai:\n  allowSourceEdits: true\n',
+      'project:\n  name: dep-health\ntasks:\n  idPrefix: F\nstatuses: [todo, done]\n',
     );
     const config = await load({ root });
     expect(config.project.name).toBe('dep-health');
     expect(config.tasks.idPrefix).toBe('F');
-    expect(config.ai.allowSourceEdits).toBe(true);
   });
 
   it('reads the documented env variables', async () => {
@@ -191,10 +202,96 @@ describe('strict validation', () => {
     ['storage:\n  provider: postgres\n', 'config.storage.provider'],
     ['project:\n  name: ""\n', 'config.project.name'],
     ['ai:\n  rules: [""]\n', 'config.ai.rules.0'],
+    ['ai:\n  rules: Ask first.\n', 'config.ai.rules'],
+    ['ai:\n  rules: [Ask first., 3]\n', 'config.ai.rules.1'],
   ])('rejects %p at %s', async (yaml, path) => {
     const root = await tmpDir();
     await writeYaml(root, 'board.config.yaml', yaml);
     await expectIssue({ root }, { path });
+  });
+
+  describe('the removed ai.allowSourceEdits (T16)', () => {
+    const HINT_PARTS = ['editCode', '.board/workflow.yaml', 'removed'];
+
+    it.each([
+      ['true', 'ai:\n  allowSourceEdits: true\n'],
+      ['false', 'ai:\n  allowSourceEdits: false\n'],
+      // The rest of the section being fine does not make the old key acceptable.
+      ['next to rules', 'ai:\n  rules: [Ask first.]\n  allowSourceEdits: false\n'],
+    ])('stops the board with a hint, whatever its value (%s)', async (_name, yaml) => {
+      const root = await tmpDir();
+      await writeYaml(root, 'board.config.yaml', yaml);
+
+      const error = await expectIssue(
+        { root },
+        { path: 'config.ai.allowSourceEdits', source: 'board.config.yaml' },
+      );
+
+      expect(error.exitCode).toBe(1);
+      for (const part of HINT_PARTS) expect(error.message).toContain(part);
+      // One issue for the key: a hint, not a second "unrecognized key" next to it.
+      expect(
+        error.issues.filter((issue) => issue.path === 'config.ai.allowSourceEdits'),
+      ).toHaveLength(1);
+    });
+
+    it('says the key never had an effect, and where editCode is set instead', async () => {
+      const root = await tmpDir();
+      await writeYaml(root, 'board.config.yaml', 'ai:\n  allowSourceEdits: false\n');
+
+      const error = await expectIssue({ root }, { path: 'config.ai.allowSourceEdits' });
+
+      expect(error.message).toMatch(/never had an effect/);
+      expect(error.message).toContain('editCode: false');
+    });
+
+    it('is refused in the user config too, naming that file', async () => {
+      const userDir = await tmpDir();
+      const userConfigPath = await writeYaml(
+        userDir,
+        'config.yaml',
+        'ai:\n  allowSourceEdits: false\n',
+      );
+
+      await expectIssue(
+        { userConfigPath },
+        { path: 'config.ai.allowSourceEdits', source: 'config.yaml' },
+      );
+    });
+
+    it('is not carried into the config by any other layer', async () => {
+      // Environment and flags have no ai keys at all, so there is no second way in.
+      const config = await load({
+        env: { BOARD_AI_ALLOW_SOURCE_EDITS: 'true', BOARD_ALLOW_SOURCE_EDITS: 'true' },
+      });
+      expect(config.ai).toEqual({ rules: [] });
+    });
+  });
+
+  it.each([
+    ['ai:\n  branch: true\n', 'config.ai.branch'],
+    ['ai:\n  editCode: false\n', 'config.ai.editCode'],
+    ['ai:\n  push: true\n', 'config.ai.push'],
+    // The settings of the workflow live in .board/workflow.yaml and nowhere in the config (ADR-0028).
+    ['workflow:\n  editCode: false\n', 'config.workflow'],
+    ['ai:\n  workflow: { editCode: false }\n', 'config.ai.workflow'],
+  ])('has no way to say how to work: rejects %p (INVARIANT)', async (yaml, path) => {
+    const root = await tmpDir();
+    await writeYaml(root, 'board.config.yaml', yaml);
+    await expectIssue({ root }, { path });
+  });
+
+  it('does not name the removed key anywhere in the source but in the hint that refuses it (INVARIANT)', async () => {
+    const files = (await readdir(join(process.cwd(), 'src'), { recursive: true })).filter((file) =>
+      /\.(ts|tsx)$/.test(file),
+    );
+    const naming: string[] = [];
+    for (const file of files) {
+      const text = await readFile(join(process.cwd(), 'src', file), 'utf8');
+      if (/allowSourceEdits/.test(text)) naming.push(file.replaceAll('\\', '/'));
+    }
+    // A reader of `allowSourceEdits` would be a second source for editCode.
+    expect(naming).toEqual(['server/config/schema.ts']);
   });
 
   it('lists the available providers when the provider is unknown', async () => {

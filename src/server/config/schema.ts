@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { statusesSchema, taskIdPrefixSchema } from '../../core/model/project.js';
-import { DEFAULT_AI_RULES } from '../../core/rules/aiRules.js';
 
 /** The only storage provider in the MVP; the list is what the error message offers. */
 export const STORAGE_PROVIDERS = ['markdown'] as const;
@@ -19,11 +18,25 @@ const section = {
     open: z.boolean(),
   }),
   ai: z.strictObject({
-    allowSourceEdits: z.boolean(),
-    /** The "## Rules" lines of the generated AI instructions; replaces the whole list. */
+    /**
+     * The project's own rules, added after the API's in the generated AI instructions (ADR-0028).
+     * They cannot remove the API rules or describe how to work on a task: that is the workflow.
+     * A layer's list replaces the one below it, as every list in the config does.
+     */
     rules: z.array(z.string().min(1)),
   }),
 };
+
+/**
+ * `ai.allowSourceEdits` existed and was read by nothing; whether an agent may change code is the
+ * workflow setting `editCode` (ADR-0028). It is refused, not ignored: left in place it would
+ * look like a ban on editing that never applied. It is not a key of `AppConfig`.
+ */
+const REMOVED_ALLOW_SOURCE_EDITS =
+  'ai.allowSourceEdits was removed. It never had an effect: whether an agent may change the ' +
+  "project's files is the workflow setting editCode, which is true unless you set it. Set " +
+  'editCode: false under `board:` in .board/workflow.yaml (or, for one column or task, in its ' +
+  'settings) and delete this key.';
 
 /** The validated result: every value is present, so nothing downstream deals with defaults. */
 export const appConfigSchema = z.strictObject({
@@ -46,7 +59,10 @@ export const configLayerSchema = z.strictObject({
   tasks: section.tasks.partial().optional(),
   storage: section.storage.partial().optional(),
   server: section.server.partial().optional(),
-  ai: section.ai.partial().optional(),
+  ai: section.ai
+    .partial()
+    .extend({ allowSourceEdits: z.never({ error: () => REMOVED_ALLOW_SOURCE_EDITS }).optional() })
+    .optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
@@ -62,6 +78,6 @@ export function defaultConfig(projectName: string): AppConfig {
     tasks: { idPrefix: 'T' },
     storage: { provider: 'markdown' },
     server: { port: DEFAULT_PORT, open: true },
-    ai: { allowSourceEdits: false, rules: [...DEFAULT_AI_RULES] },
+    ai: { rules: [] },
   };
 }

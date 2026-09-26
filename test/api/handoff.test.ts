@@ -2,7 +2,7 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   API_BASE_PATH as API,
-  DEFAULT_AI_RULES,
+  API_RULES,
   effectiveWorkflowSchema,
   errorResponseSchema,
   generateInstructions,
@@ -162,7 +162,6 @@ describe.each(providers)('GET /api/v1/tasks/:id/handoff with %s', (_name, create
       const general = generateInstructions({
         baseUrl: `http://127.0.0.1:${board.port}`,
         board: { name: 'test-board', statuses: STATUSES, idPrefix: 'T' },
-        rules: DEFAULT_AI_RULES,
       });
       expect(text.endsWith(general)).toBe(true);
     });
@@ -176,14 +175,68 @@ describe.each(providers)('GET /api/v1/tasks/:id/handoff with %s', (_name, create
       expect(logs.text()).not.toContain(board.token);
     });
 
-    it('uses the ai.rules of the board it serves', async () => {
+    it('carries the API rules, and the ai.rules of the board it serves after them (INVARIANT)', async () => {
       await board.close();
       board = await createTestBoard({ rules: ['Ask before renaming a task.'] });
       const id = await createTask();
 
       const text = await handoff(id);
 
+      for (const rule of API_RULES) expect(text).toContain(`- ${rule}`);
+      expect(text).toContain('### Project rules');
       expect(text).toContain('- Ask before renaming a task.');
+      // After the steps: the general instructions of the board follow the line that ends them.
+      expect(text.indexOf('Ask before renaming')).toBeGreaterThan(text.indexOf('\n---\n'));
+      // It is said once, in the general instructions: not among the steps of the task.
+      expect(text.match(/Ask before renaming a task\./g)).toHaveLength(1);
+      expect(stepsOf(text).join('\n')).not.toContain('Ask before renaming');
+    });
+
+    it('gives the same steps whatever ai.rules says, even when it talks about them (INVARIANT)', async () => {
+      const id = await createTask({ status: 'todo' });
+      const without = stepsOf(await handoff(id));
+      await board.close();
+      board = await createTestBoard({
+        rules: [
+          'Never change a file.',
+          'Push everything.',
+          'Do not create a branch.',
+          'Commit to master.',
+        ],
+      });
+      const same = await createTask({ status: 'todo' });
+
+      const text = await handoff(same);
+
+      // The rules of the project sit next to the steps and change none of them: the settings
+      // are the only thing that says how to work (ADR-0028), so these lines cannot flip one.
+      expect(stepsOf(text).map((line) => line.replace(/T\d+/g, 'T'))).toEqual(
+        without.map((line) => line.replace(/T\d+/g, 'T')),
+      );
+      expect(step(text, 'You may change')).toContain('source: default');
+      expect(step(text, 'Do not push')).toContain('source: default');
+      expect((await effective(same)).values).toMatchObject({
+        editCode: true,
+        branch: true,
+        commit: true,
+        push: false,
+      });
+    });
+
+    it('is told whether files may be changed by editCode alone (INVARIANT)', async () => {
+      const id = await createTask({ status: 'todo' });
+      expect(step(await handoff(id), 'You may change')).toContain('source: default');
+
+      await replaceWorkflow({ board: { editCode: false }, statuses: {} });
+      const forbidden = await handoff(id);
+      expect(step(forbidden, 'Do not change any file')).toContain('source: board');
+      expect(stepsOf(forbidden).join('\n')).not.toContain('You may change the files');
+
+      await replaceWorkflow({ board: { editCode: false }, statuses: { todo: { editCode: true } } });
+      expect(step(await handoff(id), 'You may change')).toContain('source: column "todo"');
+
+      await patchWorkflow(id, { editCode: false });
+      expect(step(await handoff(id), 'Do not change any file')).toContain('source: this task');
     });
   });
 

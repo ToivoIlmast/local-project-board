@@ -1,6 +1,6 @@
 # ADR-0026: AI workflow rules are configurable (`ai.rules`)
 
-Status: accepted (2026-09-24)
+Status: superseded by [ADR-0028](0028-ai-workflow-settings-three-levels-overrides-only.md) (2026-09-26); accepted 2026-09-24
 
 ## Context
 
