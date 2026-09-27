@@ -282,13 +282,20 @@ describe('renderWorkflowSteps', () => {
       expect(stepFor({ task: { report: false } }, 'report')).toMatch(/^Do not write a `report.md`/);
     });
 
+    it('reportLanguage: null writes no language instruction; a language code names the language', () => {
+      expect(stepFor({}, 'report')).not.toContain('language');
+      expect(stepFor({ board: { reportLanguage: 'fi' } }, 'report')).toContain('Finnish');
+      expect(stepFor({ board: { reportLanguage: 'sv' } }, 'report')).toContain('Swedish');
+    });
+
     it('startStatus and finishStatus: a status is moved to with PATCH, null leaves it alone', () => {
       expect(stepFor({}, 'startStatus')).toContain('{"status":"in-progress"}');
       expect(stepFor({ board: { startStatus: null } }, 'startStatus')).toMatch(/^Leave the status/);
-      expect(stepFor({ board: { finishStatus: 'done' } }, 'finishStatus')).toContain(
-        '{"status":"done"}',
+      // Default for a board with 'done' status is to finish there.
+      expect(stepFor({}, 'finishStatus')).toContain('{"status":"done"}');
+      expect(stepFor({ board: { finishStatus: null } }, 'finishStatus')).toMatch(
+        /^When you are done, leave the status/,
       );
-      expect(stepFor({}, 'finishStatus')).toMatch(/^When you are done, leave the status/);
     });
   });
 
@@ -406,8 +413,8 @@ describe('renderWorkflowSteps', () => {
           '4. Before you finish, run the checks of the project — its full pipeline, as its README or CLAUDE.md describes it — and fix what fails. _(source: default; checkCommand: default)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
           '6. Do not push: nothing leaves this machine. _(source: default)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
-          '8. When you are done, leave the status of the task as it is: it waits for the review. _(source: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
+          '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
           '10. Never merge a branch, into any branch.',
           '11. Never write the session token into a file of the project, a task, a document or a report.',
@@ -430,8 +437,8 @@ describe('renderWorkflowSteps', () => {
           '4. Do not run the checks of the project: without changes to the code there is nothing to check. _(source: default; inactive: editCode is off)_',
           '5. Do not commit: there are no changes to commit. _(source: default; inactive: editCode is off)_',
           '6. Do not push: there is nothing to push. _(source: board; inactive: editCode is off)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
-          '8. When you are done, leave the status of the task as it is: it waits for the review. _(source: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
+          '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
           '10. Never merge a branch, into any branch.',
           '11. Never write the session token into a file of the project, a task, a document or a report.',
@@ -461,7 +468,7 @@ describe('renderWorkflowSteps', () => {
           '4. Before you finish, run the checks of the project with `npm test` and fix what fails. _(source: default; checkCommand: board)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
           '6. Push your commits to the remote. _(source: board)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
           '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
           '10. Never merge a branch, into any branch.',

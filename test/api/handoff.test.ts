@@ -255,7 +255,8 @@ describe.each(providers)('GET /api/v1/tasks/:id/handoff with %s', (_name, create
       expect(step(text, 'Commit your work')).toBeTruthy();
       expect(step(text, 'Do not push')).toContain('source: default');
       expect(step(text, 'Write what you did')).toContain('report.md');
-      expect(step(text, 'When you are done, leave')).toBeTruthy();
+      // Default for a board with 'done': move to done when finished.
+      expect(step(text, 'When you are done, move the task to `done`')).toBeTruthy();
     });
 
     it('follows the overrides of the board', async () => {

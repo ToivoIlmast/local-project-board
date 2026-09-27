@@ -25,17 +25,22 @@ export const DEFAULT_WORKFLOW: Readonly<WorkflowSettings> = {
   finishStatus: null,
   baseBranch: null,
   checkCommand: null,
+  reportLanguage: null,
 };
 
 /** The settings that stop having an effect when `editCode` is off. */
 const NEEDS_EDIT_CODE: readonly WorkflowFlag[] = ['branch', 'checks', 'commit', 'push'];
 
-/** The defaults for a board with these statuses: no status is invented for `startStatus`. */
+/**
+ * The defaults for a board with these statuses: conventional status names (`in-progress`, `done`)
+ * are used only when the board actually has them — no status is invented.
+ */
 export function defaultWorkflow(statuses: readonly string[]): WorkflowSettings {
   const start = DEFAULT_WORKFLOW.startStatus;
   return {
     ...DEFAULT_WORKFLOW,
     startStatus: start !== null && statuses.includes(start) ? start : null,
+    finishStatus: statuses.includes('done') ? 'done' : null,
   };
 }
 

@@ -72,7 +72,7 @@ describe('the AI workflow settings panel', () => {
         'Default (in-progress)',
       );
       expect(within(group).getByLabelText(WORKFLOW_LABELS.finishStatus.label)).toHaveDisplayValue(
-        'Default (do not change)',
+        'Default (done)',
       );
       expect(within(group).getByLabelText(WORKFLOW_LABELS.baseBranch.label)).toHaveValue('');
       expect(within(group).getByLabelText(WORKFLOW_LABELS.checkCommand.label)).toHaveValue('');
@@ -202,7 +202,7 @@ describe('the AI workflow settings panel', () => {
       const select = within(board()).getByLabelText(WORKFLOW_LABELS.finishStatus.label);
       const options = within(select).getAllByRole('option');
       expect(options.map((option) => option.textContent)).toEqual([
-        'Default (do not change)',
+        'Default (done)',
         ...STATUSES,
         'Do not change',
       ]);

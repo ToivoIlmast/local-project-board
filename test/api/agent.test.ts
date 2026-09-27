@@ -257,9 +257,9 @@ describe('an external agent with nothing but the handoff of a task', () => {
     }
 
     const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
-    // The default workflow: work starts in `in-progress`, the branch is recorded, the status is
-    // left alone at the end because the task waits for the review.
-    expect(after.status).toBe('in-progress');
+    // The default workflow: work starts in `in-progress`, the branch is recorded, and the task
+    // moves to `done` when the agent finishes (finishStatus default for a board with done).
+    expect(after.status).toBe('done');
     expect(after.branch).toBe('task/T1-audit-the-dependency-graph');
     // The start of its run is on the board, in the words of the model (T27).
     expect(after.aiRun).toMatchObject({ agent: 'test-agent', state: 'working' });
@@ -284,7 +284,9 @@ describe('an external agent with nothing but the handoff of a task', () => {
           .expect(201)
       ).body,
     );
-    await board.put('/api/v1/workflow', { board: { startStatus: null }, statuses: {} }).expect(200);
+    await board
+      .put('/api/v1/workflow', { board: { startStatus: null, finishStatus: null }, statuses: {} })
+      .expect(200);
     const agent = await Agent.fromHandoff(board.port, created.id);
 
     // What is left is reporting the run itself, which no setting turns off (T27).

@@ -82,6 +82,7 @@ const exampleDefaults = {
   finishStatus: null,
   baseBranch: null,
   checkCommand: null,
+  reportLanguage: null,
 };
 
 const exampleWorkflowState = {
@@ -253,6 +254,7 @@ export const routes = {
           finishStatus: 'default',
           baseBranch: 'default',
           checkCommand: 'board',
+          reportLanguage: 'default',
         },
         inactive: ['branch', 'checks', 'commit', 'push'],
       },

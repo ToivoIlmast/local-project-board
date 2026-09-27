@@ -52,6 +52,10 @@ export const WORKFLOW_LABELS: Record<WorkflowKey, { label: string; description: 
     label: 'Check command',
     description: 'The command that runs the checks. Empty is the own pipeline of the project.',
   },
+  reportLanguage: {
+    label: 'Report language',
+    description: 'The language the agent writes the report in. Empty means English (the default).',
+  },
 };
 
 /**
@@ -83,6 +87,7 @@ const NO_VALUE: Record<BoardWorkflowKey, string> = {
   finishStatus: 'not changed',
   baseBranch: "the repository's default branch",
   checkCommand: 'the pipeline of the project',
+  reportLanguage: 'English',
 };
 
 /** The value of a board-only setting as a person reads it: `null` is a meaning, not a blank. */

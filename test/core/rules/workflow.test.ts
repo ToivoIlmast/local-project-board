@@ -23,6 +23,7 @@ describe('DEFAULT_WORKFLOW', () => {
       finishStatus: null,
       baseBranch: null,
       checkCommand: null,
+      reportLanguage: null,
     });
   });
 
@@ -36,14 +37,24 @@ describe('defaultWorkflow', () => {
     expect(defaultWorkflow(statuses).startStatus).toBe('in-progress');
   });
 
-  it('does not invent a status the board does not have', () => {
+  it('does not invent a startStatus the board does not have', () => {
     expect(defaultWorkflow(['todo', 'done']).startStatus).toBeNull();
   });
 
-  it('changes nothing else', () => {
-    expect({ ...defaultWorkflow(['todo']), startStatus: null }).toEqual({
+  it('finishes work in `done` when the board has that status', () => {
+    expect(defaultWorkflow(statuses).finishStatus).toBe('done');
+  });
+
+  it('does not invent a finishStatus the board does not have', () => {
+    expect(defaultWorkflow(['backlog', 'todo', 'in-progress']).finishStatus).toBeNull();
+  });
+
+  it('changes only startStatus and finishStatus; everything else equals DEFAULT_WORKFLOW', () => {
+    const result = defaultWorkflow(['todo']);
+    expect({ ...result, startStatus: null, finishStatus: null }).toEqual({
       ...DEFAULT_WORKFLOW,
       startStatus: null,
+      finishStatus: null,
     });
   });
 });

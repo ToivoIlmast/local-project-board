@@ -27,6 +27,25 @@ describe('taskBranchName', () => {
     expect(taskBranchName('T22', '!!! ???')).toBe('task/T22');
   });
 
+  it('is just the id when only one Latin word is isolated in a non-Latin title', () => {
+    // Real case: T20 title "Результат ... commit ..." gave `task/T20-commit`, which is
+    // misleading — "commit" is a Cyrillic list item, not a task summary.
+    expect(
+      taskBranchName(
+        'T20',
+        'Результат работы агента на доске: агент, ветка, проверки, commit, отчёт',
+      ),
+    ).toBe('task/T20');
+    // Second Latin word → slug is used.
+    expect(taskBranchName('T11', 'Watcher не должен реагировать на runtime.json')).toBe(
+      'task/T11-watcher-runtime-json',
+    );
+  });
+
+  it('keeps a single Latin word when the title has no non-Latin characters', () => {
+    expect(taskBranchName('T1', 'Deploy')).toBe('task/T1-deploy');
+  });
+
   it('drops the accents of a Latin letter instead of splitting the word', () => {
     expect(taskBranchName('T3', 'Käyttöliittymä för användare')).toBe(
       'task/T3-kayttoliittyma-for-anvandare',
