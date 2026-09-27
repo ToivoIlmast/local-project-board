@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 600fc3a716a76445bff712f5b9c9f569edbff53e -->
+<!-- Based on README.md @ d9bab51347b3260054aa35a3255ff0caa4c05f5c -->
 
 # local-project-board
 
@@ -189,16 +189,18 @@ hör hemma beskrivs i [docs/architecture.md](docs/architecture.md) (på engelska
 
 Kräver Node.js >= 22.12.0.
 
-| Kommando                                  | Vad det gör                                     |
-| ----------------------------------------- | ----------------------------------------------- |
-| `npm install`                             | Installerar beroenden                           |
-| `npm run build`                           | Bygger servern och användargränssnittet         |
-| `npm test`                                | Jest-tester (servern och sidan)                 |
-| `npm run test:e2e`                        | Playwright mot en tavla som startats på riktigt |
-| `npm run test:pack`                       | Bygger npm-paketet, installerar och startar det |
-| `npm run lint`                            | ESLint, inklusive arkitekturregler              |
-| `npm run typecheck`                       | TypeScript                                      |
-| `npm run format` / `npm run format:check` | Prettier                                        |
+| Kommando                                  | Vad det gör                                        |
+| ----------------------------------------- | -------------------------------------------------- |
+| `npm install`                             | Installerar beroenden                              |
+| `npm run build`                           | Bygger servern och användargränssnittet            |
+| `npm start`                               | Startar tavlan från bygget                         |
+| `npm run start:claude -- --wait`          | `claude --wait` från bygget (`-- T13`: en uppgift) |
+| `npm test`                                | Jest-tester (servern och sidan)                    |
+| `npm run test:e2e`                        | Playwright mot en tavla som startats på riktigt    |
+| `npm run test:pack`                       | Bygger npm-paketet, installerar och startar det    |
+| `npm run lint`                            | ESLint, inklusive arkitekturregler                 |
+| `npm run typecheck`                       | TypeScript                                         |
+| `npm run format` / `npm run format:check` | Prettier                                           |
 
 Webbläsartesterna behöver en webbläsare en gång: `npx playwright install --with-deps chromium`.
 

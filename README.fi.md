@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 600fc3a716a76445bff712f5b9c9f569edbff53e -->
+<!-- Based on README.md @ d9bab51347b3260054aa35a3255ff0caa4c05f5c -->
 
 # local-project-board
 
@@ -194,16 +194,18 @@ koodi kuuluu, on kuvattu tiedostossa [docs/architecture.md](docs/architecture.md
 
 Vaatii Node.js >= 22.12.0.
 
-| Komento                                   | Mitä se tekee                                       |
-| ----------------------------------------- | --------------------------------------------------- |
-| `npm install`                             | Asentaa riippuvuudet                                |
-| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän               |
-| `npm test`                                | Jest-testit (palvelin ja sivu)                      |
-| `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten     |
-| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
-| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                   |
-| `npm run typecheck`                       | TypeScript                                          |
-| `npm run format` / `npm run format:check` | Prettier                                            |
+| Komento                                   | Mitä se tekee                                         |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `npm install`                             | Asentaa riippuvuudet                                  |
+| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän                 |
+| `npm start`                               | Käynnistää taulun käännöksestä                        |
+| `npm run start:claude -- --wait`          | `claude --wait` käännöksestä (`-- T13`: yksi tehtävä) |
+| `npm test`                                | Jest-testit (palvelin ja sivu)                        |
+| `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten       |
+| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen   |
+| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                     |
+| `npm run typecheck`                       | TypeScript                                            |
+| `npm run format` / `npm run format:check` | Prettier                                              |
 
 Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps chromium`.
 
