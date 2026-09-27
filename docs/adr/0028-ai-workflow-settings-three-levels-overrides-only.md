@@ -125,6 +125,14 @@ by hand into a task any more, and there is no second set of rules next to the se
   is the Latin words of the title, lower-cased, at most 40 characters cut at a word; accents are
   dropped and no other script is transliterated, so a Cyrillic title gives only its Latin words
   and a title without any gives `task/<ID>`. A branch the task already records is used instead.
+- **Branch setup sequence.** When `branch` is on, the handoff spells out the full sequence the
+  agent must follow before doing any other work: (1) ensure the working tree is clean; (2) switch
+  to the base branch (`baseBranch`, or the repository's own default branch when not set) and pull
+  from the remote if available — if the remote is unreachable, use the local branch as it is;
+  (3) create the task branch from the base branch — explicitly not from whichever branch is
+  currently checked out; (4) switch to the task branch (or switch to it if it already exists).
+  The base is never implied to be the current HEAD; using "default branch" instead of "main"
+  avoids assuming a specific branch name for repositories that use a different convention.
 - **Language.** The text is English, like the rest of the instructions; the body of the task is
   copied as it was written. The two are not mixed by translating anything.
 

@@ -46,7 +46,7 @@ export const WORKFLOW_LABELS: Record<WorkflowKey, { label: string; description: 
   },
   baseBranch: {
     label: 'Base branch',
-    description: 'The branch the work is based on. Empty is the main branch of the repository.',
+    description: "The branch the work is based on. Empty means the repository's default branch.",
   },
   checkCommand: {
     label: 'Check command',
@@ -81,7 +81,7 @@ export const onOff = (value: boolean): 'on' | 'off' => (value ? 'on' : 'off');
 const NO_VALUE: Record<BoardWorkflowKey, string> = {
   startStatus: 'not changed',
   finishStatus: 'not changed',
-  baseBranch: 'the main branch of the repository',
+  baseBranch: "the repository's default branch",
   checkCommand: 'the pipeline of the project',
 };
 

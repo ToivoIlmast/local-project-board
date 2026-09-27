@@ -78,10 +78,16 @@ const STEPS: Renderers = {
       return 'Do not create a branch: without changes to the code there is nothing to put in one.';
     }
     if (!value) return 'Do not create a branch: stay on the branch that is checked out now.';
-    const base = parameter === null ? 'the main branch of the repository' : `\`${parameter}\``;
+    const base = parameter === null ? "the repository's default branch" : `\`${parameter}\``;
     return (
-      `Work in a branch of your own, \`${facts.branch}\`, based on ${base}: create it if it ` +
-      'does not exist yet, otherwise switch to it. ' +
+      `Work in a branch of your own, \`${facts.branch}\`, based on ${base}. ` +
+      'Before doing anything else, run this sequence: ' +
+      'ensure the working tree is clean; ' +
+      `switch to ${base} and pull from the remote if available ` +
+      '(if unreachable, use it as it is); ' +
+      `create \`${facts.branch}\` from ${base} if it does not exist yet ` +
+      '(not from the current branch); ' +
+      `switch to \`${facts.branch}\`. ` +
       `Record it in the task: ${patch(facts, { branch: facts.branch })}. ` +
       'Never commit to the branch it is based on.'
     );
