@@ -187,16 +187,18 @@ goes, is in [docs/architecture.md](docs/architecture.md).
 
 Requires Node.js >= 22.12.0.
 
-| Command                                   | What it does                                   |
-| ----------------------------------------- | ---------------------------------------------- |
-| `npm install`                             | Install dependencies                           |
-| `npm run build`                           | Build the server and the UI                    |
-| `npm test`                                | Jest tests (server and page)                   |
-| `npm run test:e2e`                        | Playwright, against a board started for real   |
-| `npm run test:pack`                       | Build the npm package, install it and start it |
-| `npm run lint`                            | ESLint, including architecture rules           |
-| `npm run typecheck`                       | TypeScript                                     |
-| `npm run format` / `npm run format:check` | Prettier                                       |
+| Command                                   | What it does                                        |
+| ----------------------------------------- | --------------------------------------------------- |
+| `npm install`                             | Install dependencies                                |
+| `npm run build`                           | Build the server and the UI                         |
+| `npm start`                               | Start the board from the build                      |
+| `npm run start:claude -- --wait`          | `claude --wait` from the build (`-- T13`: one task) |
+| `npm test`                                | Jest tests (server and page)                        |
+| `npm run test:e2e`                        | Playwright, against a board started for real        |
+| `npm run test:pack`                       | Build the npm package, install it and start it      |
+| `npm run lint`                            | ESLint, including architecture rules                |
+| `npm run typecheck`                       | TypeScript                                          |
+| `npm run format` / `npm run format:check` | Prettier                                            |
 
 The browser tests need a browser once: `npx playwright install --with-deps chromium`.
 
