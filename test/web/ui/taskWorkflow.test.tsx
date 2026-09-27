@@ -100,7 +100,7 @@ describe('the AI block of a task without settings of its own', () => {
     );
     expect(valueOf(WORKFLOW_LABELS.finishStatus.label)).toHaveTextContent('done, from the board');
     expect(valueOf(WORKFLOW_LABELS.baseBranch.label)).toHaveTextContent(
-      'the main branch of the repository, from the default',
+      "the repository's default branch, from the default",
     );
     expect(valueOf(WORKFLOW_LABELS.checkCommand.label)).toHaveTextContent(
       'npm test, from the board',

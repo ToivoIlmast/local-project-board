@@ -49,7 +49,7 @@ export const boardWorkflowSchema = workflowFlagsSchema.extend({
   startStatus: z.string().min(1).nullable().optional(),
   /** Status a task moves to when work is finished; `null` leaves it waiting for review. */
   finishStatus: z.string().min(1).nullable().optional(),
-  /** The branch work is based on; `null` is the repository's main branch. */
+  /** The branch work is based on; `null` means the repository's own default branch. */
   baseBranch: nonBlank.nullable().optional(),
   /** The command that runs the checks; `null` is the project's full pipeline. */
   checkCommand: nonBlank.nullable().optional(),

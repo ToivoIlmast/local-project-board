@@ -216,8 +216,29 @@ describe('renderWorkflowSteps', () => {
       expect(step).toMatch(/Never commit to the branch it is based on/);
     });
 
-    it('branch: without a base branch it is based on the main branch of the repository', () => {
-      expect(stepFor({}, 'branch')).toContain('based on the main branch of the repository');
+    it('branch: on with explicit baseBranch describes the full setup sequence', () => {
+      const step = stepFor({ board: { baseBranch: 'master' } }, 'branch');
+
+      expect(step).toContain('based on `master`');
+      expect(step).toContain('ensure the working tree is clean');
+      expect(step).toContain('switch to `master`');
+      expect(step).toContain('pull from the remote if available');
+      expect(step).toContain('if unreachable, use it as it is');
+    });
+
+    it('branch: on makes clear the new branch is created from the base, not the current branch', () => {
+      const stepWithBase = stepFor({ board: { baseBranch: 'master' } }, 'branch');
+      const stepDefault = stepFor({}, 'branch');
+
+      expect(stepWithBase).toContain('not from the current branch');
+      expect(stepDefault).toContain('not from the current branch');
+    });
+
+    it('branch: without a base branch names the repository default branch, not main', () => {
+      const step = stepFor({}, 'branch');
+
+      expect(step).toContain("the repository's default branch");
+      expect(step).not.toContain('the main branch');
     });
 
     it('branch: off forbids it and says where to stay', () => {
@@ -381,7 +402,7 @@ describe('renderWorkflowSteps', () => {
         [
           '1. Move the task to `in-progress` before you start: `PATCH /api/v1/tasks/T13` with `{"status":"in-progress"}`. _(source: default)_',
           '2. You may change the files of the project. _(source: default)_',
-          '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on the main branch of the repository: create it if it does not exist yet, otherwise switch to it. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: default)_',
+          '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on the repository\'s default branch. Before doing anything else, run this sequence: ensure the working tree is clean; switch to the repository\'s default branch and pull from the remote if available (if unreachable, use it as it is); create `task/T13-ai-workflow-model` from the repository\'s default branch if it does not exist yet (not from the current branch); switch to `task/T13-ai-workflow-model`. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: default)_',
           '4. Before you finish, run the checks of the project — its full pipeline, as its README or CLAUDE.md describes it — and fix what fails. _(source: default; checkCommand: default)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
           '6. Do not push: nothing leaves this machine. _(source: default)_',
@@ -436,7 +457,7 @@ describe('renderWorkflowSteps', () => {
         [
           '1. Move the task to `in-progress` before you start: `PATCH /api/v1/tasks/T13` with `{"status":"in-progress"}`. _(source: default)_',
           '2. You may change the files of the project. _(source: default)_',
-          '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on `master`: create it if it does not exist yet, otherwise switch to it. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: board)_',
+          '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on `master`. Before doing anything else, run this sequence: ensure the working tree is clean; switch to `master` and pull from the remote if available (if unreachable, use it as it is); create `task/T13-ai-workflow-model` from `master` if it does not exist yet (not from the current branch); switch to `task/T13-ai-workflow-model`. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: board)_',
           '4. Before you finish, run the checks of the project with `npm test` and fix what fails. _(source: default; checkCommand: board)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
           '6. Push your commits to the remote. _(source: board)_',
