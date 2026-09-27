@@ -10,6 +10,7 @@ import {
   createTokenGuard,
   securityHeaders,
 } from './security.js';
+import { createRunDispatch } from './runs.js';
 import { createV1Router } from './v1/router.js';
 
 export interface AppOptions {
@@ -40,6 +41,7 @@ export function createApp(options: AppOptions): Express {
       baseUrl: `http://127.0.0.1${options.port === undefined ? '' : `:${options.port}`}`,
       token,
     },
+    runs: createRunDispatch(),
   };
   const onInternalError = options.onInternalError ?? ((error: unknown) => console.error(error));
 

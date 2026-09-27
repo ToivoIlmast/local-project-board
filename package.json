@@ -42,6 +42,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects node web",
     "test:pack": "npm run build && node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects pack",
     "start": "node bin/board.js",
+    "start:claude": "node bin/board.js claude",
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {

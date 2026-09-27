@@ -16,6 +16,8 @@ import {
   type Task,
   type WorkflowState,
   type EffectiveWorkflow,
+  type RunStarted,
+  type RunTaskRequest,
 } from '../../contract/v1/index';
 import { ApiError, errorFromResponse, malformedResponse, networkError, readJson } from './errors';
 import type { FetchLike, RequestInitLike } from './http';
@@ -53,6 +55,11 @@ export interface BoardClient {
   taskWorkflow(id: string): Promise<EffectiveWorkflow>;
   /** The text to give an agent for one task: the task, the steps its settings call for, the API. */
   handoff(id: string): Promise<string>;
+  /**
+   * Hands the task to the runner waiting in a terminal of the project, which starts the agent
+   * (T27). Only the name of the agent is sent; what starts is the runner's business.
+   */
+  runTask(id: string, agent: RunTaskRequest['agent']): Promise<RunStarted>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string>;
@@ -155,6 +162,7 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     updateWorkflow: (body) => call('workflow.update', { body }),
     taskWorkflow: (id) => call('tasks.workflow', { params: { id } }),
     handoff: (id) => call('tasks.handoff', { params: { id } }),
+    runTask: (id, agent) => call('tasks.run', { params: { id }, body: { agent } }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),
     readDocument: (id, name) => call('documents.read', { params: { id, name } }),

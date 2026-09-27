@@ -322,6 +322,31 @@ No documents are attached to this task yet.
 1. You may change the files of the project. _(source: default)_
 ```
 
+### POST /api/v1/tasks/:id/run
+
+Hand a task to the runner waiting in a terminal of the project, which starts the agent on it
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/run
+
+Request body:
+
+```json
+{
+  "agent": "claude-code"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "taskId": "T12",
+  "agent": "claude-code"
+}
+```
+
 ## AI workflow
 
 ### GET /api/v1/workflow
@@ -696,6 +721,24 @@ Response — 200, text/markdown:
 # local-project-board API (v1)
 ```
 
+## Runs
+
+### GET /api/v1/runs
+
+Wait for Send to AI (SSE, with the token): one request, then the stream ends; the CLI runner uses it
+
+Not given to AI agents in the generated instructions.
+
+Response — 200, text/event-stream:
+
+```
+{
+  "type": "run.requested",
+  "taskId": "T12",
+  "agent": "claude-code"
+}
+```
+
 ## Errors
 
 A request that fails answers with `{ "error": { "code", "message", "details" } }` and
@@ -721,3 +764,4 @@ nothing else. The code is one of:
 - METHOD_NOT_ALLOWED
 - PAYLOAD_TOO_LARGE
 - INTERNAL_ERROR
+- NO_AGENT_RUNNER

@@ -1,15 +1,17 @@
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { boardEventSchema, type BoardEvent } from '../../src/core/events.js';
 
-export interface SseClient {
+export interface SseClient<E = BoardEvent> {
   status: number;
   headers: IncomingMessage['headers'];
   /** Every event received so far, in order. */
-  events: BoardEvent[];
+  events: E[];
+  /** True once the server has ended the stream itself. */
+  ended(): boolean;
   /** Everything the server wrote, so comments and heartbeats can be asserted too. */
   raw(): string;
-  waitFor(condition: (client: SseClient) => boolean, what?: string): Promise<void>;
-  waitForEvents(count: number): Promise<BoardEvent[]>;
+  waitFor(condition: (client: SseClient<E>) => boolean, what?: string): Promise<void>;
+  waitForEvents(count: number): Promise<E[]>;
   close(): Promise<void>;
 }
 
@@ -19,13 +21,15 @@ const WAIT_TIMEOUT_MS = 10_000;
  * A real SSE client over a real socket: supertest buffers a response until it ends, and a
  * stream never ends, so the tests read the frames as they arrive.
  */
-export function openStream(
+export function openStream<E = BoardEvent>(
   port: number,
   path: string,
   headers: Record<string, string> = {},
-): Promise<SseClient> {
+  parse: (data: unknown) => E = (data) => boardEventSchema.parse(data) as E,
+): Promise<SseClient<E>> {
   return new Promise((resolve, reject) => {
-    const events: BoardEvent[] = [];
+    const events: E[] = [];
+    let ended = false;
     let buffer = '';
     let received = '';
     const waiters: { check: () => boolean; done: () => void }[] = [];
@@ -33,10 +37,11 @@ export function openStream(
     const call = httpRequest(
       { host: '127.0.0.1', port, path, method: 'GET', headers },
       (response) => {
-        const client: SseClient = {
+        const client: SseClient<E> = {
           status: response.statusCode ?? 0,
           headers: response.headers,
           events,
+          ended: () => ended,
           raw: () => received,
           waitFor(condition, what = 'the expected state') {
             return new Promise<void>((ok, fail) => {
@@ -83,9 +88,17 @@ export function openStream(
               .filter((line) => line.startsWith('data:'))
               .map((line) => line.slice('data:'.length).trim())
               .join('\n');
-            if (data !== '') events.push(boardEventSchema.parse(JSON.parse(data)));
+            if (data !== '') events.push(parse(JSON.parse(data)));
             split = buffer.indexOf('\n\n');
           }
+          for (const waiter of waiters.splice(0)) {
+            if (waiter.check()) waiter.done();
+            else waiters.push(waiter);
+          }
+        });
+
+        response.on('end', () => {
+          ended = true;
           for (const waiter of waiters.splice(0)) {
             if (waiter.check()) waiter.done();
             else waiters.push(waiter);

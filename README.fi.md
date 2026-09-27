@@ -1,4 +1,4 @@
-<!-- Based on README.md @ ad52a0d2dae16ea3784281585f09ea7d7c248cb4 -->
+<!-- Based on README.md @ d9bab51347b3260054aa35a3255ff0caa4c05f5c -->
 
 # local-project-board
 
@@ -25,12 +25,13 @@ Taulu käynnistyy osoitteessa `http://127.0.0.1:7432/` (tai seuraavassa vapaassa
 on varattu) ja avautuu selaimeen. Ei rekisteröitymistä, ei tiliä, ei tietokantaa, ei verkkoa oman
 koneen ulkopuolelle.
 
-| Komento                                | Mitä se tekee                                                      |
-| -------------------------------------- | ------------------------------------------------------------------ |
-| `npx local-project-board`              | Käynnistää taulun                                                  |
-| `npx local-project-board instructions` | Tulostaa API-ohjeet tekoälyagentille annettavaksi                  |
-| `npx local-project-board claude <ID>`  | Käynnistää Claude Coden tehtävään tässä terminaalissa              |
-| `npx local-project-board export`       | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen) |
+| Komento                                 | Mitä se tekee                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `npx local-project-board`               | Käynnistää taulun                                                      |
+| `npx local-project-board instructions`  | Tulostaa API-ohjeet tekoälyagentille annettavaksi                      |
+| `npx local-project-board claude <ID>`   | Käynnistää Claude Coden tehtävään tässä terminaalissa                  |
+| `npx local-project-board claude --wait` | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään |
+| `npx local-project-board export`        | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)     |
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
 `--no-open` (älä avaa selainta), `--help`.
@@ -63,8 +64,12 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
 - **Lähetä tekoälylle.** Tehtävässä tai sen kortin valikossa yksi valinta kopioi handoffin —
   tehtävän, sen dokumentit ja asetusten edellyttämät vaiheet — valmiina liitettäväksi mille
   tahansa agentille. Siinä ei ole tokenia. `npx local-project-board handoff <ID>` tulostaa saman
-  tekstin. Toinen valinta, **Claude Code — kopioi komento**, kopioi yhden rivin, joka käynnistää
-  Claude Coden kyseiseen tehtävään; katso [Claude Code](#claude-code).
+  tekstin. Toinen valinta, **Claude Code**, käynnistää Claude Coden kyseiseen tehtävään siinä
+  terminaalissa, jossa `npx local-project-board claude --wait` on käynnissä; katso
+  [Claude Code](#claude-code).
+- **Tekoälyn ajo.** Se, mitä tehtävän viimeisin agentti kertoi ajostaan — mikä agentti, miten
+  meni, tarkistukset, sen commit, milloin se alkoi ja päättyi — näkyy tehtävässä merkittynä
+  agentin omaksi sanaksi: taulu ei tarkista sitä.
 
 Tiedostot, joita taulu ei osaa lukea, näkyvät juuri sellaisina sarakkeiden yläpuolella — eivät
 koskaan tehtävinä, joiden arvot on keksitty.
@@ -139,20 +144,26 @@ virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samast
 
 ## Claude Code
 
+Käynnistä odottaja kerran projektin terminaalissa käynnissä olevan taulun rinnalle:
+
+```bash
+npx local-project-board claude --wait
+```
+
+Siitä lähtien **Lähetä tekoälylle → Claude Code** tehtävässä (tai sen kortin valikossa)
+käynnistää Claude Coden kyseiseen tehtävään tuossa terminaalissa. Kun istunto päättyy, odottaja
+odottaa seuraavaa tehtävää. Ilman odottajaa komento
+
 ```bash
 npx local-project-board claude T13
 ```
 
-käynnistää Claude Coden tehtävään `T13` siinä terminaalissa, johon komennon kirjoitit, ja projektin
-juuressa: taululta kysytään, onko tehtävä olemassa, ja `claude` käynnistetään yhdellä lyhyellä
-kehotteella, joka osoittaa tehtävän elävään handoffiin (`GET /api/v1/tasks/T13/handoff`). Claude
-lukee sen itse, joten se näkee asetukset aina sellaisina kuin ne ovat nyt, ja noudattaa sen
-vaiheita: haara, työ, tarkistukset, commit, `report.md`. Komento päättyy istunnon poistumiskoodiin.
-
-Selaimessa **Lähetä tekoälylle → Claude Code — kopioi komento** laittaa saman käynnistyksen
-leikepöydälle:
-`claude "Work on task T13 of the local board: read GET http://127.0.0.1:7432/api/v1/tasks/T13/handoff and follow it."`.
-Liitä se projektin terminaaliin.
+käynnistää saman istunnon tehtävään `T13` suoraan. Kummassakin tapauksessa `claude` käynnistetään
+projektin juuressa uutena istuntona yhdellä lyhyellä kehotteella, joka osoittaa tehtävän elävään
+handoffiin (`GET /api/v1/tasks/T13/handoff`). Claude lukee sen itse, joten se näkee aina tehtävän,
+asetukset sellaisina kuin ne ovat nyt ja API-ohjeet, ja noudattaa sen vaiheita: haara, työ,
+tarkistukset, commit, `report.md` ja ajonsa kirjattuna tehtävään (`aiRun`), jonka sivu näyttää
+kohdassa **AI run**.
 
 Hyvä tietää:
 
@@ -160,7 +171,12 @@ Hyvä tietää:
   PATHissa. Muuten komento kertoo, kumpi puuttuu, eikä käynnistä mitään.
 - Taulu ei koskaan käynnistä `claude`a itse: ohjelmia ajava palvelin tekisi tokenistaan oikeuden
   suorittaa koodia koneellasi, eikä sillä ole terminaalia interaktiiviselle ohjelmalle
-  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)).
+  ([ADR-0029](docs/adr/0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md)). Sivu
+  vain pyytää taulua antamaan tehtävän käynnistämällesi odottajalle; odottaja päättää, mitä
+  ajetaan.
+- Yksi istunto kerrallaan: istunnon aikana **Lähetä tekoälylle → Claude Code** kertoo, ettei mikään
+  odota, eikä käynnistä mitään. Samoin, jos odottajaa ei ole käynnistetty; silloin se kertoo yllä
+  olevat kaksi komentoa.
 - Malli, käyttöoikeustila ja muu ovat omia Claude Code -asetuksiasi; taulu ei välitä mitään.
   Kehotteessa tai argumenteissa ei ole tokenia.
 - Clauden on tehtävä HTTP-pyyntöjä osoitteeseen `127.0.0.1` — se käyttää `curl`ia Bash-työkalunsa
@@ -178,16 +194,18 @@ koodi kuuluu, on kuvattu tiedostossa [docs/architecture.md](docs/architecture.md
 
 Vaatii Node.js >= 22.12.0.
 
-| Komento                                   | Mitä se tekee                                       |
-| ----------------------------------------- | --------------------------------------------------- |
-| `npm install`                             | Asentaa riippuvuudet                                |
-| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän               |
-| `npm test`                                | Jest-testit (palvelin ja sivu)                      |
-| `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten     |
-| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen |
-| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                   |
-| `npm run typecheck`                       | TypeScript                                          |
-| `npm run format` / `npm run format:check` | Prettier                                            |
+| Komento                                   | Mitä se tekee                                         |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `npm install`                             | Asentaa riippuvuudet                                  |
+| `npm run build`                           | Kääntää palvelimen ja käyttöliittymän                 |
+| `npm start`                               | Käynnistää taulun käännöksestä                        |
+| `npm run start:claude -- --wait`          | `claude --wait` käännöksestä (`-- T13`: yksi tehtävä) |
+| `npm test`                                | Jest-testit (palvelin ja sivu)                        |
+| `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten       |
+| `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen   |
+| `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                     |
+| `npm run typecheck`                       | TypeScript                                            |
+| `npm run format` / `npm run format:check` | Prettier                                              |
 
 Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps chromium`.
 

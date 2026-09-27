@@ -55,6 +55,16 @@ describe('the command line', () => {
     expect(() => parseCliArgs(['claude', 'T1', '--model', 'opus'])).toThrow(UsageError);
   });
 
+  it('takes --wait for the claude command instead of an id, and only there (T27)', () => {
+    expect(parseCliArgs(['claude', '--wait'])).toEqual({ command: 'claude', wait: true });
+    // A runner waits for whichever task is sent from the board; it is not told one in advance.
+    expect(() => parseCliArgs(['claude', '--wait', 'T1'])).toThrow(UsageError);
+    expect(() => parseCliArgs(['claude', 'T1', '--wait'])).toThrow(/--wait/);
+    expect(() => parseCliArgs(['--wait'])).toThrow(/claude/);
+    expect(() => parseCliArgs(['handoff', 'T1', '--wait'])).toThrow(/claude/);
+    expect(() => parseCliArgs(['claude', '--wait', '--port', '8080'])).toThrow(UsageError);
+  });
+
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });
@@ -85,6 +95,7 @@ describe('the command line', () => {
       'instructions',
       'handoff <id>',
       'claude <id>',
+      'claude --wait',
       'export',
       '--port',
       '--no-open',

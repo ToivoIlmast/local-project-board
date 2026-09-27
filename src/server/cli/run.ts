@@ -1,6 +1,7 @@
 import { parseCliArgs, USAGE, UsageError } from './args.js';
 import { resolveBoard } from './board.js';
 import { launchClaude } from './claude.js';
+import { waitForRuns } from './claudeWait.js';
 import { exportBoard } from './export.js';
 import { printHandoff } from './handoff.js';
 import { printInstructions } from './instructions.js';
@@ -14,6 +15,8 @@ export interface CliEnvironment {
   writeError: (text: string) => void;
   /** Injected so that a test never spawns a browser; the CLI passes the real one. */
   openBrowser?: ((url: string) => void) | undefined;
+  /** Ends a command that waits (`claude --wait`), as Ctrl+C would; a test's way to stop it. */
+  signal?: AbortSignal | undefined;
 }
 
 export interface CliResult {
@@ -46,6 +49,17 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
         await printHandoff(board, args.id as string, environment.write);
         return { exitCode: 0 };
       case 'claude':
+        if (args.wait === true) {
+          // Runs until it is stopped: each task sent from the board is a session here (T27).
+          return {
+            exitCode: await waitForRuns(board, {
+              env: environment.env,
+              write: environment.write,
+              writeError: environment.writeError,
+              signal: environment.signal,
+            }),
+          };
+        }
         // Nothing but a session can end this command, and it ends as the session did.
         return {
           exitCode: await launchClaude(board, args.id as string, { env: environment.env }),

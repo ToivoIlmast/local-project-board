@@ -123,6 +123,11 @@ function isOwnOrigin(origin: string, port: string): boolean {
   );
 }
 
+/** Whether an Authorization header carries this session's token; for a read that needs it. */
+export function hasSessionToken(header: string | undefined, token: string): boolean {
+  return matchesToken(header, token);
+}
+
 function matchesToken(header: string | undefined, token: string): boolean {
   // The scheme is case-insensitive (RFC 7235); the credential is compared byte by byte.
   const given = /^bearer[ \t]+(.+)$/i.exec(header ?? '')?.[1];

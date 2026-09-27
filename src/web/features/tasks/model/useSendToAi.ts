@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { claudeCodeCommand } from '../../../../contract/v1/index';
+import type { BoardClient } from '../../../api/index';
 import { useBoardClient } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useCopyToClipboard } from '../../../shared/hooks/useCopyToClipboard';
@@ -21,21 +21,25 @@ export interface AgentTarget {
 export interface TargetContext {
   /** Puts the text on the clipboard; false when the browser refused. */
   copy: (text: string) => Promise<boolean>;
-  /** Where the board answers, as an agent on this machine reaches it: `http://127.0.0.1:<port>`. */
-  boardUrl: string;
+  /** The board this page is served by. */
+  client: BoardClient;
 }
 
 /**
- * Claude Code. The page cannot start a program and neither can the board's server (ADR-0008), so
- * this puts on the clipboard the one line that does, for a terminal in the project: `claude`
- * with a prompt that points at the live handoff of this task (T19). The same session starts
- * from `npx local-project-board claude <ID>` without pasting anything.
+ * Claude Code. Neither the page nor the board's server can start a program (ADR-0029), so this
+ * asks the board to hand the task to the runner the person started in a terminal of the project
+ * (`npx local-project-board claude --wait`), and that runner starts the session there (T27). The
+ * page sends the id of the task and the name of the agent; the prompt, the program and the
+ * handoff are none of its business. When nothing waits, the board says what to do instead.
  */
 const CLAUDE_CODE: AgentTarget = {
-  label: 'Claude Code — copy command',
-  run: async (id, { copy, boardUrl }) => {
-    if (!(await copy(claudeCodeCommand(id, boardUrl)))) throw CLIPBOARD_REFUSED;
-    return 'Command for Claude Code copied. Paste it in a terminal in the project folder.';
+  label: 'Claude Code',
+  run: async (id, { client }) => {
+    await client.runTask(id, 'claude-code');
+    return (
+      `Claude Code is starting on ${id} in the terminal where ` +
+      '`local-project-board claude --wait` runs.'
+    );
   },
 };
 
@@ -80,7 +84,7 @@ export function useSendToAi(
 
   const sending = useAsyncAction(async (target: AgentTarget) => {
     setDone(undefined);
-    setDone((await target.run(taskId, { copy, boardUrl: boardUrl() })) ?? undefined);
+    setDone((await target.run(taskId, { copy, client })) ?? undefined);
   });
 
   return {
@@ -92,9 +96,4 @@ export function useSendToAi(
     done: sending.error === undefined ? done : undefined,
     error: sending.error,
   };
-}
-
-/** The page is served by the board, so its port is the board's; an agent reaches it by loopback. */
-function boardUrl(): string {
-  return `http://127.0.0.1:${window.location.port}`;
 }

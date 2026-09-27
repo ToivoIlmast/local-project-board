@@ -10,6 +10,7 @@ import {
 import type { Project } from '../../../core/index.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
+import { noRunner } from '../runs.js';
 import { composeHandoff } from './handoff.js';
 
 /** A body that is text rather than JSON; the media type depends on the file, not the route. */
@@ -43,7 +44,9 @@ export type RouteHandler<K extends RouteId> = (
  * contract does not compile until it is served. The stream is not an answer but a
  * connection, so the router hands it to the SSE serializer instead (§14).
  */
-export type Handlers = { [K in Exclude<RouteId, 'events.stream'>]: RouteHandler<K> };
+export type Handlers = {
+  [K in Exclude<RouteId, 'events.stream' | 'runs.stream'>]: RouteHandler<K>;
+};
 
 const deleted = { deleted: true } as const;
 
@@ -84,6 +87,14 @@ export const handlers: Handlers = {
   },
 
   'tasks.workflow': (context, { params }) => context.workflow.forTask(params.id),
+
+  // Send to AI → Claude Code: the task must exist, and then it goes to one waiting runner or
+  // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
+  'tasks.run': async (context, { params, body }) => {
+    await context.tasks.get(params.id);
+    if (!context.runs.hand({ taskId: params.id, agent: body.agent })) throw noRunner(params.id);
+    return { taskId: params.id, agent: body.agent };
+  },
 
   // One text for one task, generated on every request from what the services read now and
   // kept nowhere. It carries the live URL but never the token: whoever needs one asks for it.

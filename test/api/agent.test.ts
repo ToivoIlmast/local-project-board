@@ -220,7 +220,12 @@ function calls(handoff: string): { method: string; route: string; path: string; 
         method: 'PATCH',
         route: '/tasks/:id',
         path: patch[1] ?? '',
-        body: JSON.parse(patch[2] ?? ''),
+        // What the steps leave to the agent, it fills in: its name and the time (T27).
+        body: JSON.parse(
+          (patch[2] ?? '')
+            .replace('"<your name>"', '"test-agent"')
+            .replace('"<now>"', `"${new Date().toISOString()}"`),
+        ),
       });
     }
     const put = /`PUT \/api\/v1(\/tasks\/T\d+\/documents\/report\.md)`/.exec(line);
@@ -256,6 +261,8 @@ describe('an external agent with nothing but the handoff of a task', () => {
     // left alone at the end because the task waits for the review.
     expect(after.status).toBe('in-progress');
     expect(after.branch).toBe('task/T1-audit-the-dependency-graph');
+    // The start of its run is on the board, in the words of the model (T27).
+    expect(after.aiRun).toMatchObject({ agent: 'test-agent', state: 'working' });
     const report = await agent.call(
       'GET',
       '/tasks/:id/documents/:name',
@@ -280,9 +287,19 @@ describe('an external agent with nothing but the handoff of a task', () => {
     await board.put('/api/v1/workflow', { board: { startStatus: null }, statuses: {} }).expect(200);
     const agent = await Agent.fromHandoff(board.port, created.id);
 
-    expect(calls(agent.text)).toEqual([]);
+    // What is left is reporting the run itself, which no setting turns off (T27).
+    const left = calls(agent.text);
+    expect(left).toEqual([
+      {
+        method: 'PATCH',
+        route: '/tasks/:id',
+        path: `/tasks/${created.id}`,
+        body: { aiRun: { agent: 'test-agent', state: 'working', startedAt: expect.any(String) } },
+      },
+    ]);
+    for (const call of left) await agent.json(call.method, call.route, call.path, call.body);
     const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
-    expect(after).toMatchObject({ status: 'todo' });
+    expect(after).toMatchObject({ status: 'todo', aiRun: { state: 'working' } });
     expect(after.branch).toBeUndefined();
     expect(await board.storage.listDocuments('T1')).toEqual([]);
   });

@@ -17,8 +17,11 @@ interface Call {
   body?: unknown;
 }
 
-/** A route this sweep does not call, because it answers with a stream and not with a body. */
-type NotCalled = 'streamed';
+/**
+ * A route this sweep does not call: a stream answers with no body, and starting an agent needs
+ * a runner waiting on one (test/api/run.test.ts starts one and checks that answer).
+ */
+type NotCalled = 'streamed' | 'needs a runner';
 
 /**
  * One real request per route in the contract. The map is keyed by RouteId, so a route
@@ -34,6 +37,7 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'tasks.delete': { path: '/tasks/T2' },
   'tasks.workflow': { path: '/tasks/T1/workflow' },
   'tasks.handoff': { path: '/tasks/T1/handoff' },
+  'tasks.run': 'needs a runner',
   'workflow.get': { path: '/workflow' },
   'workflow.update': {
     path: '/workflow',
@@ -55,6 +59,7 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'instructions.get': { path: '/instructions' },
   // A stream has no single answer to compare; test/api/sse.test.ts reads it frame by frame.
   'events.stream': 'streamed',
+  'runs.stream': 'streamed',
 };
 
 const notCalled = (kind: NotCalled): string[] =>
@@ -96,8 +101,9 @@ function send(route: Route, call: Call) {
 }
 
 describe('every route in the contract', () => {
-  it('is served: the only route without a handler is the stream (INVARIANT)', () => {
-    expect(notCalled('streamed')).toEqual(['events.stream']);
+  it('is served: the only routes without a handler are the streams (INVARIANT)', () => {
+    expect(notCalled('streamed')).toEqual(['events.stream', 'runs.stream']);
+    expect(notCalled('needs a runner')).toEqual(['tasks.run']);
     for (const route of routeList) {
       const served = Object.prototype.hasOwnProperty.call(handlers, route.id);
       expect([route.id, served]).toEqual([route.id, route.response.media !== 'text/event-stream']);

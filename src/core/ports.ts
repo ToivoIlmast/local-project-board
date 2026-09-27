@@ -1,5 +1,6 @@
 import type { BoardEvent } from './events.js';
 import type {
+  AiRun,
   DocumentMeta,
   GitBranch,
   GitCommit,
@@ -26,6 +27,7 @@ export interface NewTask {
 /**
  * Only the given fields change. `branch: null` clears the branch; `workflow: null` clears all of
  * the task's workflow overrides, and a `workflow` object replaces them whole, as `labels` does.
+ * `aiRun` is the same: an object replaces the reported run whole, null forgets it.
  */
 export interface TaskPatch {
   title?: string | undefined;
@@ -35,6 +37,7 @@ export interface TaskPatch {
   labels?: string[] | undefined;
   branch?: string | null | undefined;
   workflow?: WorkflowFlagOverrides | null | undefined;
+  aiRun?: AiRun | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 

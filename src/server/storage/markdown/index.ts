@@ -240,12 +240,14 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     updateTask(id, patch: TaskPatch) {
       return exclusive(async () => {
         const task = await requireTask(id);
-        const { branch, workflow, ...rest } = patch;
+        const { branch, workflow, aiRun, ...rest } = patch;
         const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
         if (branch === null) delete updated.branch;
         else if (branch !== undefined) updated.branch = branch;
         if (workflow === null) delete updated.workflow;
         else if (workflow !== undefined) updated.workflow = { ...workflow };
+        if (aiRun === null) delete updated.aiRun;
+        else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
         return saveTask(updated);
       });
     },

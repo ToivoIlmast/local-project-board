@@ -1,3 +1,4 @@
+export * from './aiRun.js';
 export * from './document.js';
 export * from './git.js';
 export * from './project.js';

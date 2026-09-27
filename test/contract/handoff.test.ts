@@ -361,6 +361,7 @@ describe('renderWorkflowSteps', () => {
 
       expect(text).toContain('Never merge a branch');
       expect(text).toContain('Never write the session token into a file of the project');
+      expect(text).toContain('Record your run in the task');
       expect(text).toContain('stop and wait for the review');
     });
 
@@ -368,8 +369,8 @@ describe('renderWorkflowSteps', () => {
       const steps = workflowSteps(effective(), FACTS);
       const rules = steps.filter((step) => step.key === null);
 
-      expect(rules).toHaveLength(3);
-      expect(steps.slice(-3)).toEqual(rules);
+      expect(rules).toHaveLength(4);
+      expect(steps.slice(-4)).toEqual(rules);
       for (const rule of rules) expect(rule.text).not.toContain('source:');
     });
   });
@@ -386,9 +387,10 @@ describe('renderWorkflowSteps', () => {
           '6. Do not push: nothing leaves this machine. _(source: default)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
           '8. When you are done, leave the status of the task as it is: it waits for the review. _(source: default)_',
-          '9. Never merge a branch, into any branch.',
-          '10. Never write the session token into a file of the project, a task, a document or a report.',
-          '11. When you are done, stop and wait for the review; do not start another task.',
+          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          '10. Never merge a branch, into any branch.',
+          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
     });
@@ -409,9 +411,10 @@ describe('renderWorkflowSteps', () => {
           '6. Do not push: there is nothing to push. _(source: board; inactive: editCode is off)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
           '8. When you are done, leave the status of the task as it is: it waits for the review. _(source: default)_',
-          '9. Never merge a branch, into any branch.',
-          '10. Never write the session token into a file of the project, a task, a document or a report.',
-          '11. When you are done, stop and wait for the review; do not start another task.',
+          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          '10. Never merge a branch, into any branch.',
+          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
     });
@@ -439,11 +442,38 @@ describe('renderWorkflowSteps', () => {
           '6. Push your commits to the remote. _(source: board)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
-          '9. Never merge a branch, into any branch.',
-          '10. Never write the session token into a file of the project, a task, a document or a report.',
-          '11. When you are done, stop and wait for the review; do not start another task.',
+          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          '10. Never merge a branch, into any branch.',
+          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
+    });
+  });
+
+  describe('the run of the agent, reported back to the board (T27)', () => {
+    it('tells the agent to record its run on this very task, with the fields of the model', () => {
+      const rule = workflowSteps(effective(), FACTS).find((step) =>
+        step.text.startsWith('Record your run'),
+      );
+
+      expect(rule?.key).toBeNull();
+      expect(rule?.text).toContain(`\`PATCH ${API_BASE_PATH}/tasks/T13\``);
+      expect(rule?.text).not.toContain('/tasks/T1`');
+      for (const field of ['agent', 'state', 'startedAt', 'checks', 'commit', 'finishedAt']) {
+        expect(rule?.text).toContain(field);
+      }
+      // The start of the report is a body the API takes as it is.
+      const body = /with `(\{"aiRun".*?\}\})`/.exec(rule?.text ?? '')?.[1] ?? '';
+      expect(JSON.parse(body)).toEqual({
+        aiRun: { agent: '<your name>', state: 'working', startedAt: '<now>' },
+      });
+    });
+
+    it('is asked for even when nothing may be edited: an analysis is a run too', () => {
+      const text = renderWorkflowSteps(effective({ task: { editCode: false } }), FACTS);
+
+      expect(text).toContain('Record your run in the task');
     });
   });
 
