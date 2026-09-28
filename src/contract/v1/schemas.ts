@@ -170,6 +170,22 @@ export const errorResponseSchema = z.strictObject({
   }),
 });
 
+/** Runner → begin: identify the session being started (T31). */
+export const aiRunBeginRequestSchema = z.strictObject({
+  sessionId: z.string().uuid(),
+  mode: z.enum(['new', 'resume', 'restart']),
+  model: z.string().min(1).max(200).optional(),
+});
+
+/** Runner → end: what the process did (T31). */
+export const aiRunEndRequestSchema = z.strictObject({
+  exitCode: z.number().int().optional(),
+  launchError: z.string().min(1).optional(),
+});
+
+export type AiRunBeginRequest = z.infer<typeof aiRunBeginRequestSchema>;
+export type AiRunEndRequest = z.infer<typeof aiRunEndRequestSchema>;
+
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;
 export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;

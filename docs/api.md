@@ -725,6 +725,71 @@ Response — 200, text/markdown:
 # local-project-board API (v1)
 ```
 
+## Ai-run
+
+### POST /api/v1/tasks/:id/ai-run
+
+Runner: begin a run on a task; the server assigns a monotonic runId
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "mode": "new",
+  "model": "claude-sonnet-4-6"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "agent": "runner",
+  "state": "working",
+  "runId": 1,
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "mode": "new",
+  "model": "claude-sonnet-4-6",
+  "startedAt": "2026-09-21T09:00:00.000Z"
+}
+```
+
+### POST /api/v1/tasks/:id/ai-run/:runId/end
+
+Runner: end a run on a task; the runId must be the current one
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/end
+
+Request body:
+
+```json
+{
+  "exitCode": 0
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "agent": "runner",
+  "state": "failed",
+  "runId": 1,
+  "failure": {
+    "kind": "exit",
+    "message": "process exited with code 0 without a final state"
+  },
+  "endedAt": "2026-09-21T09:05:00.000Z"
+}
+```
+
 ## Runs
 
 ### GET /api/v1/runs
@@ -759,6 +824,8 @@ nothing else. The code is one of:
 - NEIGHBOR_NOT_FOUND
 - INVALID_POSITION
 - INVALID_GIT_ARGUMENT
+- STALE_AI_RUN
+- AI_RUN_IN_PROGRESS
 - INVALID_REQUEST
 - INVALID_JSON
 - UNAUTHORIZED

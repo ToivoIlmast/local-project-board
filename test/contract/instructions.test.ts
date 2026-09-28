@@ -46,6 +46,9 @@ describe('generated AI instructions', () => {
     // `workflow.update` replaces the board's and the columns' settings whole: it is the
     // Settings page's request, not something an agent should do to the rules it works under.
     expect(excluded.map((r) => r.id).sort()).toEqual([
+      // Runner lifecycle routes: not for agents, only for the runner process (T31).
+      'ai-run.begin',
+      'ai-run.end',
       'events.stream',
       'instructions.get',
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).

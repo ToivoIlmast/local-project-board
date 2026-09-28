@@ -57,6 +57,9 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'reports.delete': { path: '/reports/R1' },
   'session.get': { path: '/session' },
   'instructions.get': { path: '/instructions' },
+  // Runner lifecycle routes (T31); the begin call needs a real task to set up state.
+  'ai-run.begin': 'needs a runner',
+  'ai-run.end': 'needs a runner',
   // A stream has no single answer to compare; test/api/sse.test.ts reads it frame by frame.
   'events.stream': 'streamed',
   'runs.stream': 'streamed',
@@ -103,7 +106,7 @@ function send(route: Route, call: Call) {
 describe('every route in the contract', () => {
   it('is served: the only routes without a handler are the streams (INVARIANT)', () => {
     expect(notCalled('streamed')).toEqual(['events.stream', 'runs.stream']);
-    expect(notCalled('needs a runner')).toEqual(['tasks.run']);
+    expect(notCalled('needs a runner')).toEqual(['tasks.run', 'ai-run.begin', 'ai-run.end']);
     for (const route of routeList) {
       const served = Object.prototype.hasOwnProperty.call(handlers, route.id);
       expect([route.id, served]).toEqual([route.id, route.response.media !== 'text/event-stream']);

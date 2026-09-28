@@ -42,6 +42,8 @@ describe('renderApiDoc', () => {
   it('marks each route as given to, or withheld from, AI agents', () => {
     const hidden = routeList.filter((r) => !r.ai.include).map((r) => r.id);
     expect(hidden.sort()).toEqual([
+      'ai-run.begin',
+      'ai-run.end',
       'events.stream',
       'instructions.get',
       'runs.stream',
