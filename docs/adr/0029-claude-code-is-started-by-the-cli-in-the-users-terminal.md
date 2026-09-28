@@ -80,3 +80,29 @@ stands — the server starts nothing — and the gap is closed by a process the 
 What this costs: a second terminal with the runner, started by hand once. What it does not change:
 the server has no module that can start a process (a test lists the ones that can: the CLI's
 `claude.ts` and `openBrowser.ts`, and the read-only git reader).
+
+## Amendment (T31, 2026-09-28): Runner owns the aiRun lifecycle; begin/end routes added
+
+T30 showed that a runner can lose the ability to write (the Bash tool was auto-declined), leaving
+the task permanently in `aiRun.state: working`. This amendment gives the runner two dedicated
+routes that the board updates independently of the agent's self-report.
+
+- **`aiRun` gains runner fields** (`runId`, `sessionId`, `mode`, `model`, `failure`, `endedAt`)
+  that the runner, not the agent, fills in.
+- **`runId`** is a monotonically increasing integer per task, assigned by `POST
+  /tasks/:id/ai-run` (begin). It identifies the current run and lets both begin and end be
+  idempotent-safe.
+- **`POST /tasks/:id/ai-run`** (begin): the runner calls this when the session is starting.
+  The server assigns `runId = prevRunId + 1`, writes `state: working`, and records `sessionId`,
+  `mode` and `model`. If `state` is already `working`, the server refuses with 409
+  `AI_RUN_IN_PROGRESS`.
+- **`POST /tasks/:id/ai-run/:runId/end`** (end): the runner calls this when the process exits.
+  The `runId` must be the current one or the server refuses with 409 `STALE_AI_RUN`. If the
+  agent has already written a final state (`finished`, `failed`, `needs-review`), the end call
+  does not overwrite it — it only adds `endedAt` and, if non-zero, the exit code. If the agent
+  never wrote a final state (stuck `working`), the server records `failed{exit}` or
+  `failed{launch}`.
+- Both routes are **not given to AI agents** in the generated instructions.
+- **Legacy `aiRun` records** without `runId` (T20, T28, T29, T30) are read fine; the absence
+  of `runId` is treated as `runId: 0` when computing the next `runId`. The files are not
+  rewritten.

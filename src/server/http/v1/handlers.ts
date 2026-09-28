@@ -141,4 +141,9 @@ export const handlers: Handlers = {
     await context.reports.remove(params.id);
     return deleted;
   },
+
+  'ai-run.begin': async (context, { params, body }) => context.aiRun.begin(params.id, body),
+
+  'ai-run.end': async (context, { params, body }) =>
+    context.aiRun.end(params.id, params.runId, body),
 };

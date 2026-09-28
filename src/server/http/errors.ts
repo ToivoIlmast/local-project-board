@@ -18,6 +18,8 @@ const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   INVALID_ID_PREFIX: 422,
   ORPHANED_STATUSES: 409,
   INVALID_ID_SEQUENCE: 500,
+  STALE_AI_RUN: 409,
+  AI_RUN_IN_PROGRESS: 409,
 };
 
 /** An error the transport itself raises; the domain raises BoardError instead. */

@@ -299,6 +299,58 @@ export const routes = {
     ai: { include: false },
   }),
 
+  'ai-run.begin': route({
+    id: 'ai-run.begin',
+    method: 'POST',
+    path: '/tasks/:id/ai-run',
+    summary: 'Runner: begin a run on a task; the server assigns a monotonic runId',
+    params: taskParams,
+    request: s.aiRunBeginRequestSchema,
+    response: json(s.aiRunSchema),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12' },
+      body: {
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+        model: 'claude-sonnet-4-6',
+      },
+      response: {
+        agent: 'runner',
+        state: 'working',
+        runId: 1,
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+        model: 'claude-sonnet-4-6',
+        startedAt: '2026-09-21T09:00:00.000Z',
+      },
+    },
+    ai: { include: false },
+  }),
+
+  'ai-run.end': route({
+    id: 'ai-run.end',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/end',
+    summary: 'Runner: end a run on a task; the runId must be the current one',
+    params: z.strictObject({ id: s.taskIdSchema, runId: z.coerce.number().int().nonnegative() }),
+    request: s.aiRunEndRequestSchema,
+    response: json(s.aiRunSchema),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: { exitCode: 0 },
+      response: {
+        agent: 'runner',
+        state: 'failed',
+        runId: 1,
+        failure: { kind: 'exit', message: 'process exited with code 0 without a final state' },
+        endedAt: '2026-09-21T09:05:00.000Z',
+      },
+    },
+    ai: { include: false },
+  }),
+
   'workflow.get': route({
     id: 'workflow.get',
     method: 'GET',

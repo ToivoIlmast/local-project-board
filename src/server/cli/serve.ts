@@ -8,6 +8,7 @@ import {
   createTaskService,
   createWorkflowService,
 } from '../../core/index.js';
+import { createAiRunService } from '../../core/services/aiRunService.js';
 import { assertNoOrphanedStatuses } from '../../core/rules/status.js';
 import { createEventBus } from '../events/index.js';
 import { gitReader } from '../git/index.js';
@@ -80,6 +81,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
       git,
       events,
       ai: { rules: config.ai.rules },
+      aiRun: createAiRunService({ storage, statuses: config.statuses }),
     };
 
     const token = createSessionToken();

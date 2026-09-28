@@ -11,6 +11,10 @@ export const BOARD_ERROR_CODES = [
   'NEIGHBOR_NOT_FOUND',
   'INVALID_POSITION',
   'INVALID_GIT_ARGUMENT',
+  /** Runner called end with a runId that is not the current one (T31). */
+  'STALE_AI_RUN',
+  /** Runner called begin when the task already has state: working (T31). */
+  'AI_RUN_IN_PROGRESS',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

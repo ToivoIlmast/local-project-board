@@ -5,6 +5,7 @@ import type {
   TaskService,
   WorkflowService,
 } from '../../core/index.js';
+import type { AiRunService } from '../../core/services/aiRunService.js';
 import type { GitReader } from '../../core/ports.js';
 import type { RunDispatch } from './runs.js';
 import type { EventStream } from './sse.js';
@@ -28,6 +29,8 @@ export interface BoardContext {
   reports: ReportService;
   project: ProjectService;
   git: GitReader;
+  /** Runner lifecycle: begin and end a run on a task (T31). */
+  aiRun: AiRunService;
   /** What the open clients are told about; the services publish, this only hands out. */
   events: EventStream;
   /** ai.rules from this board's configuration: the project's rules that "## Rules" adds. */

@@ -11,6 +11,7 @@ import {
   createTaskService,
   createWorkflowService,
 } from '../../src/core/index.js';
+import { createAiRunService } from '../../src/core/services/aiRunService.js';
 import type { EventSink, GitReader, Storage } from '../../src/core/ports.js';
 import { closeServer } from '../../src/server/cli/listen.js';
 import { createEventBus, type EventBus } from '../../src/server/events/index.js';
@@ -104,6 +105,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     git,
     events: bus,
     ai: { rules: options.rules ?? [] },
+    aiRun: createAiRunService({ storage, statuses }),
   };
 
   // The app needs the bound port, so the server starts first and gets its handler after.

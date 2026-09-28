@@ -517,3 +517,74 @@ describe('markdown storage: workflow settings', () => {
     );
   });
 });
+
+describe('task.md and aiRun runner fields (T31)', () => {
+  let root2: string;
+  let storage2: Storage;
+
+  beforeEach(async () => {
+    root2 = await tmpDir();
+    storage2 = markdownStorage({ root: root2 });
+    await storage2.init();
+  });
+
+  afterEach(async () => {
+    await storage2.close();
+  });
+
+  const basePrefix = `---\nid: T7\ntitle: Test\nstatus: todo\nrank: a0\nlabels: []\n`;
+  const baseSuffix = `createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n`;
+
+  it('round-trips new runner fields (runId, sessionId, mode, model, failure, endedAt) (INVARIANT)', () => {
+    // Fields in schema-definition order so the round-trip is byte for byte.
+    const aiRunYaml =
+      'aiRun:\n' +
+      '  agent: claude-code\n' +
+      '  state: failed\n' +
+      '  runId: 3\n' +
+      '  sessionId: a1b2c3d4-e5f6-4890-abcd-ef0123456789\n' +
+      '  mode: new\n' +
+      '  model: claude-sonnet-4-6\n' +
+      '  startedAt: 2026-09-21T10:00:00Z\n' +
+      '  failure:\n' +
+      '    kind: exit\n' +
+      '    message: process exited with code 1\n' +
+      '    exitCode: 1\n' +
+      '  endedAt: 2026-09-21T10:05:00Z\n';
+    const text = `${basePrefix}${aiRunYaml}${baseSuffix}---\n`;
+    const parsed = parseTask('T7', text);
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.aiRun?.runId).toBe(3);
+    expect(parsed.task.aiRun?.sessionId).toBe('a1b2c3d4-e5f6-4890-abcd-ef0123456789');
+    expect(parsed.task.aiRun?.failure).toEqual({
+      kind: 'exit',
+      message: 'process exited with code 1',
+      exitCode: 1,
+    });
+    expect(serializeTask(parsed.task)).toBe(text);
+  });
+
+  it('reads legacy aiRun without runId without a readIssue and without changing the file (INVARIANT)', async () => {
+    const legacyYaml =
+      'aiRun:\n' +
+      '  agent: Claude Code\n' +
+      '  state: working\n' +
+      '  startedAt: 2026-09-28T06:35:08Z\n';
+    const dir = join(root2, '.board', 'tasks', 'T30');
+    await mkdir(dir, { recursive: true });
+    const filePath = join(dir, 'task.md');
+    const fileContent = `${basePrefix}${legacyYaml}${baseSuffix}---\n`;
+    await writeFile(filePath, fileContent, 'utf8');
+
+    const task = await storage2.getTask('T30');
+    expect(task).not.toBeNull();
+    expect(task?.aiRun?.agent).toBe('Claude Code');
+    expect(task?.aiRun?.state).toBe('working');
+
+    const issues = await storage2.readIssues();
+    expect(issues.find((i) => i.file.includes('T30'))).toBeUndefined();
+
+    // File must not have been rewritten
+    expect(await readFile(filePath, 'utf8')).toBe(fileContent);
+  });
+});
