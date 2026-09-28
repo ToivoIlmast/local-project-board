@@ -262,7 +262,8 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       }),
 
     gitStatus: () => record('gitStatus', () => ({ ...(options.git ?? aGitStatus()) })),
-    gitCommits: () => record('gitCommits', () => options.commits ?? ([] as GitCommit[])),
+    gitCommits: (_limit, _ref) =>
+      record('gitCommits', () => options.commits ?? ([] as GitCommit[])),
     gitDiff: () =>
       record('gitDiff', () => ({ text: '@@ -1 +1 @@\n-a\n+b\n', truncated: false }) as GitDiff),
 

@@ -76,6 +76,20 @@ export const TaskCard = memo(function TaskCard({
             ⎇ {task.branch}
           </Badge>
         )}
+        {task.aiRun === undefined ? null : (
+          <Badge
+            tone={
+              task.aiRun.state === 'working'
+                ? 'accent'
+                : task.aiRun.state === 'finished'
+                  ? 'neutral'
+                  : 'warning'
+            }
+            title={`AI run: ${task.aiRun.state}`}
+          >
+            AI: {task.aiRun.state}
+          </Badge>
+        )}
         {hasOwnSettings(task.workflow) ? (
           <Badge tone="warning" title="This task has AI settings of its own">
             ⚙ AI settings

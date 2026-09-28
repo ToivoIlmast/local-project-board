@@ -1,46 +1,58 @@
-import { act, screen, within } from '@testing-library/react';
-import type { Task } from '../../../src/contract/v1/index';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import type { GitCommit, Task } from '../../../src/contract/v1/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
 
 /**
- * What an agent reported about its run on a task, in the details of that task (T27, the model
- * of T20). The board shows it as the agent's own word; it does not check it against git — that
- * reconciliation, and a line on the card, are left to T20.
+ * What an agent reported about its run on a task: in the details of that task (T27) and as a
+ * state badge on the card (T20). T20 also adds a mismatch warning when the reported commit is
+ * not found in the commits of the task's branch.
  */
+
+const COMMIT_SHA = '9f1c1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b';
+const COMMIT_SHORT = '9f1c1a2b3c4d';
 
 const finished = {
   agent: 'claude-code',
   state: 'finished' as const,
   checks: 'passed' as const,
-  commit: '9f1c1a2b3c4d',
+  commit: COMMIT_SHORT,
   startedAt: '2026-09-26T10:00:00.000Z',
   finishedAt: '2026-09-26T11:00:00.000Z',
 };
 
-async function openTask(task: Partial<Task>): Promise<RenderedBoard> {
+const aCommit = (sha: string): GitCommit => ({
+  sha,
+  subject: 'T1: ship it',
+  author: 'Toivo',
+  date: '2026-09-26T10:00:00.000Z',
+});
+
+async function openTask(task: Partial<Task>, commits?: GitCommit[]): Promise<RenderedBoard> {
   const rendered = await renderBoard({
     tasks: [aTask({ id: 'T1', title: 'Ship it', status: 'todo', ...task })],
+    ...(commits !== undefined ? { commits } : {}),
   });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
   await screen.findByRole('complementary', { name: 'Task T1' });
   return rendered;
 }
 
+const card = () => screen.getByRole('button', { name: 'Ship it' }).closest('li') as HTMLElement;
 const details = () => screen.getByRole('complementary', { name: 'Task T1' });
 const run = () => within(details()).queryByRole('region', { name: 'AI run' });
 const value = (term: string): string | null | undefined =>
   within(run() as HTMLElement).getByText(term).nextElementSibling?.textContent;
 
-describe('the AI run in the details of a task (T27)', () => {
+describe('the AI run in the details of a task (T27 + T20)', () => {
   it('shows what the agent reported: who, how it went, the checks, the commit, the times and the branch', async () => {
-    await openTask({ aiRun: finished, branch: 'task/T1-ship-it' });
+    await openTask({ aiRun: finished, branch: 'task/T1-ship-it' }, [aCommit(COMMIT_SHA)]);
 
     expect(run()).toBeVisible();
     expect(value('Agent')).toBe('claude-code');
     expect(value('State')).toBe('finished');
     expect(value('Checks')).toBe('passed');
-    expect(value('Commit')).toBe('9f1c1a2b3c4d');
+    await waitFor(() => expect(value('Commit')).toBe(COMMIT_SHORT));
     expect(value('Branch')).toBe('task/T1-ship-it');
     expect(value('Started')).not.toBe('');
     expect(value('Finished')).not.toBe('');
@@ -82,5 +94,77 @@ describe('the AI run in the details of a task (T27)', () => {
     });
     expect(value('State')).toBe('finished');
     expect(value('Checks')).toBe('passed');
+  });
+
+  describe('commit verification against the branch (T20)', () => {
+    it('shows the commit as-is when it is found in the branch commits', async () => {
+      await openTask({ aiRun: finished, branch: 'task/T1-ship-it' }, [aCommit(COMMIT_SHA)]);
+
+      await waitFor(() => expect(value('Commit')).toBe(COMMIT_SHORT));
+    });
+
+    it('flags the commit when it is not found in the branch commits', async () => {
+      await openTask({ aiRun: finished, branch: 'task/T1-ship-it' }, [
+        aCommit('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+      ]);
+
+      await waitFor(() => expect(value('Commit')).toMatch(/not found in branch/));
+    });
+
+    it('shows the commit as-is when there is no branch to check against', async () => {
+      await openTask({ aiRun: finished });
+
+      expect(value('Commit')).toBe(COMMIT_SHORT);
+    });
+  });
+});
+
+describe('AI run state on the card (T20)', () => {
+  it('shows a badge with the state when the task has an aiRun', async () => {
+    await renderBoard({
+      tasks: [aTask({ id: 'T1', title: 'Ship it', status: 'todo', aiRun: finished })],
+    });
+
+    expect(within(card()).getByTitle('AI run: finished')).toBeVisible();
+  });
+
+  it('uses an accent badge for a working run', async () => {
+    await renderBoard({
+      tasks: [
+        aTask({
+          id: 'T1',
+          title: 'Ship it',
+          status: 'todo',
+          aiRun: { agent: 'claude-code', state: 'working' },
+        }),
+      ],
+    });
+
+    const badge = within(card()).getByTitle('AI run: working');
+    expect(badge).toBeVisible();
+    expect(badge.textContent).toBe('AI: working');
+  });
+
+  it('uses a warning badge for a failed run', async () => {
+    await renderBoard({
+      tasks: [
+        aTask({
+          id: 'T1',
+          title: 'Ship it',
+          status: 'todo',
+          aiRun: { agent: 'claude-code', state: 'failed' },
+        }),
+      ],
+    });
+
+    expect(within(card()).getByTitle('AI run: failed')).toBeVisible();
+  });
+
+  it('shows no AI run badge when there is no aiRun', async () => {
+    await renderBoard({
+      tasks: [aTask({ id: 'T1', title: 'Ship it', status: 'todo' })],
+    });
+
+    expect(within(card()).queryByTitle(/AI run:/)).not.toBeInTheDocument();
   });
 });

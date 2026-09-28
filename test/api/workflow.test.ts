@@ -10,8 +10,8 @@ import {
   type WorkflowOverrides,
 } from '../../src/contract/v1/index.js';
 import { WORKFLOW_KEYS } from '../../src/core/model/index.js';
-import { DEFAULT_WORKFLOW } from '../../src/core/rules/workflow.js';
-import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
+import { DEFAULT_WORKFLOW, defaultWorkflow } from '../../src/core/rules/workflow.js';
+import { STATUSES, createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { createMemoryStore, inMemoryStorage } from '../support/inMemoryStorage.js';
 import { cleanTmpDirs } from '../support/tmp.js';
 
@@ -69,8 +69,9 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
       const response = await board.get(`${API}/workflow`).expect(200);
 
       expect(response.headers['content-type']).toMatch(/^application\/json/);
+      // defaults reflects the board's own statuses (e.g. finishStatus: 'done' when the board has done)
       expect(workflowStateSchema.parse(response.body)).toEqual({
-        defaults: DEFAULT_WORKFLOW,
+        defaults: defaultWorkflow(STATUSES),
         board: {},
         statuses: {},
       });
@@ -107,7 +108,7 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
       const response = await board.put(`${API}/workflow`, overrides).expect(200);
 
       const answer = workflowStateSchema.parse(response.body);
-      expect(answer).toEqual({ defaults: DEFAULT_WORKFLOW, ...overrides });
+      expect(answer).toEqual({ defaults: defaultWorkflow(STATUSES), ...overrides });
       expect(await readState()).toEqual(answer);
       expect(await board.storage.readWorkflow()).toEqual(overrides);
     });
@@ -137,7 +138,7 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
       await board.put(`${API}/workflow`, overrides).expect(200);
       await board.put(`${API}/workflow`, none).expect(200);
 
-      expect(await readState()).toEqual({ defaults: DEFAULT_WORKFLOW, ...none });
+      expect(await readState()).toEqual({ defaults: defaultWorkflow(STATUSES), ...none });
     });
 
     it('keeps `null` as a value: it is different from a key that is not set', async () => {
@@ -348,7 +349,7 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
 
       const effective = await readEffective(id);
 
-      expect(effective.values).toEqual(DEFAULT_WORKFLOW);
+      expect(effective.values).toEqual(defaultWorkflow(STATUSES));
       expect(Object.keys(effective.sources).sort()).toEqual([...WORKFLOW_KEYS].sort());
       expect(new Set(Object.values(effective.sources))).toEqual(new Set(['default']));
       expect(effective.inactive).toEqual([]);
@@ -813,7 +814,7 @@ describe('the workflow on the markdown provider: the files', () => {
     ].join('\n');
     await writeFile(taskFile(id), written);
 
-    expect((await readEffective(id)).values).toEqual(DEFAULT_WORKFLOW);
+    expect((await readEffective(id)).values).toEqual(defaultWorkflow(STATUSES));
     await board.patch(`${API}/tasks/${id}`, { title: 'Renamed', workflow: null }).expect(200);
 
     const after = await readFile(taskFile(id), 'utf8');
@@ -836,7 +837,7 @@ describe('the workflow on the markdown provider: the files', () => {
     await writeFile(file(), 'formatVersion: 1\nboard:\n  push: maybe\n');
     const project = await board.get(`${API}/project`).expect(200);
 
-    expect(await readState()).toEqual({ defaults: DEFAULT_WORKFLOW, ...none });
+    expect(await readState()).toEqual({ defaults: defaultWorkflow(STATUSES), ...none });
     expect((project.body as { readIssues: { file: string }[] }).readIssues).toMatchObject([
       { file: 'workflow.yaml' },
     ]);

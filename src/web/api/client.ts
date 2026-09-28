@@ -71,7 +71,7 @@ export interface BoardClient {
   deleteReport(id: string): Promise<void>;
 
   gitStatus(): Promise<GitStatus>;
-  gitCommits(limit: number): Promise<GitCommit[]>;
+  gitCommits(limit: number, ref?: string): Promise<GitCommit[]>;
   gitDiff(query: { path?: string | undefined; staged?: boolean | undefined }): Promise<GitDiff>;
 
   /** Addresses for what the browser loads itself: a framed report, a document, the stream. */
@@ -179,7 +179,8 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     },
 
     gitStatus: () => call('git.status', {}),
-    gitCommits: (limit) => call('git.commits', { query: { limit } }),
+    gitCommits: (limit, ref) =>
+      call('git.commits', { query: { limit, ...(ref !== undefined ? { ref } : {}) } }),
     gitDiff: (q) =>
       call('git.diff', {
         query: {

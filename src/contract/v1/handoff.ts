@@ -1,4 +1,5 @@
 import type { DocumentMeta } from '../../core/model/document.js';
+import { languageName } from '../../core/model/language.js';
 import type { Task } from '../../core/model/task.js';
 import type {
   BoardWorkflowKey,
@@ -34,6 +35,7 @@ export interface WorkflowStep {
 export const WORKFLOW_STEP_PARAMETERS = {
   branch: 'baseBranch',
   checks: 'checkCommand',
+  report: 'reportLanguage',
 } as const satisfies Partial<Record<WorkflowKey, BoardWorkflowKey>>;
 
 type Parameters = typeof WORKFLOW_STEP_PARAMETERS;
@@ -119,11 +121,14 @@ const STEPS: Renderers = {
     return value ? 'Push your commits to the remote.' : 'Do not push: nothing leaves this machine.';
   },
 
-  report: ({ value, facts }) =>
-    value
-      ? 'Write what you did, what you checked and what is left into the document `report.md` ' +
-        `of this task: \`PUT ${tasks(facts)}/documents/report.md\`.`
-      : 'Do not write a `report.md` for this task.',
+  report: ({ value, parameter, facts }) => {
+    if (!value) return 'Do not write a `report.md` for this task.';
+    const langNote = parameter !== null ? ` Write in ${languageName(parameter)}.` : '';
+    return (
+      'Write what you did, what you checked and what is left into the document `report.md` ' +
+      `of this task: \`PUT ${tasks(facts)}/documents/report.md\`.${langNote}`
+    );
+  },
 
   finishStatus: ({ value, facts }) =>
     value === null

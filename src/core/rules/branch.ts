@@ -18,6 +18,10 @@ export function taskBranchName(id: string, title: string): string {
       .toLowerCase()
       .match(/[a-z0-9]+/g) ?? [];
 
+  // A single Latin word isolated in a title with non-Latin characters is not a meaningful slug:
+  // it picks up incidental Latin words (e.g. "commit" in a Cyrillic list) rather than the topic.
+  if (words.length < 2 && title.split('').some((c) => c.charCodeAt(0) > 127)) return `task/${id}`;
+
   let slug = '';
   for (const word of words) {
     const next = slug === '' ? word : `${slug}-${word}`;
