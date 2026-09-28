@@ -47,3 +47,20 @@ export const aiRunSchema = z.strictObject({
 
 export type AiRun = z.infer<typeof aiRunSchema>;
 export type AiRunFailure = z.infer<typeof aiRunFailureSchema>;
+
+const AI_RUN_FINAL_STATES = ['finished', 'failed', 'needs-review'] as const;
+
+/** What an agent sends to the dedicated report route (T32). */
+export const aiRunReportSchema = z.strictObject({
+  agent: z.string().regex(/\S/, 'Must not be blank').max(100),
+  state: z.enum(AI_RUN_FINAL_STATES),
+  checks: z.enum(AI_RUN_CHECKS).optional(),
+  commit: z
+    .string()
+    .regex(/^[0-9a-f]{7,64}$/, 'Must be a commit SHA')
+    .optional(),
+  finishedAt: z.iso.datetime({ offset: true }).optional(),
+  message: z.string().min(1).optional(),
+});
+
+export type AiRunReport = z.infer<typeof aiRunReportSchema>;

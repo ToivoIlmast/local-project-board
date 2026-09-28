@@ -81,7 +81,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
       git,
       events,
       ai: { rules: config.ai.rules },
-      aiRun: createAiRunService({ storage, statuses: config.statuses }),
+      aiRun: createAiRunService({ storage, statuses: config.statuses, events }),
     };
 
     const token = createSessionToken();

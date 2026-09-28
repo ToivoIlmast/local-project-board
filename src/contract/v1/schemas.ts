@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
-import { aiRunSchema } from '../../core/model/aiRun.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
 import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
@@ -9,6 +8,7 @@ import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/w
  * duplicating it would only create drift. A v2 contract may diverge; v1 does not.
  */
 export {
+  aiRunReportSchema,
   aiRunSchema,
   documentMetaSchema,
   documentNameSchema,
@@ -85,8 +85,8 @@ export const updateTaskRequestSchema = z
     branch: z.string().min(1).nullable().optional(),
     /** An object replaces the task's overrides whole, as `labels` does; null removes them all. */
     workflow: workflowFlagsSchema.nullable().optional(),
-    /** The agent's report of its run (T27); an object replaces it whole, null removes it. */
-    aiRun: aiRunSchema.nullable().optional(),
+    /** null clears the run (user cleanup). An object is rejected — use the report route (T32). */
+    aiRun: z.null().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');
 

@@ -49,6 +49,7 @@ describe('generated AI instructions', () => {
       // Runner lifecycle routes: not for agents, only for the runner process (T31).
       'ai-run.begin',
       'ai-run.end',
+      'ai-run.report',
       'events.stream',
       'instructions.get',
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).

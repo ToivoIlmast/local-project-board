@@ -155,7 +155,6 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         const { branch, workflow, aiRun, ...rest } = patch;
         Object.assign(task, rest, { updatedAt: NOW });
         if (aiRun === null) delete task.aiRun;
-        else if (aiRun !== undefined) task.aiRun = { ...aiRun };
         if (branch === null) delete task.branch;
         else if (branch !== undefined) task.branch = branch;
         if (workflow === null) delete task.workflow;

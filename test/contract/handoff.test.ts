@@ -389,7 +389,7 @@ describe('renderWorkflowSteps', () => {
 
       expect(text).toContain('Never merge a branch');
       expect(text).toContain('Never write the session token into a file of the project');
-      expect(text).toContain('Record your run in the task');
+      expect(text).toContain('report your run to the board');
       expect(text).toContain('stop and wait for the review');
     });
 
@@ -415,7 +415,7 @@ describe('renderWorkflowSteps', () => {
           '6. Do not push: nothing leaves this machine. _(source: default)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
-          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           '11. Never write the session token into a file of the project, a task, a document or a report.',
           '12. When you are done, stop and wait for the review; do not start another task.',
@@ -439,7 +439,7 @@ describe('renderWorkflowSteps', () => {
           '6. Do not push: there is nothing to push. _(source: board; inactive: editCode is off)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
-          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           '11. Never write the session token into a file of the project, a task, a document or a report.',
           '12. When you are done, stop and wait for the review; do not start another task.',
@@ -470,7 +470,7 @@ describe('renderWorkflowSteps', () => {
           '6. Push your commits to the remote. _(source: board)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
-          '9. Record your run in the task, for the board to show it: when you start, `PATCH /api/v1/tasks/T13` with `{"aiRun":{"agent":"<your name>","state":"working","startedAt":"<now>"}}`; when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or `needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, like `2026-09-26T10:00:00Z`.',
+          "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           '11. Never write the session token into a file of the project, a task, a document or a report.',
           '12. When you are done, stop and wait for the review; do not start another task.',
@@ -479,29 +479,46 @@ describe('renderWorkflowSteps', () => {
     });
   });
 
-  describe('the run of the agent, reported back to the board (T27)', () => {
-    it('tells the agent to record its run on this very task, with the fields of the model', () => {
+  describe('the run of the agent, reported back to the board (T27 updated in T32)', () => {
+    it('tells the agent to send its report to the dedicated route with the runId (INVARIANT)', () => {
       const rule = workflowSteps(effective(), FACTS).find((step) =>
-        step.text.startsWith('Record your run'),
+        step.text.startsWith('When you finish, report your run'),
       );
 
       expect(rule?.key).toBeNull();
-      expect(rule?.text).toContain(`\`PATCH ${API_BASE_PATH}/tasks/T13\``);
-      expect(rule?.text).not.toContain('/tasks/T1`');
-      for (const field of ['agent', 'state', 'startedAt', 'checks', 'commit', 'finishedAt']) {
+      // Route uses the task id, not a neighbour task
+      expect(rule?.text).toContain(`/tasks/T13/ai-run/`);
+      expect(rule?.text).not.toContain('/tasks/T1/');
+      // Agent fields only
+      for (const field of ['agent', 'state', 'checks', 'commit', 'finishedAt', 'message']) {
         expect(rule?.text).toContain(field);
       }
-      // The start of the report is a body the API takes as it is.
-      const body = /with `(\{"aiRun".*?\}\})`/.exec(rule?.text ?? '')?.[1] ?? '';
-      expect(JSON.parse(body)).toEqual({
-        aiRun: { agent: '<your name>', state: 'working', startedAt: '<now>' },
-      });
+      // The agent is told the runner writes startedAt, not to provide it (INVARIANT: protects sessionId)
+      expect(rule?.text).toContain('runner writes `startedAt`');
+      // Has the report route URL
+      expect(rule?.text).toContain('/report');
+      // Mentions begin for the no-run case
+      expect(rule?.text).toContain(`POST ${API_BASE_PATH}/tasks/T13/ai-run`);
+      // No token (INVARIANT)
+      expect(rule?.text).not.toMatch(/Bearer\s+\S{10}/);
+    });
+
+    it('with a runId in facts, embeds the specific route URL (INVARIANT: mutation check)', () => {
+      const factsWithRun: WorkflowFacts = { ...FACTS, runId: 5 };
+      const rule = workflowSteps(effective(), factsWithRun).find((step) =>
+        step.text.startsWith('When you finish, report your run'),
+      );
+
+      // The specific runId appears in the URL
+      expect(rule?.text).toContain('/ai-run/5/report');
+      // The no-run begin instruction is absent when a run exists
+      expect(rule?.text).not.toContain('If there is no current run');
     });
 
     it('is asked for even when nothing may be edited: an analysis is a run too', () => {
       const text = renderWorkflowSteps(effective({ task: { editCode: false } }), FACTS);
 
-      expect(text).toContain('Record your run in the task');
+      expect(text).toContain('report your run to the board');
     });
   });
 

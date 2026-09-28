@@ -120,7 +120,7 @@ describe('POST /tasks/:id/ai-run/:runId/end (end)', () => {
 });
 
 describe('routes absent from generateInstructions (INVARIANT)', () => {
-  it('ai-run begin and end routes are not in the generated instructions', () => {
+  it('ai-run begin, end and report routes are not in the generated instructions', () => {
     const instructions = generateInstructions({
       baseUrl: 'http://127.0.0.1:7432/api/v1',
       token: 'tok',

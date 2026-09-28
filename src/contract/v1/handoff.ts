@@ -18,6 +18,11 @@ export interface WorkflowFacts {
   status: string;
   /** The branch to work in: the one the task records, or the one its title gives. */
   branch: string;
+  /**
+   * The runId of the task's current aiRun, when the runner has already called begin (T32).
+   * Undefined means there is no current run; the rule tells the agent to start one.
+   */
+  runId?: number | undefined;
 }
 
 /** One numbered step; `key` is the setting that decides it, and null for a rule that is not one. */
@@ -136,19 +141,37 @@ const STEPS: Renderers = {
       : `When you are done, move the task to \`${value}\`: ${patch(facts, { status: value })}.`,
 };
 
+const reportUrl = (facts: WorkflowFacts): string =>
+  facts.runId !== undefined
+    ? `\`PATCH ${tasks(facts)}/ai-run/${facts.runId}/report\``
+    : `\`PATCH ${tasks(facts)}/ai-run/<runId>/report\``;
+
 /**
  * What an agent always does and never does, whatever is configured: these are not settings
  * (ADR-0028). Reporting the run is one of them: an analysis is a run as much as a change is,
- * and the board shows what the agent said about it (T27, the model of T20).
+ * and the board shows what the agent said about it (T27, the model of T20, updated in T32).
  */
 const RULES: readonly ((facts: WorkflowFacts) => string)[] = [
-  (facts) =>
-    'Record your run in the task, for the board to show it: when you start, ' +
-    `${patch(facts, { aiRun: { agent: '<your name>', state: 'working', startedAt: '<now>' } })}; ` +
-    'when you finish, send the whole `aiRun` again with `state` `finished`, `failed` or ' +
-    '`needs-review`, `checks` `passed`, `failed` or `skipped`, `commit` (the SHA of your last ' +
-    'commit, if you made one), the same `startedAt` and a `finishedAt`. Times are ISO 8601, ' +
-    'like `2026-09-26T10:00:00Z`.',
+  (facts) => {
+    const routeText = reportUrl(facts);
+    const beginNote =
+      facts.runId === undefined
+        ? ` If there is no current run (no \`runId\` in the task's \`aiRun\`), start one first: ` +
+          `\`POST ${tasks(facts)}/ai-run\` with your \`sessionId\`, \`mode\` and \`model\`. ` +
+          `The server assigns the \`runId\`; use it in the report URL. `
+        : ' ';
+    return (
+      'When you finish, report your run to the board: send ' +
+      routeText +
+      ' with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), ' +
+      '`checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, ' +
+      'if you made one), and `finishedAt`. ' +
+      'On `failed`, also send `message` describing what went wrong. ' +
+      'The runner writes `startedAt` and the runner fields; do not send them here.' +
+      beginNote +
+      'Times are ISO 8601, like `2026-09-28T10:00:00Z`.'
+    );
+  },
   () => 'Never merge a branch, into any branch.',
   () => 'Never write the session token into a file of the project, a task, a document or a report.',
   () => 'When you are done, stop and wait for the review; do not start another task.',
@@ -234,6 +257,7 @@ export function generateHandoff({
     taskId: task.id,
     status: task.status,
     branch: task.branch ?? taskBranchName(task.id, task.title),
+    runId: task.aiRun?.runId,
   };
   const lines = [`# Task ${task.id}: ${task.title}`, '', `- Status: \`${task.status}\``];
   if (task.labels.length > 0) {

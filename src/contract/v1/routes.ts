@@ -351,6 +351,32 @@ export const routes = {
     ai: { include: false },
   }),
 
+  'ai-run.report': route({
+    id: 'ai-run.report',
+    method: 'PATCH',
+    path: '/tasks/:id/ai-run/:runId/report',
+    summary:
+      'Agent: report the result of a run; runId must match the current run; runner fields are rejected',
+    params: z.strictObject({ id: s.taskIdSchema, runId: z.coerce.number().int().nonnegative() }),
+    request: s.aiRunReportSchema,
+    response: json(s.taskSchema),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: {
+        agent: 'claude-code',
+        state: 'finished',
+        checks: 'passed',
+        commit: '9f1c1a2b',
+        finishedAt: '2026-09-21T09:05:00.000Z',
+      },
+      response: exampleTask,
+    },
+    // The report route is described in the handoff with the specific runId; agents do not call
+    // it without a current run, and the general instructions cannot embed a runId.
+    ai: { include: false },
+  }),
+
   'workflow.get': route({
     id: 'workflow.get',
     method: 'GET',

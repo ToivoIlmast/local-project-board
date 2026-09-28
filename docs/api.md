@@ -790,6 +790,44 @@ Response — 200, application/json:
 }
 ```
 
+### PATCH /api/v1/tasks/:id/ai-run/:runId/report
+
+Agent: report the result of a run; runId must match the current run; runner fields are rejected
+
+Not given to AI agents in the generated instructions.
+
+Example: PATCH /api/v1/tasks/T12/ai-run/1/report
+
+Request body:
+
+```json
+{
+  "agent": "claude-code",
+  "state": "finished",
+  "checks": "passed",
+  "commit": "9f1c1a2b",
+  "finishedAt": "2026-09-21T09:05:00.000Z"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "T12",
+  "title": "Extract the git adapter",
+  "status": "in-progress",
+  "rank": "a1",
+  "body": "## Context\n\nThe status parser still lives in the HTTP layer.\n",
+  "labels": [
+    "refactor"
+  ],
+  "branch": "feat/git-adapter",
+  "createdAt": "2026-09-21T09:00:00.000Z",
+  "updatedAt": "2026-09-21T11:30:00.000Z"
+}
+```
+
 ## Runs
 
 ### GET /api/v1/runs
@@ -826,6 +864,7 @@ nothing else. The code is one of:
 - INVALID_GIT_ARGUMENT
 - STALE_AI_RUN
 - AI_RUN_IN_PROGRESS
+- AI_RUN_ALREADY_FINAL
 - INVALID_REQUEST
 - INVALID_JSON
 - UNAUTHORIZED
