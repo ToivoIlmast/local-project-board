@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 264ca6e8e9040194d3a7dc925cc64b0f5d1593f1 -->
+<!-- Based on README.md @ 1641e28b4d4ba6d6348d492d81e7518433d404a8 -->
 
 # local-project-board
 
@@ -138,7 +138,8 @@ npx local-project-board instructions
 tulostaa kaiken, mitä agentti tarvitsee käyttääkseen taulua API:n kautta: perus-URL:n, tunnuksen
 (kun taulu on käynnissä), tämän taulun tilat ja jokaisen reitin esimerkkeineen. Anna teksti
 Claudelle, ChatGPT:lle tai omalle työkalullesi, niin se voi lukea taulua, luoda ja siirtää
-tehtäviä, kirjoittaa dokumentteja ja tallentaa raportteja.
+tehtäviä, kirjoittaa dokumentteja ja tallentaa raportteja. Projekti tukee myös tekoälyavusteista
+tehtävien suorittamista Claude Coden kautta ([Claude Code](#claude-code)).
 
 Täydellinen reittiviite — jokainen reitti, myös ne, jotka tämä teksti jättää pois, sekä jokainen
 virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samasta reittitaulusta.

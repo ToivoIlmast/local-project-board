@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 264ca6e8e9040194d3a7dc925cc64b0f5d1593f1 -->
+<!-- Based on README.md @ 1641e28b4d4ba6d6348d492d81e7518433d404a8 -->
 
 # local-project-board
 
@@ -134,7 +134,8 @@ npx local-project-board instructions
 skriver ut allt en agent behöver för att använda tavlan genom dess API: bas-URL:en, token (när
 tavlan kör), den här tavlans statusar och varje rutt med exempel. Ge texten till Claude, ChatGPT
 eller ditt eget verktyg, så kan den läsa tavlan, skapa och flytta uppgifter, skriva dokument och
-spara rapporter.
+spara rapporter. Projektet stöder också AI-assisterad uppgiftskörning via Claude Code
+([Claude Code](#claude-code)).
 
 Den fullständiga ruttreferensen — varje rutt, även de som den här texten utelämnar, varje felkod och
 mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
