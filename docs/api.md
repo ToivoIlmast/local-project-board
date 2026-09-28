@@ -269,7 +269,8 @@ Response — 200, application/json:
     "startStatus": "in-progress",
     "finishStatus": null,
     "baseBranch": null,
-    "checkCommand": "npm test"
+    "checkCommand": "npm test",
+    "reportLanguage": null
   },
   "sources": {
     "editCode": "status",
@@ -281,7 +282,8 @@ Response — 200, application/json:
     "startStatus": "default",
     "finishStatus": "default",
     "baseBranch": "default",
-    "checkCommand": "board"
+    "checkCommand": "board",
+    "reportLanguage": "default"
   },
   "inactive": [
     "branch",
@@ -369,7 +371,8 @@ Response — 200, application/json:
     "startStatus": "in-progress",
     "finishStatus": null,
     "baseBranch": null,
-    "checkCommand": null
+    "checkCommand": null,
+    "reportLanguage": null
   },
   "board": {
     "push": false,
@@ -419,7 +422,8 @@ Response — 200, application/json:
     "startStatus": "in-progress",
     "finishStatus": null,
     "baseBranch": null,
-    "checkCommand": null
+    "checkCommand": null,
+    "reportLanguage": null
   },
   "board": {
     "push": false,

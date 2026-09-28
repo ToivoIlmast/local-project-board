@@ -92,6 +92,7 @@ export function anEffectiveWorkflow(overrides: Partial<EffectiveWorkflow> = {}):
       finishStatus: 'default',
       baseBranch: 'default',
       checkCommand: 'default',
+      reportLanguage: 'default',
     },
     inactive: [],
     ...overrides,
