@@ -418,7 +418,8 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
       `#!${process.execPath}`,
       "const { writeFileSync } = require('node:fs');",
       '(async () => {',
-      '  const url = /read GET (\\S+) and follow it/.exec(process.argv[2])[1];',
+      '  const prompt = process.argv[process.argv.length - 1];',
+      '  const url = /read GET (\\S+) and follow it/.exec(prompt)[1];',
       '  const handoff = await (await fetch(url)).text();',
       `  writeFileSync(${JSON.stringify(log)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), handoff }));`,
       '  const [, api, id] = /^(.*)\\/tasks\\/([^/]+)\\/handoff$/.exec(url);',
@@ -477,9 +478,11 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
       handoff: string;
     };
     const address = board.url.replace(/\/$/, '').replace('localhost', '127.0.0.1');
-    expect(call.argv).toEqual([
+    expect(call.argv).toHaveLength(3);
+    expect(call.argv[0]).toBe('--session-id');
+    expect(call.argv[2]).toBe(
       `Work on task T1 of the local board: read GET ${address}/api/v1/tasks/T1/handoff and follow it.`,
-    ]);
+    );
     expect(call.cwd).toBe(await realpath(board.root));
     expect(call.handoff).toMatch(/^# Task T1: Ship it\n/);
     expect(call.handoff).toContain('# local-project-board API (v1)');
