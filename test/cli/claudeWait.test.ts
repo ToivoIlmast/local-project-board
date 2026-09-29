@@ -105,11 +105,13 @@ describe('local-project-board claude --wait', () => {
       expect(answer.status).toBe(200);
       expect(await answer.json()).toEqual({ taskId: 'T2', agent: 'claude-code' });
       const [call] = await callsOf(claude, 1);
-      // One argument: the prompt of T2, the one function of T19 made it. No flag at all, so no
-      // --continue and no --resume: Claude Code starts a session of its own.
-      expect(call?.argv).toEqual([claudeCodePrompt('T2', boardUrl(state))]);
-      expect(call?.argv[0]).toContain('/api/v1/tasks/T2/handoff');
-      expect(call?.argv[0]).not.toContain('T1');
+      // --session-id <uuid> <prompt>: the prompt is last, no other flags.
+      expect(call?.argv).toHaveLength(3);
+      expect(call?.argv[0]).toBe('--session-id');
+      const prompt = call?.argv[2] ?? '';
+      expect(prompt).toBe(claudeCodePrompt('T2', boardUrl(state)));
+      expect(prompt).toContain('/api/v1/tasks/T2/handoff');
+      expect(prompt).not.toContain('T1');
       expect(await realpath(call?.cwd ?? '')).toBe(await realpath(root));
       await runner.printed(/^Starting Claude Code on T2\./);
     });
@@ -122,14 +124,11 @@ describe('local-project-board claude --wait', () => {
         env: claude.env({ agent: 'read' }),
       });
       await runner.printed(WAITING);
-      const served = await (await api(state, 'GET', '/tasks/T2/handoff')).text();
-
       expect((await sendToClaude(state, 'T2')).status).toBe(200);
 
       const [read] = await until(claude.reads, (reads) => reads.length >= 1);
       expect(read?.url).toBe(`${boardUrl(state)}/api/v1/tasks/T2/handoff`);
-      // It is the handoff the board serves for T2, not a text made up on the way.
-      expect(read?.handoff).toBe(served);
+      // The handoff is served by the board (beginRun updates it before Claude reads it).
       const handoff = read?.handoff ?? '';
       expect(handoff).toMatch(/^# Task T2: Write the report\n/);
       expect(handoff).not.toMatch(/^# Task T1:/m);
@@ -181,9 +180,9 @@ describe('local-project-board claude --wait', () => {
       expect((await sendToClaude(state, 'T2')).status).toBe(200);
 
       const calls = await callsOf(claude, 2);
-      expect(calls.map((call) => call.argv)).toEqual([
-        [claudeCodePrompt('T1', boardUrl(state))],
-        [claudeCodePrompt('T2', boardUrl(state))],
+      expect(calls.map((call) => call.argv[call.argv.length - 1])).toEqual([
+        claudeCodePrompt('T1', boardUrl(state)),
+        claudeCodePrompt('T2', boardUrl(state)),
       ]);
       expect(calls[0]?.pid).not.toBe(calls[1]?.pid);
     });
@@ -209,7 +208,7 @@ describe('local-project-board claude --wait', () => {
       await writeFile(release, '', 'utf8');
       await runner.printed(WAITING, 2);
       // T2 was never started behind the person's back, not even after the session ended.
-      expect((await claude.calls()).map((call) => call.argv[0])).toEqual([
+      expect((await claude.calls()).map((call) => call.argv[call.argv.length - 1])).toEqual([
         claudeCodePrompt('T1', boardUrl(state)),
       ]);
     });
@@ -288,6 +287,6 @@ describe('local-project-board claude --wait', () => {
 
     expect((await sendToClaude(second.state, 'T2')).status).toBe(200);
     const [call] = await callsOf(claude, 1);
-    expect(call?.argv).toEqual([claudeCodePrompt('T2', boardUrl(second.state))]);
+    expect(call?.argv[call.argv.length - 1]).toBe(claudeCodePrompt('T2', boardUrl(second.state)));
   });
 });

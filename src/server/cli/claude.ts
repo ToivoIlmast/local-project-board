@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { constants } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { claudeCodePrompt } from '../../contract/v1/index.js';
+import { API_BASE_PATH, claudeCodePrompt } from '../../contract/v1/index.js';
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
 import { findRunningBoard, get } from './running.js';
@@ -20,8 +21,8 @@ const PROGRAM = 'claude';
  *
  * It checks everything that can be checked before the session starts — the id, the running
  * board, the task, `claude` itself — and says which of them is wrong. Then Claude Code is given
- * one thing: the prompt that points it at the live handoff. No token, no handoff text, no flags
- * of its own: the model and the permissions are the user's own settings of Claude Code.
+ * `--session-id <uuid> <prompt>`. No token, no handoff text, no other flags of its own: the
+ * model and the permissions are the user's own settings of Claude Code.
  *
  * Resolves to the exit code the session ended with, so that the command ends as `claude` did.
  */
@@ -49,19 +50,23 @@ export async function launchClaude(
 
 /**
  * The one way a session of Claude Code starts, for `claude <ID>` and for the runner of
- * `claude --wait` alike: `claude` with one argument, the prompt that points at the live handoff
- * of this task, in the root of the project, in this terminal. No flag, so no `--continue` and
- * no `--resume`: every start is a session of its own (T19, T27).
+ * `claude --wait` alike. Generates a UUID, records the session on the board (begin), then
+ * starts `claude --session-id <uuid> <prompt>` in the root of the project. Records the
+ * process outcome on the board (end) before resolving (T33).
  */
-export function startSession(
+export async function startSession(
   program: string,
   id: string,
   board: RuntimeState,
   root: string,
   env: NodeJS.ProcessEnv,
 ): Promise<number> {
+  const sessionId = randomUUID();
   const prompt = claudeCodePrompt(id, board.url.replace(/\/+$/, ''));
-  return run(program, [prompt], root, env);
+
+  const runId = await beginRun(board, id, sessionId);
+
+  return run(program, ['--session-id', sessionId, prompt], root, env, board, id, runId, sessionId);
 }
 
 /** `claude` as the PATH finds it, or the reason there is none, in words a user can act on. */
@@ -95,6 +100,87 @@ async function boardMessage(answer: Response): Promise<string> {
 }
 
 /**
+ * POST to the board with the session token; nothing when the network fails.
+ * Never puts the token in a URL or a log.
+ */
+async function postBoard(
+  state: RuntimeState,
+  path: string,
+  body: unknown,
+): Promise<Response | undefined> {
+  try {
+    return await fetch(`${state.url}${API_BASE_PATH.slice(1)}${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Records the start of a session on the board; throws if the board refuses.
+ * Called before spawn so that no session ever runs without a recorded run (T33).
+ */
+async function beginRun(board: RuntimeState, taskId: string, sessionId: string): Promise<number> {
+  const response = await postBoard(board, `/tasks/${taskId}/ai-run`, { sessionId, mode: 'new' });
+  if (response === undefined) {
+    throw new Error(
+      `The board did not answer when beginning run for ${taskId}. Is it still running?`,
+    );
+  }
+  if (!response.ok) {
+    throw new Error(await boardMessage(response));
+  }
+  const body = (await response.json()) as { runId?: number };
+  if (typeof body.runId !== 'number') {
+    throw new Error(`The board returned an unexpected response for begin on ${taskId}.`);
+  }
+  return body.runId;
+}
+
+/** How long to retry end before giving up and printing a manual-recovery message. */
+const END_RETRY_MS = 30_000;
+const END_RETRY_INITIAL_DELAY_MS = 200;
+
+/**
+ * Records the end of a session on the board, retrying for ~30 s on network failure.
+ * If all retries fail, prints a recovery message to stderr — the one case that cannot
+ * be recorded (T33).
+ */
+async function endRun(
+  board: RuntimeState,
+  taskId: string,
+  runId: number,
+  input: { exitCode?: number; launchError?: string },
+  sessionId: string,
+): Promise<void> {
+  const deadline = Date.now() + END_RETRY_MS;
+  let delay = END_RETRY_INITIAL_DELAY_MS;
+  for (;;) {
+    const response = await postBoard(board, `/tasks/${taskId}/ai-run/${runId}/end`, input);
+    if (response?.ok) return;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise<void>((resolve) => {
+      const ms = Math.min(delay, remaining);
+      setTimeout(resolve, ms);
+    });
+    delay = Math.min(delay * 2, 5_000);
+  }
+  process.stderr.write(
+    `Warning: could not record run end for task ${taskId}.\n` +
+      `  taskId: ${taskId}  runId: ${runId}  sessionId: ${sessionId}\n` +
+      `  Recover: PATCH /api/v1/tasks/${taskId}/ai-run/${runId}/end manually.\n`,
+  );
+}
+
+/**
  * The file `name` in the PATH that can be run, or nothing. Looked up here, not left to `spawn`,
  * so that a missing `claude` is told apart from any other reason a start can fail. On Windows
  * only `claude.exe` counts: a `.cmd` cannot be started without a shell, and there is none here.
@@ -117,16 +203,21 @@ async function findExecutable(name: string, env: NodeJS.ProcessEnv): Promise<str
 
 /**
  * Runs the program with the terminal of this process, without a shell, and resolves to how it
- * ended. While it runs, Ctrl+C belongs to it: the terminal sends it to both of us, and this
- * process must not die before the session has said goodbye.
+ * ended. Records begin/end on the board. While it runs, Ctrl+C belongs to it: the terminal
+ * sends it to both of us, and this process must not die before the session has said goodbye.
+ * End is always sent — whether the process exits normally, via signal, or fails to start (T33).
  */
 function run(
   program: string,
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  board: RuntimeState,
+  taskId: string,
+  runId: number,
+  sessionId: string,
 ): Promise<number> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const child = spawn(program, args, { cwd, env, stdio: 'inherit', shell: false });
     const forwarded = (['SIGTERM', 'SIGHUP'] as const).map((signal) => {
       const forward = (): void => void child.kill(signal);
@@ -135,19 +226,32 @@ function run(
     });
     const ignore = (): void => undefined;
     process.on('SIGINT', ignore);
+
+    let released = false;
     const release = (): void => {
+      if (released) return;
+      released = true;
       process.off('SIGINT', ignore);
       for (const [signal, forward] of forwarded) process.off(signal, forward);
     };
 
-    child.once('error', (error) => {
+    let ended = false;
+    const doEnd = (input: { exitCode?: number; launchError?: string }, code: number): void => {
+      if (ended) return;
+      ended = true;
       release();
-      reject(new Error(`Claude Code could not be started: ${error.message}`));
+      endRun(board, taskId, runId, input, sessionId)
+        .then(() => resolve(code))
+        .catch(() => resolve(code));
+    };
+
+    child.once('error', (error) => {
+      process.stderr.write(`Claude Code could not be started: ${error.message}\n`);
+      doEnd({ launchError: error.message }, 1);
     });
     child.once('close', (code, signal) => {
-      release();
-      // The way a shell reports a program that a signal ended.
-      resolve(code ?? (signal === null ? 1 : 128 + (constants.signals[signal] ?? 0)));
+      const exitCode = code ?? (signal === null ? 1 : 128 + (constants.signals[signal] ?? 0));
+      doEnd({ exitCode }, exitCode);
     });
   });
 }
