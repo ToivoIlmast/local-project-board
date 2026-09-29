@@ -66,9 +66,16 @@ class Agent {
     return this.instructions;
   }
 
-  /** The instructions promise this route; the agent calls nothing they do not describe. */
+  /**
+   * The instructions or the handoff describe this route; the agent calls nothing outside that
+   * context. Routes the handoff embeds directly (e.g. the report route with a specific runId)
+   * are matched by their pattern, not their literal URL.
+   */
   private documents(method: string, route: string): boolean {
-    return this.instructions.includes(`### ${method} /api/v1${route}`);
+    if (this.instructions.includes(`### ${method} /api/v1${route}`)) return true;
+    // Routes described in the handoff text via their pattern path
+    const pattern = route.replace(/:[\w]+/g, '[^/]+');
+    return new RegExp(`\`${method} /api/v1${pattern}\``).test(this.instructions);
   }
 
   async call(method: string, route: string, path: string, body?: unknown): Promise<Response> {
@@ -220,12 +227,7 @@ function calls(handoff: string): { method: string; route: string; path: string; 
         method: 'PATCH',
         route: '/tasks/:id',
         path: patch[1] ?? '',
-        // What the steps leave to the agent, it fills in: its name and the time (T27).
-        body: JSON.parse(
-          (patch[2] ?? '')
-            .replace('"<your name>"', '"test-agent"')
-            .replace('"<now>"', `"${new Date().toISOString()}"`),
-        ),
+        body: JSON.parse(patch[2] ?? ''),
       });
     }
     const put = /`PUT \/api\/v1(\/tasks\/T\d+\/documents\/report\.md)`/.exec(line);
@@ -235,6 +237,16 @@ function calls(handoff: string): { method: string; route: string; path: string; 
         route: '/tasks/:id/documents/:name',
         path: put[1] ?? '',
         body: { content: '# Report\n\nDone as the handoff said.\n' },
+      });
+    }
+    // The report route: agent sends a PATCH to /tasks/:id/ai-run/:runId/report (T32)
+    const report = /`PATCH \/api\/v1(\/tasks\/T\d+\/ai-run\/(?:\d+|<runId>)\/report)`/.exec(line);
+    if (report) {
+      found.push({
+        method: 'PATCH',
+        route: '/tasks/:id/ai-run/:runId/report',
+        path: report[1] ?? '',
+        body: { agent: 'test-agent', state: 'finished' },
       });
     }
   }
@@ -250,10 +262,20 @@ describe('an external agent with nothing but the handoff of a task', () => {
           .expect(201)
       ).body,
     );
+    // The agent calls begin (as the handoff instructs when no run exists) to get a runId
+    const beginRes = await board.post(`/api/v1/tasks/${created.id}/ai-run`, {
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      mode: 'new',
+    });
+    const runId = (beginRes.body as { runId: number }).runId;
+
+    // Re-read the handoff now that a run exists; it will embed the specific runId
     const agent = await Agent.fromHandoff(board.port, created.id);
 
     for (const call of calls(agent.text)) {
-      await agent.json(call.method, call.route, call.path, call.body);
+      // Substitute the placeholder <runId> with the actual runId in the path
+      const path = call.path.replace('<runId>', String(runId));
+      await agent.json(call.method, call.route, path, call.body);
     }
 
     const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
@@ -261,8 +283,8 @@ describe('an external agent with nothing but the handoff of a task', () => {
     // moves to `done` when the agent finishes (finishStatus default for a board with done).
     expect(after.status).toBe('done');
     expect(after.branch).toBe('task/T1-audit-the-dependency-graph');
-    // The start of its run is on the board, in the words of the model (T27).
-    expect(after.aiRun).toMatchObject({ agent: 'test-agent', state: 'working' });
+    // The agent reported finished (T32)
+    expect(after.aiRun).toMatchObject({ agent: 'test-agent', state: 'finished' });
     const report = await agent.call(
       'GET',
       '/tasks/:id/documents/:name',
@@ -289,19 +311,28 @@ describe('an external agent with nothing but the handoff of a task', () => {
       .expect(200);
     const agent = await Agent.fromHandoff(board.port, created.id);
 
-    // What is left is reporting the run itself, which no setting turns off (T27).
+    // What is left is reporting the run itself, which no setting turns off (T32).
     const left = calls(agent.text);
     expect(left).toEqual([
       {
         method: 'PATCH',
-        route: '/tasks/:id',
-        path: `/tasks/${created.id}`,
-        body: { aiRun: { agent: 'test-agent', state: 'working', startedAt: expect.any(String) } },
+        route: '/tasks/:id/ai-run/:runId/report',
+        path: `/tasks/${created.id}/ai-run/<runId>/report`,
+        body: { agent: 'test-agent', state: 'finished' },
       },
     ]);
-    for (const call of left) await agent.json(call.method, call.route, call.path, call.body);
+    // The agent calls begin first (as the handoff says when no run exists), then report
+    const beginRes = await board.post(`/api/v1/tasks/${created.id}/ai-run`, {
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      mode: 'new',
+    });
+    const runId = (beginRes.body as { runId: number }).runId;
+    for (const call of left) {
+      const path = call.path.replace('<runId>', String(runId));
+      await agent.json(call.method, call.route, path, call.body);
+    }
     const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
-    expect(after).toMatchObject({ status: 'todo', aiRun: { state: 'working' } });
+    expect(after).toMatchObject({ status: 'todo', aiRun: { state: 'finished' } });
     expect(after.branch).toBeUndefined();
     expect(await board.storage.listDocuments('T1')).toEqual([]);
   });

@@ -135,7 +135,7 @@ describe('local-project-board claude --wait', () => {
       expect(handoff).not.toMatch(/^# Task T1:/m);
       expect(handoff).toContain('## How to work on this task');
       expect(handoff).toContain('Work in a branch of your own, `task/T2-write-the-report`');
-      expect(handoff).toContain('Record your run in the task');
+      expect(handoff).toContain('report your run to the board');
       expect(handoff).toContain('# local-project-board API (v1)');
       expect(handoff).toContain('### Project rules');
       expect(handoff).toContain('- Keep commits small.');

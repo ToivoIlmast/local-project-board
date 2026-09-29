@@ -146,4 +146,7 @@ export const handlers: Handlers = {
 
   'ai-run.end': async (context, { params, body }) =>
     context.aiRun.end(params.id, params.runId, body),
+
+  'ai-run.report': async (context, { params, body }) =>
+    context.aiRun.report(params.id, params.runId, body),
 };

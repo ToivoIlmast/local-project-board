@@ -15,6 +15,8 @@ export const BOARD_ERROR_CODES = [
   'STALE_AI_RUN',
   /** Runner called begin when the task already has state: working (T31). */
   'AI_RUN_IN_PROGRESS',
+  /** Agent sent a report when the run already has a final state (T32). */
+  'AI_RUN_ALREADY_FINAL',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

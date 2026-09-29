@@ -44,6 +44,7 @@ describe('renderApiDoc', () => {
     expect(hidden.sort()).toEqual([
       'ai-run.begin',
       'ai-run.end',
+      'ai-run.report',
       'events.stream',
       'instructions.get',
       'runs.stream',

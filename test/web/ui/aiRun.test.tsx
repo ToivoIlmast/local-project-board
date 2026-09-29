@@ -83,14 +83,23 @@ describe('the AI run in the details of a task (T27 + T20)', () => {
     const rendered = await openTask({});
 
     await act(async () => {
-      await rendered.board.client.updateTask('T1', {
-        aiRun: { agent: 'claude-code', state: 'working' },
+      rendered.board.emit({
+        type: 'task.updated',
+        task: aTask({
+          id: 'T1',
+          title: 'Ship it',
+          status: 'todo',
+          aiRun: { agent: 'claude-code', state: 'working' },
+        }),
       });
     });
     expect(value('State')).toBe('working');
 
     await act(async () => {
-      await rendered.board.client.updateTask('T1', { aiRun: finished });
+      rendered.board.emit({
+        type: 'task.updated',
+        task: aTask({ id: 'T1', title: 'Ship it', status: 'todo', aiRun: finished }),
+      });
     });
     expect(value('State')).toBe('finished');
     expect(value('Checks')).toBe('passed');

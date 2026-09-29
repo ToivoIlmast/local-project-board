@@ -105,7 +105,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     git,
     events: bus,
     ai: { rules: options.rules ?? [] },
-    aiRun: createAiRunService({ storage, statuses }),
+    aiRun: createAiRunService({ storage, statuses, events: sink }),
   };
 
   // The app needs the bound port, so the server starts first and gets its handler after.

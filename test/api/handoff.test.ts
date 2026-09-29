@@ -574,3 +574,41 @@ describe('the handoff of a markdown board', () => {
     expect(text).toContain('source: default');
   });
 });
+
+describe('report route in handoff (T32)', () => {
+  beforeEach(async () => {
+    board = await createTestBoard();
+  });
+
+  it('no run: tells the agent to start one via begin before reporting', async () => {
+    const id = await createTask();
+    const text = await handoff(id);
+
+    expect(text).toContain('POST /api/v1/tasks/' + id + '/ai-run');
+    expect(text).toContain('/report');
+    // The actual token must never appear (the placeholder text "Bearer <session token>" is ok)
+    expect(text).not.toContain(board.token);
+  });
+
+  it('has run: embeds the specific runId in the report route URL (INVARIANT)', async () => {
+    const id = await createTask();
+    await board
+      .post(`${API}/tasks/${id}/ai-run`, {
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+      })
+      .expect(200);
+    const text = await handoff(id);
+
+    expect(text).toContain('PATCH /api/v1/tasks/' + id + '/ai-run/1/report');
+    expect(text).not.toContain('/ai-run/<runId>/report');
+  });
+
+  it('has exactly one mention of the ai-run report route URL (INVARIANT)', async () => {
+    const id = await createTask();
+    const text = await handoff(id);
+
+    const aiRunReportMentions = (text.match(/\/ai-run\/[^/]+\/report/g) ?? []).length;
+    expect(aiRunReportMentions).toBe(1);
+  });
+});

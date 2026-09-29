@@ -1,10 +1,12 @@
-import type { AiRun } from '../model/aiRun.js';
-import type { Storage } from '../ports.js';
+import type { AiRun, AiRunReport } from '../model/aiRun.js';
+import type { EventSink, Storage } from '../ports.js';
 import { BoardError } from '../errors.js';
+import type { Task } from '../model/task.js';
 
 export interface AiRunServiceOptions {
   storage: Storage;
   statuses: string[];
+  events?: EventSink | undefined;
 }
 
 export interface BeginInput {
@@ -23,6 +25,7 @@ export interface EndInput {
 export interface AiRunService {
   begin(taskId: string, input: BeginInput): Promise<AiRun>;
   end(taskId: string, runId: number, input: EndInput): Promise<AiRun>;
+  report(taskId: string, runId: number, input: AiRunReport): Promise<Task>;
 }
 
 /** The current runId from a task's aiRun, normalizing legacy records (no runId → 0). */
@@ -31,7 +34,7 @@ function currentRunId(aiRun: AiRun | undefined): number {
   return aiRun.runId ?? 0;
 }
 
-export function createAiRunService({ storage }: AiRunServiceOptions): AiRunService {
+export function createAiRunService({ storage, events }: AiRunServiceOptions): AiRunService {
   const now = (): string => new Date().toISOString();
 
   async function requireTask(id: string) {
@@ -128,6 +131,43 @@ export function createAiRunService({ storage }: AiRunServiceOptions): AiRunServi
 
       const updated = await storage.updateTask(taskId, { aiRun: patch });
       return updated.aiRun!;
+    },
+
+    async report(taskId, runId, input) {
+      const task = await requireTask(taskId);
+      const existingRun = task.aiRun;
+
+      if (!existingRun || currentRunId(existingRun) !== runId) {
+        throw new BoardError(
+          'STALE_AI_RUN',
+          `Run ${runId} is not the current run for task "${taskId}".`,
+          { id: taskId, runId },
+        );
+      }
+
+      if (existingRun.state !== 'working') {
+        throw new BoardError(
+          'AI_RUN_ALREADY_FINAL',
+          `Run ${runId} on task "${taskId}" already has a final state.`,
+          { id: taskId, runId },
+        );
+      }
+
+      const patch: AiRun = {
+        ...existingRun,
+        agent: input.agent,
+        state: input.state,
+        ...(input.checks !== undefined ? { checks: input.checks } : {}),
+        ...(input.commit !== undefined ? { commit: input.commit } : {}),
+        ...(input.finishedAt !== undefined ? { finishedAt: input.finishedAt } : {}),
+        ...(input.state === 'failed' && input.message !== undefined
+          ? { failure: { kind: 'agent', message: input.message } }
+          : {}),
+      };
+
+      const updated = await storage.updateTask(taskId, { aiRun: patch });
+      events?.publish({ type: 'task.updated', task: updated });
+      return updated;
     },
   };
 }
