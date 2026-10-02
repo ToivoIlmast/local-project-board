@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { SUPPORTED_LANGUAGES } from './language.js';
 
 /**
  * The AI workflow settings (ADR-0028). The board stores only overrides; the settings a task
  * really runs with are computed by `resolveWorkflow` and never stored.
  *
  * Six settings can be overridden on every level (board, column, task); all of them are booleans.
+ * `reportLanguage` sits between: the board and a task can set it, a column cannot (T34).
  */
 export const WORKFLOW_FLAGS = ['editCode', 'branch', 'checks', 'commit', 'push', 'report'] as const;
 
@@ -17,13 +19,29 @@ export const BOARD_WORKFLOW_KEYS = [
   'reportLanguage',
 ] as const;
 
+/** The one value setting a task may override besides the flags; a column may not (T34). */
+export const TASK_VALUE_KEYS = ['reportLanguage'] as const;
+
+/** Everything a task can override: the flags and the report language. */
+export const TASK_WORKFLOW_KEYS = [...WORKFLOW_FLAGS, ...TASK_VALUE_KEYS] as const;
+
+/** What only the whole board can set: the board's keys that a task cannot override either. */
+export const BOARD_ONLY_WORKFLOW_KEYS = [
+  'startStatus',
+  'finishStatus',
+  'baseBranch',
+  'checkCommand',
+] as const;
+
 export const WORKFLOW_KEYS = [...WORKFLOW_FLAGS, ...BOARD_WORKFLOW_KEYS] as const;
 
+export type TaskWorkflowKey = (typeof TASK_WORKFLOW_KEYS)[number];
+export type BoardOnlyWorkflowKey = (typeof BOARD_ONLY_WORKFLOW_KEYS)[number];
 export type WorkflowFlag = (typeof WORKFLOW_FLAGS)[number];
 export type BoardWorkflowKey = (typeof BOARD_WORKFLOW_KEYS)[number];
 export type WorkflowKey = (typeof WORKFLOW_KEYS)[number];
 
-/** Overrides of a column or a task: any subset of the boolean settings. */
+/** Overrides of a column: any subset of the boolean settings. */
 export const workflowFlagsSchema = z.strictObject({
   /** The agent changes the project's code; otherwise it only analyses and writes documents. */
   editCode: z.boolean().optional(),
@@ -41,6 +59,18 @@ export const workflowFlagsSchema = z.strictObject({
 
 const nonBlank = z.string().regex(/\S/, 'Must not be blank');
 
+/** One of the 14 languages the report can be written in (ADR-0028). */
+const reportLanguage = z.enum(SUPPORTED_LANGUAGES);
+
+/**
+ * Overrides of a task: the flags and the report language. There is no `null` here: "like the
+ * board" is the key left out, and English is `en`.
+ */
+export const taskWorkflowSchema = workflowFlagsSchema.extend({
+  /** Language for the AI-generated report on this task. */
+  reportLanguage: reportLanguage.optional(),
+});
+
 /**
  * Overrides of the whole board. `null` is a value, not a gap: it says "no status change" or
  * "the project's own default", which is different from not setting the key.
@@ -55,7 +85,7 @@ export const boardWorkflowSchema = workflowFlagsSchema.extend({
   /** The command that runs the checks; `null` is the project's full pipeline. */
   checkCommand: nonBlank.nullable().optional(),
   /** Language for the AI-generated report; `null` means English (the default). */
-  reportLanguage: nonBlank.nullable().optional(),
+  reportLanguage: reportLanguage.nullable().optional(),
 });
 
 /**
@@ -69,6 +99,7 @@ export const workflowOverridesSchema = z.strictObject({
 });
 
 export type WorkflowFlagOverrides = z.infer<typeof workflowFlagsSchema>;
+export type TaskWorkflowOverrides = z.infer<typeof taskWorkflowSchema>;
 export type BoardWorkflowOverrides = z.infer<typeof boardWorkflowSchema>;
 export type WorkflowOverrides = z.infer<typeof workflowOverridesSchema>;
 
@@ -84,7 +115,7 @@ export const workflowSettingsSchema = z.strictObject({
   finishStatus: z.string().min(1).nullable(),
   baseBranch: nonBlank.nullable(),
   checkCommand: nonBlank.nullable(),
-  reportLanguage: nonBlank.nullable(),
+  reportLanguage: reportLanguage.nullable(),
 });
 
 /** Where the value of a setting comes from. */

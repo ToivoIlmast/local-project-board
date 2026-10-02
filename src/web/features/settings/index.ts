@@ -3,5 +3,6 @@ export { SettingsPanel, type SettingsPanelProps } from './ui/SettingsPanel';
 // rules. A task is overridden in the same three states as a column, so none of it is copied.
 export { INACTIVE_NOTE, WORKFLOW_LABELS, boardValueText, onOff, sourceLabel } from './model/labels';
 export { FlagChoice, type FlagChoiceProps } from './ui/FlagChoice';
-export { effectiveFlag, setFlag } from './model/draft';
+export { effectiveFlag, effectiveLanguage, setFlag, setTaskLanguage } from './model/draft';
+export { LanguageChoice, type LanguageChoiceProps } from './ui/LanguageChoice';
 export { useOverridesDraft, type DraftKit, type OverridesDraft } from './model/useWorkflowDraft';

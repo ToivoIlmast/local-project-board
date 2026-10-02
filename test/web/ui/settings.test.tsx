@@ -1,6 +1,7 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import type { WorkflowOverrides, WorkflowState } from '../../../src/contract/v1/index';
 import { WORKFLOW_KEYS } from '../../../src/core/model/workflow';
+import { SUPPORTED_LANGUAGES } from '../../../src/core/model/language';
 import { defaultWorkflow } from '../../../src/core/rules/workflow';
 import { ApiError } from '../../../src/web/api/index';
 import { WORKFLOW_LABELS } from '../../../src/web/features/settings/index';
@@ -99,7 +100,13 @@ describe('the AI workflow settings panel', () => {
 
       const group = column('todo');
       expect(within(group).getAllByRole('combobox')).toHaveLength(6);
-      for (const key of ['startStatus', 'finishStatus', 'baseBranch', 'checkCommand'] as const) {
+      for (const key of [
+        'startStatus',
+        'finishStatus',
+        'baseBranch',
+        'checkCommand',
+        'reportLanguage',
+      ] as const) {
         expect(within(group).queryByLabelText(WORKFLOW_LABELS[key].label)).not.toBeInTheDocument();
       }
     });
@@ -206,6 +213,58 @@ describe('the AI workflow settings panel', () => {
         ...STATUSES,
         'Do not change',
       ]);
+    });
+
+    it('offers English as the default and the 14 languages, labelled as the language of the report', async () => {
+      await openSettings();
+
+      const select = within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label);
+      expect(select).toHaveDisplayValue('English (default)');
+      const values = within(select)
+        .getAllByRole('option')
+        .map((option) => (option as HTMLOptionElement).value);
+      expect(values).toEqual(['', ...SUPPORTED_LANGUAGES.filter((code) => code !== 'en')]);
+      expect(select).toHaveAccessibleDescription(/not .*language of this page/i);
+    });
+
+    it('sets the report language, and shows it after a reload', async () => {
+      const { user, board: fake } = await openSettings();
+
+      await user.selectOptions(
+        within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
+        'fi',
+      );
+      await user.click(save());
+
+      await waitFor(() => expect(fake.workflow.board).toEqual({ reportLanguage: 'fi' }));
+      cleanup();
+      await openSettings(structuredClone(fake.workflow));
+      expect(
+        within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
+      ).toHaveDisplayValue('Finnish');
+    });
+
+    it('sends the choice of the default as no override at all (INVARIANT)', async () => {
+      const { user, board: fake } = await openSettings({
+        board: { reportLanguage: 'sv', push: true },
+        statuses: {},
+      });
+      const select = within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label);
+      expect(select).toHaveDisplayValue('Swedish');
+
+      await user.selectOptions(select, '');
+      await user.click(save());
+
+      // English is the default: neither the key nor a "null" is written.
+      await waitFor(() => expect(fake.workflow.board).toEqual({ push: true }));
+    });
+
+    it('shows a board language that was stored as English, by hand, as the default', async () => {
+      await openSettings({ board: { reportLanguage: 'en' }, statuses: {} });
+
+      expect(
+        within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
+      ).toHaveDisplayValue('English (default)');
     });
 
     it('sets the base branch and the check command, and an empty field is no override', async () => {
@@ -587,7 +646,7 @@ describe('the AI workflow settings panel', () => {
         ...within(panel()).getAllByRole('combobox'),
         ...within(panel()).getAllByRole('textbox'),
       ];
-      expect(controls).toHaveLength(6 + 2 + 2 + STATUSES.length * 6);
+      expect(controls).toHaveLength(6 + 2 + 2 + 1 + STATUSES.length * 6);
       for (const control of controls) expect(control).toHaveAccessibleName();
 
       expect(

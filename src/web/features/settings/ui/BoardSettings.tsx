@@ -1,11 +1,17 @@
 import {
   WORKFLOW_FLAGS,
-  type BoardWorkflowKey,
   type WorkflowOverrides,
   type WorkflowSettings,
 } from '../../../../contract/v1/index';
 import { Checkbox, Field, Input, Select, type SelectOption } from '../../../shared/ui/index';
-import { effectiveFlag, inactiveFlags, setBoardFlag, setBoardValue } from '../model/draft';
+import {
+  effectiveFlag,
+  inactiveFlags,
+  setBoardFlag,
+  setBoardLanguage,
+  setBoardValue,
+} from '../model/draft';
+import { BoardLanguage } from './LanguageChoice';
 import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
 
 export interface BoardSettingsProps {
@@ -15,7 +21,7 @@ export interface BoardSettingsProps {
   onChange: (change: (current: WorkflowOverrides) => WorkflowOverrides) => void;
 }
 
-/** The settings of the whole board: six on/off flags, two statuses and two texts. */
+/** The settings of the whole board: six on/off flags, two statuses, two texts and the report language. */
 export function BoardSettings({ overrides, defaults, statuses, onChange }: BoardSettingsProps) {
   const inactive = inactiveFlags(overrides, defaults);
 
@@ -64,6 +70,11 @@ export function BoardSettings({ overrides, defaults, statuses, onChange }: Board
 
       <TextSetting settingKey="baseBranch" overrides={overrides} onChange={onChange} />
       <TextSetting settingKey="checkCommand" overrides={overrides} onChange={onChange} />
+
+      <BoardLanguage
+        value={overrides.board.reportLanguage}
+        onChange={(language) => onChange((current) => setBoardLanguage(current, language))}
+      />
     </fieldset>
   );
 }
@@ -126,7 +137,7 @@ function StatusSelect({ settingKey, overrides, defaults, statuses, onChange }: S
 }
 
 interface TextSettingProps {
-  settingKey: Extract<BoardWorkflowKey, 'baseBranch' | 'checkCommand'>;
+  settingKey: 'baseBranch' | 'checkCommand';
   overrides: WorkflowOverrides;
   onChange: BoardSettingsProps['onChange'];
 }

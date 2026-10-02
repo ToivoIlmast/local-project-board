@@ -1,6 +1,8 @@
 import {
-  type BoardWorkflowKey,
   type BoardWorkflowOverrides,
+  type BoardOnlyWorkflowKey,
+  type SupportedLanguage,
+  type TaskWorkflowOverrides,
   type WorkflowFlag,
   type WorkflowFlagOverrides,
   type WorkflowOverrides,
@@ -89,7 +91,7 @@ export function setBoardFlag(
  */
 export function setBoardValue(
   overrides: WorkflowOverrides,
-  key: BoardWorkflowKey,
+  key: BoardOnlyWorkflowKey,
   value: string | null | undefined,
 ): WorkflowOverrides {
   const { [key]: _old, ...rest } = overrides.board;
@@ -100,16 +102,52 @@ export function setBoardValue(
 }
 
 /**
+ * The report language of the board. English is the default, so choosing it (or nothing) is no
+ * override and the key is removed: only another language is written.
+ */
+export function setBoardLanguage(
+  overrides: WorkflowOverrides,
+  language: SupportedLanguage | undefined,
+): WorkflowOverrides {
+  const { reportLanguage: _old, ...rest } = overrides.board;
+  return {
+    ...overrides,
+    board:
+      language === undefined || language === 'en' ? rest : { ...rest, reportLanguage: language },
+  };
+}
+
+/** The report language the board has without a task's own, and where it comes from. */
+export function effectiveLanguage(
+  overrides: WorkflowOverrides,
+  defaults: WorkflowSettings,
+): { value: SupportedLanguage | null; source: Exclude<Source, 'status'> } {
+  const board = overrides.board.reportLanguage;
+  return board === undefined
+    ? { value: defaults.reportLanguage, source: 'default' }
+    : { value: board, source: 'board' };
+}
+
+/**
  * One flag of a set of overrides — a column's or a task's; `'inherit'` takes the key out, so
  * what the level below says applies again. A value that is off is a value and stays.
  */
-export function setFlag(
-  flags: WorkflowFlagOverrides,
+export function setFlag<T extends WorkflowFlagOverrides>(
+  flags: T,
   key: WorkflowFlag,
   value: boolean | 'inherit',
-): WorkflowFlagOverrides {
+): T {
   const { [key]: _old, ...rest } = flags;
-  return value === 'inherit' ? rest : { ...rest, [key]: value };
+  return (value === 'inherit' ? rest : { ...rest, [key]: value }) as T;
+}
+
+/** The language of a task's report; `'inherit'` takes the key out, so the board's applies again. */
+export function setTaskLanguage(
+  overrides: TaskWorkflowOverrides,
+  language: SupportedLanguage | 'inherit',
+): TaskWorkflowOverrides {
+  const { reportLanguage: _old, ...rest } = overrides;
+  return language === 'inherit' ? rest : { ...rest, reportLanguage: language };
 }
 
 /** One flag of one column; a column left empty by it is dropped. */
@@ -139,6 +177,8 @@ export function removeColumn(overrides: WorkflowOverrides, status: string): Work
  */
 export function normalizeOverrides(overrides: WorkflowOverrides): WorkflowOverrides {
   const board: BoardWorkflowOverrides = { ...overrides.board };
+  // English is what no language means: it is not an override (a hand-written one is not either).
+  if (board.reportLanguage === 'en' || board.reportLanguage === null) delete board.reportLanguage;
   for (const key of ['baseBranch', 'checkCommand'] as const) {
     const text = board[key];
     if (typeof text !== 'string') continue;

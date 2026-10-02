@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import type { Task, WorkflowOverrides } from '../../../src/contract/v1/index';
 import { WORKFLOW_FLAGS, type WorkflowFlag } from '../../../src/core/model/workflow';
+import { SUPPORTED_LANGUAGES } from '../../../src/core/model/language';
 import { ApiError } from '../../../src/web/api/index';
 import { WORKFLOW_LABELS } from '../../../src/web/features/settings/index';
 import { defaultWorkflow } from '../../../src/core/rules/workflow';
@@ -105,8 +106,9 @@ describe('the AI block of a task without settings of its own', () => {
     expect(valueOf(WORKFLOW_LABELS.checkCommand.label)).toHaveTextContent(
       'npm test, from the board',
     );
-    // The task can override the six on/off settings and nothing else (T13).
-    expect(within(ai()).getAllByRole('combobox')).toHaveLength(WORKFLOW_FLAGS.length);
+    // The task can override the six on/off settings and the report language, nothing else (T13, T34).
+    expect(within(ai()).getAllByRole('combobox')).toHaveLength(WORKFLOW_FLAGS.length + 1);
+    expect(valueOf(WORKFLOW_LABELS.reportLanguage.label)).toBeNull();
     expect(within(ai()).queryAllByRole('textbox')).toHaveLength(0);
   });
 
@@ -403,6 +405,77 @@ describe('changing one setting of a task', () => {
 
     expect(await within(ai()).findByText('Saved.')).toBeInTheDocument();
     expect(field('push')).toHaveDisplayValue('On');
+  });
+});
+
+const language = () => within(ai()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label);
+
+describe('the report language of a task (T34)', () => {
+  it('offers "like the board" and every one of the 14 languages, and says it is the agent’s report', async () => {
+    const rendered = await openTask({
+      workflow: boardOverrides({ board: { reportLanguage: 'sv' } }),
+    });
+    await expandAndRead(rendered);
+
+    expect(language()).toHaveDisplayValue('Like the board (now Swedish, from the board)');
+    const values = within(language())
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value);
+    expect(values).toEqual(['inherit', ...SUPPORTED_LANGUAGES]);
+    expect(WORKFLOW_LABELS.reportLanguage.description).toMatch(/report/i);
+    expect(WORKFLOW_LABELS.reportLanguage.description).toMatch(/not .*language of this page/i);
+  });
+
+  it('PATCHes workflow with the chosen language and keeps the other overrides of the task', async () => {
+    const rendered = await openTask({ tasks: [todo({ workflow: { push: true } })] });
+    const patch = jest.spyOn(rendered.board.client, 'updateTask');
+
+    await rendered.user.selectOptions(language(), 'fi');
+    await rendered.user.click(save());
+    await within(ai()).findByText('Saved.');
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith('T1', { workflow: { push: true, reportLanguage: 'fi' } });
+    expect(language()).toHaveDisplayValue('Finnish');
+    expect(language()).toHaveAccessibleDescription(/In effect: Finnish, from this task/);
+  });
+
+  it('shows the language that is saved after a reload', async () => {
+    await openTask({ tasks: [todo({ workflow: { reportLanguage: 'ja' } })] });
+
+    expect(language()).toHaveDisplayValue('Japanese');
+  });
+
+  it('"like the board" removes the key, and the last key going sends null (INVARIANT)', async () => {
+    const rendered = await openTask({
+      tasks: [todo({ workflow: { push: true, reportLanguage: 'fi' } })],
+    });
+    const patch = jest.spyOn(rendered.board.client, 'updateTask');
+
+    await rendered.user.selectOptions(language(), 'inherit');
+    await rendered.user.click(save());
+    await within(ai()).findByText('Saved.');
+    expect(patch).toHaveBeenLastCalledWith('T1', { workflow: { push: true } });
+    expect(rendered.board.tasks[0]?.workflow).toEqual({ push: true });
+
+    await rendered.user.selectOptions(field('push'), 'inherit');
+    await rendered.user.click(save());
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith('T1', { workflow: null }));
+  });
+
+  it('English on a task is a value of its own, not the same as "like the board"', async () => {
+    const rendered = await openTask({
+      workflow: boardOverrides({ board: { reportLanguage: 'sv' } }),
+    });
+    const patch = jest.spyOn(rendered.board.client, 'updateTask');
+    await expandAndRead(rendered);
+
+    await rendered.user.selectOptions(language(), 'en');
+    await rendered.user.click(save());
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('T1', { workflow: { reportLanguage: 'en' } }),
+    );
   });
 });
 
@@ -740,13 +813,13 @@ describe('for a keyboard and a screen reader', () => {
     ).toBeInTheDocument();
   });
 
-  it('is reached in reading order: the six settings, then save, then reset', async () => {
+  it('is reached in reading order: the six settings, the language, then save, then reset', async () => {
     const { user } = await openTask({ tasks: [todo({ workflow: { push: true } })] });
     await user.selectOptions(field('report'), 'Off');
 
     field('editCode').focus();
     const order: (string | null)[] = [];
-    for (let step = 0; step < 8; step += 1) {
+    for (let step = 0; step < 9; step += 1) {
       order.push(document.activeElement?.id || document.activeElement?.textContent || null);
       await user.tab();
     }
@@ -755,6 +828,7 @@ describe('for a keyboard and a screen reader', () => {
       ...(['editCode', 'branch', 'checks', 'commit', 'push', 'report'] as const).map(
         (key) => field(key).id,
       ),
+      language().id,
       'Save',
       'Reset to the settings of column todo',
     ]);
