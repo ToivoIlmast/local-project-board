@@ -55,11 +55,13 @@ describe('local-project-board claude <id>', () => {
       expect(run.exitCode).toBe(0);
       expect(run.err).toEqual([]);
       const calls = await claude.calls();
-      // One session, and one argument: the prompt, in one piece, whatever it contains.
+      // --session-id <uuid> <prompt>: exactly three arguments, the prompt last and whole.
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.argv).toEqual([claudeCodePrompt('T2', boardUrl(state))]);
-      expect(calls[0]?.argv[0]).toContain('/api/v1/tasks/T2/handoff');
-      expect(calls[0]?.argv[0]).not.toContain('T1');
+      expect(calls[0]?.argv).toHaveLength(3);
+      expect(calls[0]?.argv[0]).toBe('--session-id');
+      expect(calls[0]?.argv[2]).toBe(claudeCodePrompt('T2', boardUrl(state)));
+      expect(calls[0]?.argv[2]).toContain('/api/v1/tasks/T2/handoff');
+      expect(calls[0]?.argv[2]).not.toContain('T1');
     });
 
     it('sends the session to a handoff that is the handoff of that task, as the board gives it', async () => {
@@ -69,7 +71,8 @@ describe('local-project-board claude <id>', () => {
       await cli(['claude', 'T2'], { cwd: root, env: claude.env() });
 
       const [call] = await claude.calls();
-      const url = /read GET (\S+) and follow it/.exec(call?.argv[0] ?? '')?.[1] ?? '';
+      const prompt = call?.argv[call.argv.length - 1] ?? '';
+      const url = /read GET (\S+) and follow it/.exec(prompt)?.[1] ?? '';
       expect(url).toBe(`${boardUrl(state)}/api/v1/tasks/T2/handoff`);
       const handoff = await (await fetch(url)).text();
       expect(handoff).toContain('# Task T2: Write the report');
@@ -96,7 +99,8 @@ describe('local-project-board claude <id>', () => {
       await cli(['claude', 'T1'], { cwd: root, env: claude.env() });
 
       const [call] = await claude.calls();
-      expect(call?.argv.filter((argument) => argument.startsWith('-'))).toEqual([]);
+      // --session-id is the one flag the runner passes; no model/permission flags.
+      expect(call?.argv.filter((a) => a.startsWith('-') && a !== '--session-id')).toEqual([]);
     });
 
     it('never gives the session token to claude: not in its arguments, not in its environment (INVARIANT)', async () => {
@@ -109,14 +113,19 @@ describe('local-project-board claude <id>', () => {
       expect(run.text).not.toContain(state.token);
     });
 
-    it('changes nothing on the board: the agent is the one that moves the task', async () => {
+    it('records the run on the board but does not move the task: the agent moves it (T33)', async () => {
       const { root, state } = await boardWithTasks();
       const claude = await fakeClaude();
-      const before = await (await fetch(`${state.url}api/v1/tasks`)).text();
 
       await cli(['claude', 'T1'], { cwd: root, env: claude.env() });
 
-      expect(await (await fetch(`${state.url}api/v1/tasks`)).text()).toBe(before);
+      const task = (await (await api(state, 'GET', '/tasks/T1')).json()) as {
+        status?: string;
+        aiRun?: { state?: string };
+      };
+      // Runner records the run end — aiRun is written — but the task status stays.
+      expect(task.status).toBe('todo');
+      expect(task.aiRun?.state).not.toBeUndefined();
     });
   });
 

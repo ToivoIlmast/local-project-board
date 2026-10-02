@@ -97,7 +97,10 @@ export function createAiRunService({ storage, events }: AiRunServiceOptions): Ai
           ...(input.exitCode !== undefined && input.exitCode !== 0
             ? {
                 failure: {
-                  ...(existingRun.failure ?? { kind: 'exit', message: '' }),
+                  ...(existingRun.failure ?? {
+                    kind: 'exit',
+                    message: `process exited with code ${input.exitCode}`,
+                  }),
                   exitCode: input.exitCode,
                 },
               }
@@ -123,7 +126,11 @@ export function createAiRunService({ storage, events }: AiRunServiceOptions): Ai
           patch = {
             ...existingRun,
             state: 'failed',
-            failure: { kind: 'exit', message: 'process exited with code 0 without a final state' },
+            failure: {
+              kind: 'exit',
+              message: 'process exited with code 0 without a final state',
+              exitCode: 0,
+            },
             endedAt,
           };
         }
