@@ -325,6 +325,9 @@ test('the AI settings of a task are changed with the keyboard, and the handoff c
   // A select does not submit a form: the way on is Tab, past the last setting, to Save.
   await page.keyboard.press('Tab');
   await expect(ai.getByLabel('Write a report')).toBeFocused();
+  // The report language (T34) is the last setting of the task, right before Save.
+  await page.keyboard.press('Tab');
+  await expect(ai.getByLabel('Report language')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(ai.getByRole('button', { name: 'Save' })).toBeFocused();
   await page.keyboard.press('Enter');
