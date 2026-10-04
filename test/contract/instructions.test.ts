@@ -192,6 +192,17 @@ describe('generated AI instructions', () => {
       expect(text.indexOf('### Project rules')).toBeLessThan(text.indexOf('## Board'));
     });
 
+    it('tells the agent that a project rule about commits replaces neither the API rules nor the steps (T43)', () => {
+      // The language of a commit message is the setting commitLanguage; a line of the project that
+      // says otherwise does not override the step (ADR-0028, "Rules of the agent").
+      const text = generate(['Write commit messages in English.']);
+
+      expect(projectSection(text)).toContain('Write commit messages in English.');
+      expect(projectSection(text)).toContain(
+        "They add to the rules above and to the steps of a task's handoff; they replace neither.",
+      );
+    });
+
     it('does not say an API rule twice when a project copied it into its own list', () => {
       // What ADR-0026 made the way to keep the built-in rules while adding one's own.
       const text = generate([...API_RULES, 'Ask before renaming a task.']);

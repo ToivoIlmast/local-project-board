@@ -23,6 +23,7 @@ describe('DEFAULT_WORKFLOW', () => {
       finishStatus: null,
       baseBranch: null,
       checkCommand: null,
+      commitLanguage: null,
       reportLanguage: null,
     });
   });
@@ -88,6 +89,31 @@ describe('resolveWorkflow', () => {
         { reportLanguage: 'en' },
       );
       expect(effective.values.reportLanguage).toBe('en');
+    });
+  });
+
+  describe('commitLanguage comes from the board or the default, nowhere else (T43)', () => {
+    it('is null by default and named as the default', () => {
+      const effective = resolveWorkflow(defaults, {}, undefined, undefined);
+      expect(effective.values.commitLanguage).toBeNull();
+      expect(effective.sources.commitLanguage).toBe('default');
+    });
+
+    it('takes the board value and names the board', () => {
+      const effective = resolveWorkflow(defaults, { commitLanguage: 'fi' }, {}, {});
+      expect(effective.values.commitLanguage).toBe('fi');
+      expect(effective.sources.commitLanguage).toBe('board');
+    });
+
+    it('does not follow reportLanguage on any level', () => {
+      const effective = resolveWorkflow(
+        defaults,
+        { reportLanguage: 'sv' },
+        {},
+        { reportLanguage: 'fi' },
+      );
+      expect(effective.values.commitLanguage).toBeNull();
+      expect(effective.sources.commitLanguage).toBe('default');
     });
   });
 

@@ -264,6 +264,19 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
           'a language in a column (T34)',
           { board: {}, statuses: { todo: { reportLanguage: 'fi' } } },
         ],
+        [
+          'a commit language that is not one of the 14 (T43)',
+          { board: { commitLanguage: 'xx' }, statuses: {} },
+        ],
+        ['an empty commit language (T43)', { board: { commitLanguage: '' }, statuses: {} }],
+        [
+          'a commit language by its name instead of its code (T43)',
+          { board: { commitLanguage: 'Finnish' }, statuses: {} },
+        ],
+        [
+          'a commit language in a column (T43)',
+          { board: {}, statuses: { todo: { commitLanguage: 'fi' } } },
+        ],
         ['a column that is not an object', { board: {}, statuses: { todo: true } }],
         ['statuses as a list', { board: {}, statuses: ['todo'] }],
         ['an empty status name', { board: {}, statuses: { '': { push: true } } }],
@@ -915,5 +928,72 @@ describe('a board with other columns', () => {
       .expect(422);
 
     expect(code(response.body)).toBe('UNKNOWN_STATUS');
+  });
+});
+
+describe('commitLanguage over the API (T43)', () => {
+  const file = (): string => join(board.root, '.board', 'workflow.yaml');
+
+  beforeEach(async () => {
+    board = await createTestBoard();
+  });
+
+  it('is stored on the board, read back, and named as the board in the effective settings', async () => {
+    const id = await createTask({ status: 'todo' });
+
+    await board
+      .put(`${API}/workflow`, { board: { commitLanguage: 'fi' }, statuses: {} })
+      .expect(200);
+
+    expect((await readState()).board).toEqual({ commitLanguage: 'fi' });
+    const effective = await readEffective(id);
+    expect(effective.values.commitLanguage).toBe('fi');
+    expect(effective.sources.commitLanguage).toBe('board');
+  });
+
+  it('is null and from the default on a board that says nothing', async () => {
+    const id = await createTask({ status: 'todo' });
+    const effective = await readEffective(id);
+    expect(effective.values.commitLanguage).toBeNull();
+    expect(effective.sources.commitLanguage).toBe('default');
+    expect((await readState()).defaults.commitLanguage).toBeNull();
+  });
+
+  it.each([
+    ['an invalid code', { board: { commitLanguage: 'xx' }, statuses: {} }],
+    ['a column key', { board: {}, statuses: { todo: { commitLanguage: 'fi' } } }],
+  ])('PUT with %s writes nothing: the bytes of workflow.yaml are the same', async (_n, body) => {
+    await board.put(`${API}/workflow`, { board: { push: true }, statuses: {} }).expect(200);
+    const before = await readFile(file());
+
+    await board.put(`${API}/workflow`, body).expect(400);
+
+    expect((await readFile(file())).equals(before)).toBe(true);
+  });
+
+  it('is refused on a task with 400 INVALID_REQUEST, on create and on PATCH, and nothing is written', async () => {
+    const id = await createTask({ status: 'todo', workflow: { push: true } });
+
+    const patched = await board
+      .patch(`${API}/tasks/${id}`, { workflow: { commitLanguage: 'fi' } })
+      .expect(400);
+    const created = await board
+      .post(`${API}/tasks`, { title: 'Another', workflow: { commitLanguage: 'fi' } })
+      .expect(400);
+
+    expect(code(patched.body)).toBe('INVALID_REQUEST');
+    expect(code(created.body)).toBe('INVALID_REQUEST');
+    expect((await readTask(id)).workflow).toEqual({ push: true });
+  });
+
+  it('both language keys are refused alike for an invalid code (the same status and code)', async () => {
+    const results = [];
+    for (const key of ['reportLanguage', 'commitLanguage']) {
+      const response = await board
+        .put(`${API}/workflow`, { board: { [key]: 'xx' }, statuses: {} })
+        .expect(400);
+      results.push(code(response.body));
+    }
+    expect(results).toEqual(['INVALID_REQUEST', 'INVALID_REQUEST']);
   });
 });
