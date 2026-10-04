@@ -597,20 +597,19 @@ describe('commitLanguage (T43)', () => {
       expect(step).not.toBe(stepFor({}, 'commit'));
     });
 
-    it('says nothing about a language when commit is off (INVARIANT)', () => {
-      const step = stepFor({ board: { commitLanguage: 'fi' }, task: { commit: false } }, 'commit');
-      expect(step).toMatch(/^Do not commit/);
-      expect(step).not.toMatch(/Finnish|language|commitLanguage/);
-    });
+    it.each([
+      ['commit is off', { commit: false }],
+      ['editCode is off', { editCode: false }],
+    ] as const)(
+      'says nothing about a language when %s: the step is the same as without one (INVARIANT)',
+      (_why, task) => {
+        const without = stepFor({ task }, 'commit');
+        const withLanguage = stepFor({ board: { commitLanguage: 'fi' }, task }, 'commit');
 
-    it('says nothing about a language when editCode is off (INVARIANT)', () => {
-      const step = stepFor(
-        { board: { commitLanguage: 'fi' }, task: { editCode: false } },
-        'commit',
-      );
-      expect(step).toMatch(/^Do not commit/);
-      expect(step).not.toMatch(/Finnish|language|commitLanguage/);
-    });
+        expect(without).toMatch(/^Do not commit/);
+        expect(withLanguage).toBe(without);
+      },
+    );
   });
 
   describe('is independent of reportLanguage (INVARIANT)', () => {
