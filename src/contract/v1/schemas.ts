@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
-import { workflowFlagsSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
+import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
 /**
  * Wire DTOs. Where the wire format equals the domain, the core schema is re-exported:
@@ -24,11 +24,20 @@ export {
   reportSchema,
   taskIdSchema,
   taskSchema,
+  taskWorkflowSchema,
   workflowFlagsSchema,
   workflowOverridesSchema,
   workflowStateSchema,
 } from '../../core/model/index.js';
-export { BOARD_WORKFLOW_KEYS, WORKFLOW_FLAGS, WORKFLOW_KEYS } from '../../core/model/index.js';
+export {
+  BOARD_ONLY_WORKFLOW_KEYS,
+  BOARD_WORKFLOW_KEYS,
+  SUPPORTED_LANGUAGES,
+  TASK_WORKFLOW_KEYS,
+  languageName,
+  WORKFLOW_FLAGS,
+  WORKFLOW_KEYS,
+} from '../../core/model/index.js';
 export { boardEventSchema } from '../../core/events.js';
 
 /**
@@ -47,8 +56,11 @@ export type {
   Project,
   Report,
   Task,
+  BoardOnlyWorkflowKey,
   BoardWorkflowKey,
   BoardWorkflowOverrides,
+  SupportedLanguage,
+  TaskWorkflowOverrides,
   WorkflowFlag,
   WorkflowKey,
   WorkflowFlagOverrides,
@@ -72,7 +84,7 @@ export const createTaskRequestSchema = z.strictObject({
   labels: labels.optional(),
   branch: z.string().min(1).optional(),
   /** The task's own overrides of the AI workflow settings; only what is set (ADR-0028). */
-  workflow: workflowFlagsSchema.optional(),
+  workflow: taskWorkflowSchema.optional(),
 });
 
 export const updateTaskRequestSchema = z
@@ -84,7 +96,7 @@ export const updateTaskRequestSchema = z
     /** null clears the branch. */
     branch: z.string().min(1).nullable().optional(),
     /** An object replaces the task's overrides whole, as `labels` does; null removes them all. */
-    workflow: workflowFlagsSchema.nullable().optional(),
+    workflow: taskWorkflowSchema.nullable().optional(),
     /** null clears the run (user cleanup). An object is rejected — use the report route (T32). */
     aiRun: z.null().optional(),
   })

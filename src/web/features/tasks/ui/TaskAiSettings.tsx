@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  BOARD_WORKFLOW_KEYS,
+  BOARD_ONLY_WORKFLOW_KEYS,
   WORKFLOW_FLAGS,
+  languageName,
   type Task,
-  type WorkflowFlagOverrides,
+  type TaskWorkflowOverrides,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
@@ -12,11 +13,14 @@ import { Button, Text } from '../../../shared/ui/index';
 import {
   FlagChoice,
   INACTIVE_NOTE,
+  LanguageChoice,
   WORKFLOW_LABELS,
   boardValueText,
   effectiveFlag,
+  effectiveLanguage,
   onOff,
   setFlag,
+  setTaskLanguage,
   sourceLabel,
   useOverridesDraft,
   type DraftKit,
@@ -26,7 +30,7 @@ import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
 import type { AgentTarget } from '../model/useSendToAi';
 import { SendToAi } from './SendToAi';
 
-const taskKit: DraftKit<WorkflowFlagOverrides | undefined, WorkflowFlagOverrides> = {
+const taskKit: DraftKit<TaskWorkflowOverrides | undefined, TaskWorkflowOverrides> = {
   read: (workflow) => structuredClone(workflow ?? {}),
   same: sameSettings,
   normalize: (draft) => draft,
@@ -66,7 +70,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
   }, [open]);
 
   const send = useAsyncAction(async (mode: 'save' | 'reset') => {
-    const push = async (draft: WorkflowFlagOverrides): Promise<void> => {
+    const push = async (draft: TaskWorkflowOverrides): Promise<void> => {
       const request = settingsRequest(draft);
       // Set before the request: the board's answer folds the block away before this resumes.
       focusToggleRef.current = request === null;
@@ -99,6 +103,29 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
 
   const canSay = state.workflow;
   const effective = read.effective;
+
+  const boardLanguage =
+    canSay === undefined ? undefined : effectiveLanguage(canSay, canSay.defaults);
+  const languageInheritLabel =
+    boardLanguage === undefined
+      ? 'Like the board'
+      : `Like the board (now ${languageName(boardLanguage.value ?? 'en')}, from ${sourceLabel(
+          boardLanguage.source,
+          task.status,
+        )})`;
+  const languageHint = [
+    effective === undefined
+      ? read.error === undefined
+        ? 'Reading what is in effect…'
+        : 'What is in effect could not be read.'
+      : `In effect: ${languageName(effective.values.reportLanguage ?? 'en')}, from ${sourceLabel(
+          effective.sources.reportLanguage,
+          task.status,
+        )}.`,
+    form.draft.reportLanguage !== task.workflow?.reportLanguage ? 'Not saved yet.' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <section className="ai" aria-labelledby={`ai-${task.id}`}>
@@ -179,6 +206,12 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
                 />
               );
             })}
+            <LanguageChoice
+              own={form.draft.reportLanguage}
+              inheritLabel={languageInheritLabel}
+              hint={languageHint}
+              onChange={(chosen) => form.edit((current) => setTaskLanguage(current, chosen))}
+            />
           </fieldset>
 
           {effective === undefined ? null : (
@@ -187,7 +220,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
                 Also in effect. These are set for the whole board, on the Settings page.
               </Text>
               <dl className="ai__values">
-                {BOARD_WORKFLOW_KEYS.map((key) => (
+                {BOARD_ONLY_WORKFLOW_KEYS.map((key) => (
                   <div key={key} className="ai__value">
                     <dt>{WORKFLOW_LABELS[key].label}</dt>
                     <dd>

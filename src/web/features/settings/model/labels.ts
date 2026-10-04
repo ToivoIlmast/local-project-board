@@ -1,3 +1,4 @@
+import { languageName } from '../../../../contract/v1/index';
 import type {
   BoardWorkflowKey,
   WorkflowKey,
@@ -54,7 +55,8 @@ export const WORKFLOW_LABELS: Record<WorkflowKey, { label: string; description: 
   },
   reportLanguage: {
     label: 'Report language',
-    description: 'The language the agent writes the report in. Empty means English (the default).',
+    description:
+      'The language the agent writes its report in. This is not the language of this page.',
   },
 };
 
@@ -92,5 +94,7 @@ const NO_VALUE: Record<BoardWorkflowKey, string> = {
 
 /** The value of a board-only setting as a person reads it: `null` is a meaning, not a blank. */
 export function boardValueText(key: BoardWorkflowKey, settings: WorkflowSettings): string {
-  return settings[key] ?? NO_VALUE[key];
+  const value = settings[key];
+  if (value === null) return NO_VALUE[key];
+  return key === 'reportLanguage' ? languageName(value) : value;
 }

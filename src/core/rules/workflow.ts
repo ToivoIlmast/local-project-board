@@ -3,6 +3,7 @@ import {
   type BoardWorkflowOverrides,
   type EffectiveWorkflow,
   type WorkflowFlag,
+  type TaskWorkflowOverrides,
   type WorkflowFlagOverrides,
   type WorkflowKey,
   type WorkflowOverrides,
@@ -58,7 +59,7 @@ export function resolveWorkflow(
   defaults: WorkflowSettings,
   board: BoardWorkflowOverrides,
   status: WorkflowFlagOverrides | undefined,
-  task: WorkflowFlagOverrides | undefined,
+  task: TaskWorkflowOverrides | undefined,
 ): EffectiveWorkflow {
   const layers: [WorkflowSource, Layer][] = [
     ['board', board],

@@ -1,7 +1,7 @@
 import { BoardError } from '../errors.js';
 import type { Task } from '../model/task.js';
 import type { AiRun } from '../model/aiRun.js';
-import type { WorkflowFlagOverrides } from '../model/workflow.js';
+import type { TaskWorkflowOverrides } from '../model/workflow.js';
 import type { EventSink, Storage } from '../ports.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import { assertKnownStatus } from '../rules/status.js';
@@ -19,7 +19,7 @@ export interface CreateTaskInput {
   body?: string | undefined;
   labels?: string[] | undefined;
   branch?: string | undefined;
-  workflow?: WorkflowFlagOverrides | undefined;
+  workflow?: TaskWorkflowOverrides | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -29,7 +29,7 @@ export interface UpdateTaskInput {
   labels?: string[] | undefined;
   branch?: string | null | undefined;
   /** An object replaces the task's overrides whole; null removes them. */
-  workflow?: WorkflowFlagOverrides | null | undefined;
+  workflow?: TaskWorkflowOverrides | null | undefined;
   /** What the agent reports about its run; an object replaces it whole, null removes it. */
   aiRun?: AiRun | null | undefined;
 }

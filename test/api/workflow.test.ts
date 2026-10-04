@@ -252,6 +252,18 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
         ['an empty startStatus', { board: { startStatus: '' }, statuses: {} }],
         ['a blank checkCommand', { board: { checkCommand: '   ' }, statuses: {} }],
         ['a blank baseBranch', { board: { baseBranch: '' }, statuses: {} }],
+        [
+          'a language that is not one of the 14 (T34)',
+          { board: { reportLanguage: 'xx' }, statuses: {} },
+        ],
+        [
+          'a language by its name instead of its code (T34)',
+          { board: { reportLanguage: 'Finnish' }, statuses: {} },
+        ],
+        [
+          'a language in a column (T34)',
+          { board: {}, statuses: { todo: { reportLanguage: 'fi' } } },
+        ],
         ['a column that is not an object', { board: {}, statuses: { todo: true } }],
         ['statuses as a list', { board: {}, statuses: ['todo'] }],
         ['an empty status name', { board: {}, statuses: { '': { push: true } } }],
@@ -531,6 +543,36 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
       expect(code(response.body)).toBe('INVALID_REQUEST');
       expect(await board.storage.listTasks()).toEqual([]);
     });
+  });
+
+  describe('PATCH /tasks/:id with a reportLanguage (T34)', () => {
+    it('stores the language of the task, and the effective settings name the task as its source', async () => {
+      const id = await createTask({ status: 'todo' });
+      await board
+        .put(`${API}/workflow`, { board: { reportLanguage: 'sv' }, statuses: {} })
+        .expect(200);
+
+      await board.patch(`${API}/tasks/${id}`, { workflow: { reportLanguage: 'fi' } }).expect(200);
+
+      expect((await readTask(id)).workflow).toEqual({ reportLanguage: 'fi' });
+      const effective = await readEffective(id);
+      expect(effective.values.reportLanguage).toBe('fi');
+      expect(effective.sources.reportLanguage).toBe('task');
+    });
+
+    it.each(['xx', null, ''])(
+      'refuses %j with 400 INVALID_REQUEST and keeps what the task had',
+      async (language) => {
+        const id = await createTask({ status: 'todo', workflow: { push: true } });
+
+        const response = await board
+          .patch(`${API}/tasks/${id}`, { workflow: { reportLanguage: language } })
+          .expect(400);
+
+        expect(code(response.body)).toBe('INVALID_REQUEST');
+        expect((await readTask(id)).workflow).toEqual({ push: true });
+      },
+    );
   });
 
   describe('PATCH /tasks/:id with a workflow', () => {

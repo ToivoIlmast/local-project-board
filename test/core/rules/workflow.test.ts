@@ -61,6 +61,36 @@ describe('defaultWorkflow', () => {
 
 describe('resolveWorkflow', () => {
   const defaults = defaultWorkflow(statuses);
+
+  describe('reportLanguage is set on the board and on the task, never on a column (T34)', () => {
+    it('the task wins over the board, and is named as the source', () => {
+      const effective = resolveWorkflow(
+        defaults,
+        { reportLanguage: 'sv' },
+        {},
+        { reportLanguage: 'fi' },
+      );
+      expect(effective.values.reportLanguage).toBe('fi');
+      expect(effective.sources.reportLanguage).toBe('task');
+    });
+
+    it('without a task value the board applies again: removing the key is the reset', () => {
+      const effective = resolveWorkflow(defaults, { reportLanguage: 'sv' }, {}, {});
+      expect(effective.values.reportLanguage).toBe('sv');
+      expect(effective.sources.reportLanguage).toBe('board');
+    });
+
+    it('English is chosen explicitly on a task over a board that says another language', () => {
+      const effective = resolveWorkflow(
+        defaults,
+        { reportLanguage: 'sv' },
+        {},
+        { reportLanguage: 'en' },
+      );
+      expect(effective.values.reportLanguage).toBe('en');
+    });
+  });
+
   const everySource = (source: string): Record<WorkflowKey, string> =>
     Object.fromEntries(WORKFLOW_KEYS.map((key) => [key, source])) as Record<WorkflowKey, string>;
 

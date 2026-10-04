@@ -18,12 +18,20 @@ written atomically.
 
 - **Settings.** Six booleans can be overridden on any level: `editCode` (default `true`),
   `branch` (`true`), `checks` (`true`), `commit` (`true`), `push` (`false`), `report` (`true`).
-  Five settings exist only for the board, because they mean nothing for a column or a task:
+  Four settings exist only for the board, because they mean nothing for a column or a task:
   `startStatus` (default `in-progress` if the board has that status, otherwise `null`),
   `finishStatus` (default `done` if the board has that status, otherwise `null`),
-  `baseBranch`, `checkCommand` and `reportLanguage` (all default `null`). For these, `null` is a
-  value ("no status change", "the repository's main branch", "the project's own pipeline",
-  "English"), not a missing key.
+  `baseBranch` and `checkCommand` (both default `null`). For these, `null` is a value ("no status
+  change", "the repository's main branch", "the project's own pipeline"), not a missing key.
+  `reportLanguage` (default `null`, English) is in between (T34): the board and a task can set
+  it, a column cannot. It is one of the 14 codes of `SUPPORTED_LANGUAGES`
+  (`z.enum`, not any string). The board's `null` still means English; a task has no `null` —
+  "like the board" is the key left out, and English on a task is `en`.
+  `TASK_WORKFLOW_KEYS` (the flags and `reportLanguage`) is what a task may override;
+  `BOARD_ONLY_WORKFLOW_KEYS` is what only the board may set. A code that is not one of the 14, in
+  `workflow.yaml` or in a task file, is reported in `readIssues` (the file is unreadable), as
+  any other invalid value is; over the API it is `400 INVALID_REQUEST`, like every other value
+  the schema refuses.
 - **Only overrides are stored; the effective settings never are.** The defaults are a constant
   in `core/rules/workflow.ts` (`DEFAULT_WORKFLOW`). The board's and the
   columns' overrides are in `.board/workflow.yaml`; a task's are in the optional `workflow:`
@@ -112,8 +120,10 @@ by hand into a task any more, and there is no second set of rules next to the se
   each an explicit "do not", whatever their value is (the `inactive` list of T13), and
   `editCode: false` says that no project file is to be changed and where the result goes.
   `baseBranch` and `checkCommand` are parameters of the branch and checks steps, not steps of
-  their own; `reportLanguage` is similarly a parameter of the report step (`WORKFLOW_STEP_PARAMETERS`).
-  When `reportLanguage` is set, the report step appends "Write in <Language>." (the human name from
+  their own; `reportLanguage` is similarly a parameter of the report step (`WORKFLOW_STEP_PARAMETERS`);
+  the type-level guarantee stays: a key that no step renders is a type error, wherever it can be
+  overridden. The step names where the language came from (`reportLanguage: this task` or
+  `reportLanguage: board`). When `reportLanguage` is set, the report step appends "Write in <Language>." (the human name from
   `SUPPORTED_LANGUAGES` in `core/model/language.ts`); when it is `null` the report is in English and
   no language instruction is added. The same 14 language codes are used as in dep-health-analyzer's
   i18n. The steps are typed per key, so a setting added to the model without a text does not compile.
@@ -142,10 +152,15 @@ by hand into a task any more, and there is no second set of rules next to the se
   avoids assuming a specific branch name for repositories that use a different convention.
 - **Language.** The handoff text is always English, like the rest of the instructions; the body
   of the task is copied as it was written. The two are not mixed by translating anything. The
-  _report_ the agent writes is a separate matter: `reportLanguage` (a board-only setting) tells
+  _report_ the agent writes is a separate matter: `reportLanguage` (a setting of the board and of a task, T34) tells
   the agent which language to write it in. `null` means English and adds no instruction; a
   language code (e.g. `fi`, `ru`) appends "Write in Finnish." (or the appropriate language name)
-  to the report step. The board UI shows "English" for `null` under "Report language".
+  to the report step. The board UI says
+  that it is the language of the agent's report, not of the page. Settings → Board has a select
+  "English (default)" plus the other 13; choosing English removes the key (it is the default, not an
+  override). The AI block of a task has "Like the board" (removes the key) or one of the 14
+  languages, sent as `PATCH /tasks/:id {workflow}` like the flags. The language of the page itself
+  and of the handoff stays English; the choice in the launch dialog is not part of T34.
 
 ## Rules of the agent (T16)
 

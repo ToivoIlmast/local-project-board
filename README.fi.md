@@ -1,4 +1,4 @@
-<!-- Based on README.md @ d9bab51347b3260054aa35a3255ff0caa4c05f5c -->
+<!-- Based on README.md @ c298cf0b9a11e8cf88ee667f10d6b0455866e221 -->
 
 # local-project-board
 
@@ -59,7 +59,7 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
   ja jokaiselle sarakkeelle. Vain se, minkä muutat, tallennetaan tiedostoon
   `.board/workflow.yaml`; sarake voi yksinkertaisesti seurata taulua. Yksittäinen tehtävä voi myös
   poiketa: avaa se nähdäksesi, mistä kukin voimassa oleva arvo tulee, ohita yksi asetus tai palauta
-  tehtävä sarakkeensa asetuksiin. Lomakkeesta poistuttaessa tallentamattomat muutokset kysytään
+  tehtävä sarakkeensa asetuksiin. Agentin raportin kieli on yksi 14:stä (oletuksena englanti), ja se voidaan asettaa taululle ja yksittäiselle tehtävälle; se ei ole taulun sivun kieli. Lomakkeesta poistuttaessa tallentamattomat muutokset kysytään
   ensin: Tallenna, Hylkää tai Peruuta.
 - **Lähetä tekoälylle.** Tehtävässä tai sen kortin valikossa yksi valinta kopioi handoffin —
   tehtävän, sen dokumentit ja asetusten edellyttämät vaiheet — valmiina liitettäväksi mille

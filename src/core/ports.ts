@@ -8,7 +8,7 @@ import type {
   GitStatus,
   Report,
   Task,
-  WorkflowFlagOverrides,
+  TaskWorkflowOverrides,
   WorkflowOverrides,
 } from './model/index.js';
 
@@ -20,7 +20,7 @@ export interface NewTask {
   body: string;
   labels: string[];
   branch?: string | undefined;
-  workflow?: WorkflowFlagOverrides | undefined;
+  workflow?: TaskWorkflowOverrides | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
@@ -36,7 +36,7 @@ export interface TaskPatch {
   body?: string | undefined;
   labels?: string[] | undefined;
   branch?: string | null | undefined;
-  workflow?: WorkflowFlagOverrides | null | undefined;
+  workflow?: TaskWorkflowOverrides | null | undefined;
   aiRun?: AiRun | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }

@@ -8,6 +8,8 @@ import {
   boardWorkflowSchema,
   workflowFlagsSchema,
   workflowOverridesSchema,
+  SUPPORTED_LANGUAGES,
+  taskWorkflowSchema,
   type Task,
 } from '../../src/core/model/index.js';
 
@@ -212,5 +214,80 @@ describe('boardSnapshotSchema', () => {
   it('rejects unsafe document names inside a snapshot', () => {
     const bad = { ...snapshot, documents: [{ taskId: 'T1', name: '../x.md', content: '' }] };
     expect(boardSnapshotSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe('reportLanguage (T34)', () => {
+  // The list of dep-health's i18n.test.ts, in its order: English first, as the default.
+  const EXPECTED = [
+    'en',
+    'fi',
+    'sv',
+    'no',
+    'da',
+    'is',
+    'de',
+    'fr',
+    'es',
+    'pl',
+    'pt',
+    'ru',
+    'ar',
+    'ja',
+  ];
+
+  it('is exactly the 14 languages of dep-health, no more and no fewer', () => {
+    expect([...SUPPORTED_LANGUAGES]).toEqual(EXPECTED);
+  });
+
+  it.each(EXPECTED)('the board accepts %s, and the task too', (language) => {
+    expect(boardWorkflowSchema.parse({ reportLanguage: language })).toEqual({
+      reportLanguage: language,
+    });
+    expect(taskWorkflowSchema.parse({ reportLanguage: language })).toEqual({
+      reportLanguage: language,
+    });
+  });
+
+  it('the board still accepts null: that is English, as before', () => {
+    expect(boardWorkflowSchema.parse({ reportLanguage: null })).toEqual({ reportLanguage: null });
+  });
+
+  it.each([
+    { reportLanguage: 'xx' },
+    { reportLanguage: 'English' },
+    { reportLanguage: '' },
+    { reportLanguage: 'FI' },
+  ])('rejects %j on the board and on a task', (value) => {
+    expect(boardWorkflowSchema.safeParse(value).success).toBe(false);
+    expect(taskWorkflowSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('a task has no null: "like the board" is the key removed, not a value', () => {
+    expect(taskWorkflowSchema.safeParse({ reportLanguage: null }).success).toBe(false);
+  });
+
+  it('a task can still set the six flags next to the language, and no other board setting', () => {
+    expect(taskWorkflowSchema.parse({ push: true, reportLanguage: 'fi' })).toEqual({
+      push: true,
+      reportLanguage: 'fi',
+    });
+    expect(taskWorkflowSchema.safeParse({ baseBranch: 'x' }).success).toBe(false);
+  });
+
+  it('a column cannot override it (INVARIANT: board+task, not column)', () => {
+    expect(workflowFlagsSchema.safeParse({ reportLanguage: 'fi' }).success).toBe(false);
+    expect(
+      workflowOverridesSchema.safeParse({ board: {}, statuses: { todo: { reportLanguage: 'fi' } } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('a task carries it in its own overrides', () => {
+    const withLanguage = { ...task, workflow: { reportLanguage: 'fi' } };
+    expect(taskSchema.parse(withLanguage)).toEqual(withLanguage);
+    expect(taskSchema.safeParse({ ...task, workflow: { reportLanguage: 'xx' } }).success).toBe(
+      false,
+    );
   });
 });

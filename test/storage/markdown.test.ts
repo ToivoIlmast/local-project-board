@@ -139,6 +139,28 @@ describe('markdown storage on disk', () => {
     expect(issues[0]?.message).toContain('frontmatter');
   });
 
+  it('reports a task whose report language is not one of the 14, and keeps the other tasks (T34)', async () => {
+    const good = await storage.createTask(task);
+    const dir = join(root, '.board', 'tasks', 'T77');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'task.md'),
+      '---\nid: T77\ntitle: Bad language\nstatus: todo\nrank: a1\nlabels: []\nworkflow:\n  reportLanguage: xx\ncreatedAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\n',
+      'utf8',
+    );
+
+    expect((await storage.listTasks()).map((t) => t.id)).toEqual([good.id]);
+    const issues = await storage.readIssues();
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.file).toBe('tasks/T77/task.md');
+    expect(issues[0]?.message).toContain('reportLanguage');
+  });
+
+  it('stores and reads back the language of a task (T34)', async () => {
+    const created = await storage.createTask({ ...task, workflow: { reportLanguage: 'fi' } });
+    expect((await storage.getTask(created.id))?.workflow).toEqual({ reportLanguage: 'fi' });
+  });
+
   it('reports a file with no frontmatter instead of crashing', async () => {
     const dir = join(root, '.board', 'tasks', 'T42');
     await mkdir(dir, { recursive: true });
@@ -349,6 +371,16 @@ describe('markdown storage: workflow settings', () => {
         'statuses.todo',
       ],
       ['an unknown top-level key', 'formatVersion: 1\ncolumns: {}\n', 'columns'],
+      [
+        'a report language that is not one of the 14 (T34)',
+        'formatVersion: 1\nboard:\n  reportLanguage: xx\n',
+        'board.reportLanguage',
+      ],
+      [
+        'a report language in a column (T34)',
+        'formatVersion: 1\nstatuses:\n  todo:\n    reportLanguage: fi\n',
+        'statuses.todo',
+      ],
     ])('is reported, and the board runs on defaults: %s', async (_why, text, mention) => {
       const created = await storage.createTask(task);
       await writeFile(file(), text, 'utf8');

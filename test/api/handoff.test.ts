@@ -564,6 +564,22 @@ describe('the handoff of a markdown board', () => {
     expect(await handoff(id)).toContain('Push your commits');
   });
 
+  it('writes the language of the task into the report step, with its source (T34)', async () => {
+    const id = await createTask({ status: 'todo' });
+    await board
+      .put(`${API}/workflow`, { board: { reportLanguage: 'sv' }, statuses: {} })
+      .expect(200);
+    expect(await handoff(id)).toContain(
+      'Write in Swedish. _(source: default; reportLanguage: board)_',
+    );
+
+    await patchWorkflow(id, { reportLanguage: 'fi' });
+    const text = await handoff(id);
+
+    expect(text).toContain('Write in Finnish. _(source: default; reportLanguage: this task)_');
+    expect(text).not.toContain('Swedish');
+  });
+
   it('runs on the defaults when workflow.yaml cannot be read, as the rest of the board does', async () => {
     const id = await createTask({ status: 'todo' });
     await writeFile(join(board.root, '.board', 'workflow.yaml'), 'formatVersion: [\n', 'utf8');

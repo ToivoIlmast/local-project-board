@@ -17,6 +17,7 @@ import {
   type DocumentMeta,
   type EffectiveWorkflow,
   type Task,
+  type TaskWorkflowOverrides,
   type WorkflowFlagOverrides,
   type WorkflowFlag,
 } from '../../src/core/index.js';
@@ -32,7 +33,7 @@ const FACTS: WorkflowFacts = {
 interface Levels {
   board?: BoardWorkflowOverrides;
   status?: WorkflowFlagOverrides;
-  task?: WorkflowFlagOverrides;
+  task?: TaskWorkflowOverrides;
 }
 
 /** What the API would compute for a task in `todo`: the one function that decides (ADR-0028). */
@@ -286,6 +287,19 @@ describe('renderWorkflowSteps', () => {
       expect(stepFor({}, 'report')).not.toContain('language');
       expect(stepFor({ board: { reportLanguage: 'fi' } }, 'report')).toContain('Finnish');
       expect(stepFor({ board: { reportLanguage: 'sv' } }, 'report')).toContain('Swedish');
+    });
+
+    it('reportLanguage on the task: "Write in Finnish." and where it comes from (T34)', () => {
+      const step = stepFor(
+        { board: { reportLanguage: 'sv' }, task: { reportLanguage: 'fi' } },
+        'report',
+      );
+      expect(step).toContain(' Write in Finnish.');
+      expect(step).not.toContain('Swedish');
+      expect(step).toContain('reportLanguage: this task');
+      expect(stepFor({ board: { reportLanguage: 'sv' } }, 'report')).toContain(
+        'reportLanguage: board',
+      );
     });
 
     it('startStatus and finishStatus: a status is moved to with PATCH, null leaves it alone', () => {

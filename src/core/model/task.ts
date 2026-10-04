@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isTaskId } from '../rules/ids.js';
 import { isValidRank } from '../rules/rank.js';
 import { aiRunSchema } from './aiRun.js';
-import { workflowFlagsSchema } from './workflow.js';
+import { taskWorkflowSchema } from './workflow.js';
 
 export const taskIdSchema = z.string().refine(isTaskId, 'Invalid task id');
 export const isoDateTimeSchema = z.iso.datetime();
@@ -21,7 +21,7 @@ export const taskSchema = z.strictObject({
   /** A soft link to a git branch; not validated against the repository. */
   branch: z.string().min(1).optional(),
   /** This task's overrides of the AI workflow settings; only what is set (ADR-0028). */
-  workflow: workflowFlagsSchema.optional(),
+  workflow: taskWorkflowSchema.optional(),
   /** What the last agent on this task reported about its run (T27). */
   aiRun: aiRunSchema.optional(),
   createdAt: isoDateTimeSchema,
