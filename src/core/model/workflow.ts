@@ -7,6 +7,7 @@ import { SUPPORTED_LANGUAGES } from './language.js';
  *
  * Six settings can be overridden on every level (board, column, task); all of them are booleans.
  * `reportLanguage` sits between: the board and a task can set it, a column cannot (T34).
+ * `commitLanguage` is the board's alone (T43).
  */
 export const WORKFLOW_FLAGS = ['editCode', 'branch', 'checks', 'commit', 'push', 'report'] as const;
 
@@ -16,6 +17,7 @@ export const BOARD_WORKFLOW_KEYS = [
   'finishStatus',
   'baseBranch',
   'checkCommand',
+  'commitLanguage',
   'reportLanguage',
 ] as const;
 
@@ -31,6 +33,7 @@ export const BOARD_ONLY_WORKFLOW_KEYS = [
   'finishStatus',
   'baseBranch',
   'checkCommand',
+  'commitLanguage',
 ] as const;
 
 export const WORKFLOW_KEYS = [...WORKFLOW_FLAGS, ...BOARD_WORKFLOW_KEYS] as const;
@@ -59,8 +62,8 @@ export const workflowFlagsSchema = z.strictObject({
 
 const nonBlank = z.string().regex(/\S/, 'Must not be blank');
 
-/** One of the 14 languages the report can be written in (ADR-0028). */
-const reportLanguage = z.enum(SUPPORTED_LANGUAGES);
+/** One of the 14 languages an agent can be asked to write in (ADR-0028); the report's and the commits'. */
+const language = z.enum(SUPPORTED_LANGUAGES);
 
 /**
  * Overrides of a task: the flags and the report language. There is no `null` here: "like the
@@ -68,7 +71,7 @@ const reportLanguage = z.enum(SUPPORTED_LANGUAGES);
  */
 export const taskWorkflowSchema = workflowFlagsSchema.extend({
   /** Language for the AI-generated report on this task. */
-  reportLanguage: reportLanguage.optional(),
+  reportLanguage: language.optional(),
 });
 
 /**
@@ -85,7 +88,9 @@ export const boardWorkflowSchema = workflowFlagsSchema.extend({
   /** The command that runs the checks; `null` is the project's full pipeline. */
   checkCommand: nonBlank.nullable().optional(),
   /** Language for the AI-generated report; `null` means English (the default). */
-  reportLanguage: reportLanguage.nullable().optional(),
+  reportLanguage: language.nullable().optional(),
+  /** Language of the rest of a commit message; `null` gives no instruction (T43). */
+  commitLanguage: language.nullable().optional(),
 });
 
 /**
@@ -115,7 +120,8 @@ export const workflowSettingsSchema = z.strictObject({
   finishStatus: z.string().min(1).nullable(),
   baseBranch: nonBlank.nullable(),
   checkCommand: nonBlank.nullable(),
-  reportLanguage: reportLanguage.nullable(),
+  commitLanguage: language.nullable(),
+  reportLanguage: language.nullable(),
 });
 
 /** Where the value of a setting comes from. */

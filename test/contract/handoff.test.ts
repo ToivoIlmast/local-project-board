@@ -332,9 +332,13 @@ describe('renderWorkflowSteps', () => {
       };
 
       expect(sourceOf(levels, 'commit')).toBe('source: this task');
-      expect(sourceOf({ ...levels, task: {} }, 'commit')).toBe('source: column "todo"');
+      // The commit step uses commitLanguage as a parameter, so it names that source too (T43).
+      expect(sourceOf({ ...levels, task: {} }, 'commit')).toBe(
+        'source: column "todo"; commitLanguage: default',
+      );
+      // With commit off the language is not used, so it is not named.
       expect(sourceOf({ ...levels, task: {}, status: {} }, 'commit')).toBe('source: board');
-      expect(sourceOf({}, 'commit')).toBe('source: default');
+      expect(sourceOf({}, 'commit')).toBe('source: default; commitLanguage: default');
     });
 
     it('takes the source from the effective settings and never works it out itself (INVARIANT)', () => {
@@ -425,7 +429,7 @@ describe('renderWorkflowSteps', () => {
           '2. You may change the files of the project. _(source: default)_',
           '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on the repository\'s default branch. Before doing anything else, run this sequence: ensure the working tree is clean; switch to the repository\'s default branch and pull from the remote if available (if unreachable, use it as it is); create `task/T13-ai-workflow-model` from the repository\'s default branch if it does not exist yet (not from the current branch); switch to `task/T13-ai-workflow-model`. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: default)_',
           '4. Before you finish, run the checks of the project — its full pipeline, as its README or CLAUDE.md describes it — and fix what fails. _(source: default; checkCommand: default)_',
-          '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
+          '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default; commitLanguage: default)_',
           '6. Do not push: nothing leaves this machine. _(source: default)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
@@ -480,7 +484,7 @@ describe('renderWorkflowSteps', () => {
           '2. You may change the files of the project. _(source: default)_',
           '3. Work in a branch of your own, `task/T13-ai-workflow-model`, based on `master`. Before doing anything else, run this sequence: ensure the working tree is clean; switch to `master` and pull from the remote if available (if unreachable, use it as it is); create `task/T13-ai-workflow-model` from `master` if it does not exist yet (not from the current branch); switch to `task/T13-ai-workflow-model`. Record it in the task: `PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`. Never commit to the branch it is based on. _(source: default; baseBranch: board)_',
           '4. Before you finish, run the checks of the project with `npm test` and fix what fails. _(source: default; checkCommand: board)_',
-          '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default)_',
+          '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default; commitLanguage: default)_',
           '6. Push your commits to the remote. _(source: board)_',
           '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
@@ -555,6 +559,201 @@ describe('renderWorkflowSteps', () => {
     expect(text).not.toContain('undefined');
     expect(text).not.toContain('null');
     expect(text.match(/\bT\d+\b/g)?.every((id) => id === 'T13')).toBe(true);
+  });
+});
+
+describe('commitLanguage (T43)', () => {
+  const COMMIT_BASE =
+    'Commit your work; start the message with the task id, like `T13: what changed`.';
+  const STEP_LINES = (levels: Levels): string[] =>
+    workflowSteps(effective(levels), FACTS).map((step) => step.text);
+
+  /** The keys of the steps whose text differs between two configurations. */
+  const changedSteps = (a: Levels, b: Levels): (string | null)[] => {
+    const before = workflowSteps(effective(a), FACTS);
+    const after = workflowSteps(effective(b), FACTS);
+    return before.filter((step, index) => step.text !== after[index]?.text).map((step) => step.key);
+  };
+
+  describe('the step of commit', () => {
+    it('null adds no instruction: the text is the old one, byte for byte, plus only the origin', () => {
+      expect(stepFor({}, 'commit')).toBe(
+        `${COMMIT_BASE} _(source: default; commitLanguage: default)_`,
+      );
+      expect(stepFor({}, 'commit')).not.toMatch(/Write the rest|English/);
+    });
+
+    it('a language adds the instruction, keeps the T<id>: prefix and names the board as its source', () => {
+      expect(stepFor({ board: { commitLanguage: 'fi' } }, 'commit')).toBe(
+        `${COMMIT_BASE} Write the rest of the message in Finnish; the task id, file names, ` +
+          'code identifiers and trailers stay as they are. ' +
+          '_(source: default; commitLanguage: board)_',
+      );
+    });
+
+    it('en is an explicit instruction in English, not the same as null', () => {
+      const step = stepFor({ board: { commitLanguage: 'en' } }, 'commit');
+      expect(step).toContain('Write the rest of the message in English;');
+      expect(step).not.toBe(stepFor({}, 'commit'));
+    });
+
+    it.each([
+      ['commit is off', { commit: false }],
+      ['editCode is off', { editCode: false }],
+    ] as const)(
+      'says nothing about a language when %s: the step is the same as without one (INVARIANT)',
+      (_why, task) => {
+        const without = stepFor({ task }, 'commit');
+        const withLanguage = stepFor({ board: { commitLanguage: 'fi' }, task }, 'commit');
+
+        expect(without).toMatch(/^Do not commit/);
+        expect(withLanguage).toBe(without);
+      },
+    );
+  });
+
+  describe('is independent of reportLanguage (INVARIANT)', () => {
+    it('commitLanguage changes exactly the commit step', () => {
+      expect(changedSteps({}, { board: { commitLanguage: 'ru' } })).toEqual(['commit']);
+      expect(
+        changedSteps(
+          { board: { reportLanguage: 'de' } },
+          { board: { reportLanguage: 'de', commitLanguage: 'ru' } },
+        ),
+      ).toEqual(['commit']);
+    });
+
+    it('reportLanguage changes exactly the report step', () => {
+      expect(changedSteps({}, { board: { reportLanguage: 'de' } })).toEqual(['report']);
+      expect(
+        changedSteps(
+          { board: { commitLanguage: 'fi' } },
+          { board: { commitLanguage: 'fi', reportLanguage: 'de' } },
+        ),
+      ).toEqual(['report']);
+      expect(changedSteps({}, { task: { reportLanguage: 'de' } })).toEqual(['report']);
+    });
+
+    it('with both set, each step names only its own language', () => {
+      const levels: Levels = { board: { reportLanguage: 'de', commitLanguage: 'fi' } };
+      const commit = stepFor(levels, 'commit');
+      const report = stepFor(levels, 'report');
+
+      expect(commit).toContain('Finnish');
+      expect(commit).not.toMatch(/German|reportLanguage/);
+      expect(report).toContain('German');
+      expect(report).not.toMatch(/Finnish|commitLanguage/);
+    });
+
+    it('commitLanguage: null does not inherit reportLanguage, and the other way round', () => {
+      const onlyReport: Levels = { board: { reportLanguage: 'de' } };
+      expect(stepFor(onlyReport, 'commit')).toBe(stepFor({}, 'commit'));
+      expect(stepFor(onlyReport, 'commit')).not.toContain('German');
+
+      const onlyCommit: Levels = { board: { commitLanguage: 'fi' } };
+      expect(stepFor(onlyCommit, 'report')).toBe(stepFor({}, 'report'));
+      expect(stepFor(onlyCommit, 'report')).not.toContain('Finnish');
+    });
+  });
+
+  describe('is a parameter of commit, and of no other step', () => {
+    it('is the parameter of the commit step in WORKFLOW_STEP_PARAMETERS', () => {
+      expect(WORKFLOW_STEP_PARAMETERS.commit).toBe('commitLanguage');
+    });
+
+    it('no other step mentions it, whatever the value', () => {
+      const others = (levels: Levels): string[] =>
+        workflowSteps(effective(levels), FACTS)
+          .filter((step) => step.key !== 'commit')
+          .map((step) => step.text);
+      expect(others({ board: { commitLanguage: 'ru' } })).toEqual(others({}));
+    });
+  });
+
+  describe('in the whole handoff', () => {
+    const task: Task = {
+      id: 'T13',
+      title: 'Модель настроек',
+      status: 'todo',
+      rank: 'a0',
+      body: '## Цель\n\nОдна модель для настроек.\n\nTrailing text  \n',
+      labels: [],
+      createdAt: '2026-09-25T06:35:49.365Z',
+      updatedAt: '2026-09-26T12:17:45.921Z',
+    };
+    const instructions = generateInstructions({
+      baseUrl: 'http://127.0.0.1:7432',
+      board: { name: 'demo', statuses: STATUSES, idPrefix: 'T' },
+    });
+    const handoff = (levels: Levels, given: Task = task): string =>
+      generateHandoff({ task: given, documents: [], effective: effective(levels), instructions });
+    const lineOf = (text: string, fragment: string): string | undefined =>
+      text.split('\n').find((line) => line.includes(fragment));
+
+    it('differs by exactly one line between null and ru: the line of the commit step', () => {
+      const a = handoff({}).split('\n');
+      const b = handoff({ board: { commitLanguage: 'ru' } }).split('\n');
+
+      expect(b).toHaveLength(a.length);
+      const differing = a.flatMap((line, index) => (line === b[index] ? [] : [index]));
+      expect(differing).toHaveLength(1);
+      expect(a[differing[0] ?? -1]).toMatch(/^\d+\. Commit your work/);
+      expect(b[differing[0] ?? -1]).toContain('Write the rest of the message in Russian');
+    });
+
+    it('the branch, the description, the report step and the rules are the same for every language', () => {
+      const plain = handoff({});
+      for (const levels of [
+        { board: { commitLanguage: 'ru' } },
+        { board: { reportLanguage: 'de' } },
+        { board: { commitLanguage: 'fi', reportLanguage: 'de' } },
+      ] satisfies Levels[]) {
+        const text = handoff(levels);
+        const branch = (t: string) => lineOf(t, 'Work in a branch of your own');
+        expect(branch(text)).toBe(branch(plain));
+        // A Cyrillic title has no Latin words: the branch is `task/T13`, with no slug and no language (T29).
+        expect(branch(text)).toContain('`task/T13`');
+        expect(text).not.toMatch(/task\/T13-/);
+        expect(text.split('## Description')[1]?.split('## Documents')[0]).toBe(
+          plain.split('## Description')[1]?.split('## Documents')[0],
+        );
+        expect(text.split('## How to work')[1]?.split('---')[0]).toContain('Never merge a branch');
+        expect(text.slice(text.indexOf('---'))).toBe(plain.slice(plain.indexOf('---')));
+      }
+    });
+
+    it('copies the body as it is, and nothing tells the agent to change the title or the body', () => {
+      for (const levels of [
+        {},
+        { board: { commitLanguage: 'ru', reportLanguage: 'de' } },
+      ] as Levels[]) {
+        const text = handoff(levels);
+        expect(text).toContain(`## Description\n\n${task.body.trimEnd()}\n`);
+        const steps = text.split('## How to work on this task')[1]?.split('\n---\n')[0] ?? '';
+        expect(steps).not.toMatch(/"title"|"body"|\btranslate\b/i);
+      }
+    });
+
+    it('a title with Latin words keeps its ASCII slug, whatever the language', () => {
+      const latin = { ...task, title: 'AI workflow model' };
+      const a = handoff({}, latin);
+      const b = handoff({ board: { commitLanguage: 'ru' } }, latin);
+      expect(lineOf(b, 'Work in a branch of your own')).toBe(
+        lineOf(a, 'Work in a branch of your own'),
+      );
+      expect(b).toContain('task/T13-ai-workflow-model');
+      expect(b).not.toContain('task/T13-ai-workflow-model-ru');
+    });
+  });
+
+  it('every step line is unchanged by the language apart from the commit one', () => {
+    const base = STEP_LINES({});
+    const withLanguage = STEP_LINES({ board: { commitLanguage: 'ru' } });
+    expect(withLanguage).toHaveLength(base.length);
+    const keys = workflowSteps(effective(), FACTS).map((step) => step.key);
+    withLanguage.forEach((text, index) => {
+      if (keys[index] !== 'commit') expect(text).toBe(base[index]);
+    });
   });
 });
 

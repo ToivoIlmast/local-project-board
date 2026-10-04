@@ -26,6 +26,7 @@ export const DEFAULT_WORKFLOW: Readonly<WorkflowSettings> = {
   finishStatus: null,
   baseBranch: null,
   checkCommand: null,
+  commitLanguage: null,
   reportLanguage: null,
 };
 

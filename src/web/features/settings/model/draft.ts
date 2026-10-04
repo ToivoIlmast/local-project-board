@@ -91,7 +91,7 @@ export function setBoardFlag(
  */
 export function setBoardValue(
   overrides: WorkflowOverrides,
-  key: BoardOnlyWorkflowKey,
+  key: Exclude<BoardOnlyWorkflowKey, 'commitLanguage'>,
   value: string | null | undefined,
 ): WorkflowOverrides {
   const { [key]: _old, ...rest } = overrides.board;
@@ -114,6 +114,21 @@ export function setBoardLanguage(
     ...overrides,
     board:
       language === undefined || language === 'en' ? rest : { ...rest, reportLanguage: language },
+  };
+}
+
+/**
+ * The commit message language of the board. Unlike the report's, English is an instruction of its
+ * own here, so it is stored; only "not set" removes the key (and no `null` is ever written).
+ */
+export function setBoardCommitLanguage(
+  overrides: WorkflowOverrides,
+  language: SupportedLanguage | undefined,
+): WorkflowOverrides {
+  const { commitLanguage: _old, ...rest } = overrides.board;
+  return {
+    ...overrides,
+    board: language === undefined ? rest : { ...rest, commitLanguage: language },
   };
 }
 
@@ -179,6 +194,8 @@ export function normalizeOverrides(overrides: WorkflowOverrides): WorkflowOverri
   const board: BoardWorkflowOverrides = { ...overrides.board };
   // English is what no language means: it is not an override (a hand-written one is not either).
   if (board.reportLanguage === 'en' || board.reportLanguage === null) delete board.reportLanguage;
+  // `null` is no instruction, which is what the key missing says too.
+  if (board.commitLanguage === null) delete board.commitLanguage;
   for (const key of ['baseBranch', 'checkCommand'] as const) {
     const text = board[key];
     if (typeof text !== 'string') continue;

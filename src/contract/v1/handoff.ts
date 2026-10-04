@@ -40,6 +40,7 @@ export interface WorkflowStep {
 export const WORKFLOW_STEP_PARAMETERS = {
   branch: 'baseBranch',
   checks: 'checkCommand',
+  commit: 'commitLanguage',
   report: 'reportLanguage',
 } as const satisfies Partial<Record<WorkflowKey, BoardWorkflowKey>>;
 
@@ -114,11 +115,16 @@ const STEPS: Renderers = {
       : `Before you finish, run the checks of the project with \`${parameter}\` and fix what fails.`;
   },
 
-  commit: ({ value, inactive, facts }) => {
+  commit: ({ value, parameter, inactive, facts }) => {
     if (inactive) return 'Do not commit: there are no changes to commit.';
-    return value
-      ? `Commit your work; start the message with the task id, like \`${facts.taskId}: what changed\`.`
-      : 'Do not commit: leave your changes in the working tree.';
+    if (!value) return 'Do not commit: leave your changes in the working tree.';
+    // The language is only a request for the free text; the prefix, names and trailers are not text.
+    const langNote =
+      parameter !== null
+        ? ` Write the rest of the message in ${languageName(parameter)}; the task id, file names, ` +
+          'code identifiers and trailers stay as they are.'
+        : '';
+    return `Commit your work; start the message with the task id, like \`${facts.taskId}: what changed\`.${langNote}`;
   },
 
   push: ({ value, inactive }) => {

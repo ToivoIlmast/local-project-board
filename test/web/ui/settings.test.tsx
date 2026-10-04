@@ -106,6 +106,7 @@ describe('the AI workflow settings panel', () => {
         'baseBranch',
         'checkCommand',
         'reportLanguage',
+        'commitLanguage',
       ] as const) {
         expect(within(group).queryByLabelText(WORKFLOW_LABELS[key].label)).not.toBeInTheDocument();
       }
@@ -265,6 +266,98 @@ describe('the AI workflow settings panel', () => {
       expect(
         within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
       ).toHaveDisplayValue('English (default)');
+    });
+
+    describe('the commit message language (T43)', () => {
+      const commitLanguage = () =>
+        within(board()).getByLabelText(WORKFLOW_LABELS.commitLanguage.label);
+
+      it('offers "not set" first, then every one of the 14 languages, English included', async () => {
+        await openSettings();
+
+        expect(commitLanguage()).toHaveDisplayValue(/^Not set/);
+        const values = within(commitLanguage())
+          .getAllByRole('option')
+          .map((option) => (option as HTMLOptionElement).value);
+        // English is a real instruction here, unlike the report language where it is the default.
+        expect(values).toEqual(['', ...SUPPORTED_LANGUAGES]);
+        expect(commitLanguage()).toHaveAccessibleDescription(/commit/i);
+      });
+
+      it('is a control of its own, not the one of the report language', async () => {
+        await openSettings();
+
+        expect(commitLanguage()).not.toBe(
+          within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
+        );
+        expect(WORKFLOW_LABELS.commitLanguage.label).not.toBe(WORKFLOW_LABELS.reportLanguage.label);
+      });
+
+      it('sends only the override, and shows it after a reload', async () => {
+        const { user, board: fake } = await openSettings();
+
+        await user.selectOptions(commitLanguage(), 'fi');
+        await user.click(save());
+
+        await waitFor(() => expect(fake.workflow.board).toEqual({ commitLanguage: 'fi' }));
+        cleanup();
+        await openSettings(structuredClone(fake.workflow));
+        expect(commitLanguage()).toHaveDisplayValue('Finnish');
+      });
+
+      it('English is stored as an override: it is an instruction, not the absence of one', async () => {
+        const { user, board: fake } = await openSettings();
+
+        await user.selectOptions(commitLanguage(), 'en');
+        await user.click(save());
+
+        await waitFor(() => expect(fake.workflow.board).toEqual({ commitLanguage: 'en' }));
+      });
+
+      it('"not set" removes the key and keeps the rest (INVARIANT)', async () => {
+        const { user, board: fake } = await openSettings({
+          board: { commitLanguage: 'ru', reportLanguage: 'de', push: true },
+          statuses: {},
+        });
+        expect(commitLanguage()).toHaveDisplayValue('Russian');
+
+        await user.selectOptions(commitLanguage(), '');
+        await user.click(save());
+
+        await waitFor(() =>
+          expect(fake.workflow.board).toEqual({ reportLanguage: 'de', push: true }),
+        );
+      });
+
+      it('changing it leaves the report language alone, and the other way round', async () => {
+        const { user, board: fake } = await openSettings();
+
+        await user.selectOptions(commitLanguage(), 'fi');
+        await user.selectOptions(
+          within(board()).getByLabelText(WORKFLOW_LABELS.reportLanguage.label),
+          'de',
+        );
+        await user.click(save());
+
+        await waitFor(() =>
+          expect(fake.workflow.board).toEqual({ commitLanguage: 'fi', reportLanguage: 'de' }),
+        );
+      });
+
+      it('a column has no control for it, and sends no such key', async () => {
+        const { user, board: fake } = await openSettings();
+        expect(
+          within(column('todo')).queryByLabelText(WORKFLOW_LABELS.commitLanguage.label),
+        ).not.toBeInTheDocument();
+
+        await user.selectOptions(
+          within(column('todo')).getByLabelText(WORKFLOW_LABELS.push.label),
+          'On',
+        );
+        await user.click(save());
+
+        await waitFor(() => expect(fake.workflow.statuses).toEqual({ todo: { push: true } }));
+      });
     });
 
     it('sets the base branch and the check command, and an empty field is no override', async () => {
@@ -646,7 +739,7 @@ describe('the AI workflow settings panel', () => {
         ...within(panel()).getAllByRole('combobox'),
         ...within(panel()).getAllByRole('textbox'),
       ];
-      expect(controls).toHaveLength(6 + 2 + 2 + 1 + STATUSES.length * 6);
+      expect(controls).toHaveLength(6 + 2 + 2 + 2 + STATUSES.length * 6);
       for (const control of controls) expect(control).toHaveAccessibleName();
 
       expect(

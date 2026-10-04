@@ -10,6 +10,7 @@ import {
   normalizeOverrides,
   orphanStatuses,
   sameOverrides,
+  setBoardCommitLanguage,
   setBoardFlag,
   setBoardValue,
   setColumnFlag,
@@ -177,5 +178,38 @@ describe('the settings form works on overrides, never on effective values', () =
     expect(Object.keys(setColumnFlag(empty(), 'todo', flag, false).statuses['todo'] ?? {})).toEqual(
       ['editCode'],
     );
+  });
+});
+
+describe('the commit language of the board (T43)', () => {
+  it('sets only its own key, and leaves the report language and the rest as they are', () => {
+    const before: WorkflowOverrides = { board: { reportLanguage: 'de', push: true }, statuses: {} };
+
+    const after = setBoardCommitLanguage(before, 'fi');
+
+    expect(after.board).toEqual({ reportLanguage: 'de', push: true, commitLanguage: 'fi' });
+    expect(before.board).toEqual({ reportLanguage: 'de', push: true });
+  });
+
+  it('English is a value: it is an instruction, unlike the report language where it is the default', () => {
+    expect(setBoardCommitLanguage(empty(), 'en').board).toEqual({ commitLanguage: 'en' });
+    expect(normalizeOverrides(setBoardCommitLanguage(empty(), 'en')).board).toEqual({
+      commitLanguage: 'en',
+    });
+  });
+
+  it('undefined removes the key and sends no null (INVARIANT)', () => {
+    const after = setBoardCommitLanguage(
+      { board: { commitLanguage: 'ru', push: true }, statuses: {} },
+      undefined,
+    );
+    expect(after.board).toEqual({ push: true });
+    expect(Object.hasOwn(after.board, 'commitLanguage')).toBe(false);
+  });
+
+  it('a hand-written null is the same as not set, and is not sent back', () => {
+    const overrides: WorkflowOverrides = { board: { commitLanguage: null }, statuses: {} };
+    expect(normalizeOverrides(overrides).board).toEqual({});
+    expect(sameOverrides(overrides, empty())).toBe(true);
   });
 });

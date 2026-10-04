@@ -53,6 +53,12 @@ export const WORKFLOW_LABELS: Record<WorkflowKey, { label: string; description: 
     label: 'Check command',
     description: 'The command that runs the checks. Empty is the own pipeline of the project.',
   },
+  commitLanguage: {
+    label: 'Commit message language',
+    description:
+      'The language the agent writes the text of its commit messages in. The task id, file names ' +
+      'and code identifiers stay as they are, and the language of the report is a separate setting.',
+  },
   reportLanguage: {
     label: 'Report language',
     description:
@@ -89,6 +95,7 @@ const NO_VALUE: Record<BoardWorkflowKey, string> = {
   finishStatus: 'not changed',
   baseBranch: "the repository's default branch",
   checkCommand: 'the pipeline of the project',
+  commitLanguage: "the project's convention",
   reportLanguage: 'English',
 };
 
@@ -96,5 +103,5 @@ const NO_VALUE: Record<BoardWorkflowKey, string> = {
 export function boardValueText(key: BoardWorkflowKey, settings: WorkflowSettings): string {
   const value = settings[key];
   if (value === null) return NO_VALUE[key];
-  return key === 'reportLanguage' ? languageName(value) : value;
+  return key === 'reportLanguage' || key === 'commitLanguage' ? languageName(value) : value;
 }

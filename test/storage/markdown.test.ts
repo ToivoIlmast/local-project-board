@@ -161,6 +161,23 @@ describe('markdown storage on disk', () => {
     expect((await storage.getTask(created.id))?.workflow).toEqual({ reportLanguage: 'fi' });
   });
 
+  it('reports a task with a commitLanguage in its workflow as unreadable, and keeps the others (T43)', async () => {
+    const good = await storage.createTask(task);
+    const dir = join(root, '.board', 'tasks', 'T78');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'task.md'),
+      '---\nid: T78\ntitle: Own commit language\nstatus: todo\nrank: a1\nlabels: []\nworkflow:\n  commitLanguage: fi\ncreatedAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\n',
+      'utf8',
+    );
+
+    expect((await storage.listTasks()).map((t) => t.id)).toEqual([good.id]);
+    const issues = await storage.readIssues();
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.file).toBe('tasks/T78/task.md');
+    expect(issues[0]?.message).toContain('commitLanguage');
+  });
+
   it('reports a file with no frontmatter instead of crashing', async () => {
     const dir = join(root, '.board', 'tasks', 'T42');
     await mkdir(dir, { recursive: true });
@@ -379,6 +396,16 @@ describe('markdown storage: workflow settings', () => {
       [
         'a report language in a column (T34)',
         'formatVersion: 1\nstatuses:\n  todo:\n    reportLanguage: fi\n',
+        'statuses.todo',
+      ],
+      [
+        'a commit language that is not one of the 14 (T43)',
+        'formatVersion: 1\nboard:\n  commitLanguage: xx\n',
+        'board.commitLanguage',
+      ],
+      [
+        'a commit language in a column (T43)',
+        'formatVersion: 1\nstatuses:\n  todo:\n    commitLanguage: fi\n',
         'statuses.todo',
       ],
     ])('is reported, and the board runs on defaults: %s', async (_why, text, mention) => {

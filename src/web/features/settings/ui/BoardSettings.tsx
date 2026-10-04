@@ -7,11 +7,12 @@ import { Checkbox, Field, Input, Select, type SelectOption } from '../../../shar
 import {
   effectiveFlag,
   inactiveFlags,
+  setBoardCommitLanguage,
   setBoardFlag,
   setBoardLanguage,
   setBoardValue,
 } from '../model/draft';
-import { BoardLanguage } from './LanguageChoice';
+import { BoardLanguage, CommitLanguage } from './LanguageChoice';
 import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
 
 export interface BoardSettingsProps {
@@ -21,7 +22,7 @@ export interface BoardSettingsProps {
   onChange: (change: (current: WorkflowOverrides) => WorkflowOverrides) => void;
 }
 
-/** The settings of the whole board: six on/off flags, two statuses, two texts and the report language. */
+/** The settings of the whole board: six on/off flags, two statuses, two texts and the languages of the commits and of the report. */
 export function BoardSettings({ overrides, defaults, statuses, onChange }: BoardSettingsProps) {
   const inactive = inactiveFlags(overrides, defaults);
 
@@ -70,6 +71,11 @@ export function BoardSettings({ overrides, defaults, statuses, onChange }: Board
 
       <TextSetting settingKey="baseBranch" overrides={overrides} onChange={onChange} />
       <TextSetting settingKey="checkCommand" overrides={overrides} onChange={onChange} />
+
+      <CommitLanguage
+        value={overrides.board.commitLanguage}
+        onChange={(language) => onChange((current) => setBoardCommitLanguage(current, language))}
+      />
 
       <BoardLanguage
         value={overrides.board.reportLanguage}

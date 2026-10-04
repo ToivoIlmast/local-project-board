@@ -10,6 +10,10 @@ import {
   workflowOverridesSchema,
   SUPPORTED_LANGUAGES,
   taskWorkflowSchema,
+  workflowSettingsSchema,
+  BOARD_ONLY_WORKFLOW_KEYS,
+  BOARD_WORKFLOW_KEYS,
+  TASK_WORKFLOW_KEYS,
   type Task,
 } from '../../src/core/model/index.js';
 
@@ -289,5 +293,46 @@ describe('reportLanguage (T34)', () => {
     expect(taskSchema.safeParse({ ...task, workflow: { reportLanguage: 'xx' } }).success).toBe(
       false,
     );
+  });
+});
+
+describe('commitLanguage (T43)', () => {
+  it('the board accepts exactly the codes of reportLanguage: one source, not a copy', () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      expect(boardWorkflowSchema.parse({ commitLanguage: language })).toEqual({
+        commitLanguage: language,
+      });
+    }
+    expect(boardWorkflowSchema.parse({ commitLanguage: null })).toEqual({ commitLanguage: null });
+  });
+
+  it.each(['xx', '', 'Finnish', 'FI', 'English'])('rejects %j on the board', (value) => {
+    expect(boardWorkflowSchema.safeParse({ commitLanguage: value }).success).toBe(false);
+  });
+
+  it('a column cannot override it (INVARIANT: board only)', () => {
+    expect(workflowFlagsSchema.safeParse({ commitLanguage: 'fi' }).success).toBe(false);
+    expect(
+      workflowOverridesSchema.safeParse({ board: {}, statuses: { todo: { commitLanguage: 'fi' } } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('a task cannot override it (INVARIANT: board only)', () => {
+    expect(taskWorkflowSchema.safeParse({ commitLanguage: 'fi' }).success).toBe(false);
+    expect(taskSchema.safeParse({ ...task, workflow: { commitLanguage: 'fi' } }).success).toBe(
+      false,
+    );
+  });
+
+  it('is a board-only key, and is not one a task may override', () => {
+    expect(BOARD_ONLY_WORKFLOW_KEYS as readonly string[]).toContain('commitLanguage');
+    expect(BOARD_WORKFLOW_KEYS as readonly string[]).toContain('commitLanguage');
+    expect(TASK_WORKFLOW_KEYS as readonly string[]).not.toContain('commitLanguage');
+  });
+
+  it('is a key of the settings a task runs with, and null by default', () => {
+    expect(workflowSettingsSchema.shape).toHaveProperty('commitLanguage');
+    expect(workflowSettingsSchema.shape.commitLanguage.safeParse('xx').success).toBe(false);
   });
 });

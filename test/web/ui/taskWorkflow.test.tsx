@@ -112,6 +112,48 @@ describe('the AI block of a task without settings of its own', () => {
     expect(within(ai()).queryAllByRole('textbox')).toHaveLength(0);
   });
 
+  it('shows the commit language as in effect, with its source, and offers no control for it (T43)', async () => {
+    const rendered = await openTask({
+      workflow: boardOverrides({ board: { commitLanguage: 'fi' } }),
+    });
+
+    await expandAndRead(rendered);
+
+    expect(valueOf(WORKFLOW_LABELS.commitLanguage.label)).toHaveTextContent(
+      'Finnish, from the board',
+    );
+    // Still the six flags and the report language: no control was added (T43, board only).
+    expect(within(ai()).getAllByRole('combobox')).toHaveLength(WORKFLOW_FLAGS.length + 1);
+    expect(
+      within(ai()).queryByLabelText(WORKFLOW_LABELS.commitLanguage.label),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says that the commit language follows the convention of the project when it is not set (T43)', async () => {
+    const rendered = await openTask();
+
+    await expandAndRead(rendered);
+
+    expect(valueOf(WORKFLOW_LABELS.commitLanguage.label)).toHaveTextContent(
+      "the project's convention, from the default",
+    );
+  });
+
+  it('does not send the commit language when a task is saved (T43, INVARIANT)', async () => {
+    const rendered = await openTask({
+      tasks: [todo({ workflow: { push: true } })],
+      workflow: boardOverrides({ board: { commitLanguage: 'fi' } }),
+    });
+    const patch = jest.spyOn(rendered.board.client, 'updateTask');
+
+    await rendered.user.selectOptions(field('report'), 'Off');
+    await rendered.user.click(save());
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('T1', { workflow: { push: true, report: false } }),
+    );
+  });
+
   it('writes nothing just because it was opened (INVARIANT)', async () => {
     const rendered = await openTask({
       workflow: boardOverrides({ board: { push: true }, statuses: { todo: { report: false } } }),
