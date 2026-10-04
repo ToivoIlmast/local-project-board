@@ -58,8 +58,10 @@ whatever you are looking at.
   differ too: open it to see where each value in effect comes from, override one setting, or send
   the task back to its column's settings. The language of the agent's report is one of 14
   (English by default) and can be set for the board and for a single task; it is not the language
-  of the board's page. Leaving a form with unsaved changes asks first: Save,
-  Discard or Cancel.
+  of the board's page. The language of commit messages is a separate setting of the board alone —
+  the same 14, or none, which leaves it to the convention of the project; the task id, file names
+  and trailers are never translated, and branch names stay English. Leaving a form with unsaved
+  changes asks first: Save, Discard or Cancel.
 - **Send to AI.** In a task, or in the menu of its card, one entry copies the handoff — the task,
   its documents and the steps its settings call for — ready to paste into any agent. It holds no
   token. `npx local-project-board handoff <ID>` prints the same text. The second entry,

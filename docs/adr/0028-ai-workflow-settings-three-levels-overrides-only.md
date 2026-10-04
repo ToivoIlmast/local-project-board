@@ -27,8 +27,10 @@ written atomically.
   it, a column cannot. It is one of the 14 codes of `SUPPORTED_LANGUAGES`
   (`z.enum`, not any string). The board's `null` still means English; a task has no `null` —
   "like the board" is the key left out, and English on a task is `en`.
+  `commitLanguage` (default `null`, T43) is board-only: the same 14 codes (the one `z.enum`, not
+  a copy), `null` meaning "no instruction" (see "Commit message language" below).
   `TASK_WORKFLOW_KEYS` (the flags and `reportLanguage`) is what a task may override;
-  `BOARD_ONLY_WORKFLOW_KEYS` is what only the board may set. A code that is not one of the 14, in
+  `BOARD_ONLY_WORKFLOW_KEYS` (now including `commitLanguage`) is what only the board may set. A code that is not one of the 14, in
   `workflow.yaml` or in a task file, is reported in `readIssues` (the file is unreadable), as
   any other invalid value is; over the API it is `400 INVALID_REQUEST`, like every other value
   the schema refuses.
@@ -175,7 +177,11 @@ Three things describe what an agent does, and each has one place:
   the config no longer needs). They are always in the instructions and nothing overrides them.
   None is about how to work: a test rejects the words of the settings in them.
 - **Project rules** — `ai.rules`, a list of strings, default `[]`: conventions that no setting
-  expresses (the language of comments, the style of commit messages). They are added after the
+  expresses (the language of comments, the style of commit messages). The _language_ of commit
+  messages is no longer one of them: it is the setting `commitLanguage` (T43). Its _style_ and the
+  language of comments stay here. If a line says otherwise ("commit messages in English" with
+  `commitLanguage: ru`), the step wins, as the subsection already says: the rules replace
+  neither the API rules nor the steps. They are added after the
   API rules under "### Project rules", never in place of them; an empty list leaves the
   subsection out, and a line that is exactly an API rule is not said twice. Between config layers
   the list is replaced whole (ADR-0021), which now only ever replaces the project's own lines.
@@ -296,6 +302,53 @@ so they behave and read the same.
   question (`beforeunload`) while something is unsaved; that question cannot offer Save.
 - If the settings were also changed elsewhere, the dialog says that Save replaces that change
   (last-write-wins, ADR-0018) — the same warning the form shows.
+
+## Commit message language (T43)
+
+Each human-readable text that an agent writes in the workflow has one answer to "in which language",
+and one setting that gives it:
+
+| Artifact | Language | Set by |
+| --- | --- | --- |
+| Branch name | always English (ASCII slug) | `taskBranchName` (T29), computed by the board |
+| Commit message: the prefix `T<id>:`, file names, identifiers, trailers (`Co-Authored-By:`) | not localised | the `commit` step |
+| Commit message: the rest of the text | `commitLanguage` | the `commit` step |
+| Title and description of a pull request | `commitLanguage` | this rule only: there is no PR step |
+| `report.md` | `reportLanguage` | the `report` step (T29, T34) |
+| Title and body of the task | not translated | the handoff copies the body; the agent changes only `status` and `branch` |
+| Code, identifiers, file names, endpoints, statuses, ids, setting keys | not localised | — |
+| Comments in code, the style of commit messages | the project's convention | `ai.rules` / the project's CLAUDE.md |
+| The handoff and the instructions | always English | "Language" above |
+| Other documents of a task (analysis with `editCode: false`), `message` of a run report (T32) | **no setting governs them** | open question, not decided here |
+
+- **A setting of its own.** Its reader is the history of the repository, not the reviewer of the
+  task; its sensible level is the repository's convention, not the task's; and its step is
+  `commit`. It cannot share `reportLanguage`: that one is overridable per task (T34), and a
+  language of history set per task is exactly the mixed history it exists to prevent.
+- **The name names the step.** `commitLanguage` is `WORKFLOW_STEP_PARAMETERS.commit`, as
+  `baseBranch`→`branch`, `checkCommand`→`checks`, `reportLanguage`→`report`; so a key that no step
+  renders is still a type error. "Communication language" would also cover the report, the `message`
+  of a run report and the conversation in the terminal. **If a pull request step is ever added, it
+  uses this same key**: the title and description of a PR describe the commits of the branch.
+- **Board only.** Not a column key, not a task key: a column or a task that names it is refused
+  (`400 INVALID_REQUEST`; in a file, `readIssues` for `workflow.yaml` and an unreadable task).
+  An invalid code is refused exactly like one for `reportLanguage`.
+- **Stored in `workflow.yaml`, not passed with a run.** The language changes the text of the
+  handoff, and the handoff is a function of the state of the board; Resume (T36) reads the handoff
+  again, so a parameter of a run would be lost on Resume or Restart. (The model of T35 is a run's
+  parameter because it does not change the handoff.)
+- **`null` is no instruction.** The text of the commit step is exactly what it was before; the
+  agent follows the project's convention. It does _not_ mean "English": an explicit `en` gives an
+  explicit instruction. With a language set, the step adds "Write the rest of the message in
+  <Language>; the task id, file names, code identifiers and trailers stay as they are." With
+  `commit` off, or inactive (`editCode: false`), no language is mentioned.
+- **Independent of `reportLanguage`.** Each is the parameter of exactly one step, so changing one
+  changes exactly one line of the handoff — a test holds this — and `null` of one never takes the
+  value of the other. The origin is named by the existing rule: the step lists
+  `commitLanguage: board|default` whenever the commit step is on, so every board's commit step now
+  ends `(source: default; commitLanguage: default)`, as `baseBranch` and `reportLanguage` do.
+- A snapshot's `formatVersion` does not change: the key is optional, as `reportLanguage` was.
+- The board does not check which language a commit is actually in; it only gives the instruction.
 
 ## Consequences
 

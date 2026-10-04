@@ -82,3 +82,38 @@ export function BoardLanguage({ value, onChange }: BoardLanguageProps) {
     </Field>
   );
 }
+
+export interface CommitLanguageProps {
+  value: SupportedLanguage | null | undefined;
+  onChange: (value: SupportedLanguage | undefined) => void;
+}
+
+/**
+ * The language of the board's commit messages: "not set" (the project's own convention) first,
+ * then all 14. English is a language here, because choosing it gives the agent an instruction.
+ */
+export function CommitLanguage({ value, onChange }: CommitLanguageProps) {
+  const options: SelectOption[] = [
+    { value: '', label: 'Not set (the convention of the project)' },
+    ...SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: languageName(code) })),
+  ];
+  return (
+    <Field
+      label={WORKFLOW_LABELS.commitLanguage.label}
+      hint={WORKFLOW_LABELS.commitLanguage.description}
+    >
+      {(id, hintId) => (
+        <Select
+          id={id}
+          aria-describedby={hintId}
+          options={options}
+          value={value ?? ''}
+          onChange={(event) => {
+            const chosen = event.target.value;
+            onChange(chosen === '' ? undefined : (chosen as SupportedLanguage));
+          }}
+        />
+      )}
+    </Field>
+  );
+}

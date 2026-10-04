@@ -332,9 +332,13 @@ describe('renderWorkflowSteps', () => {
       };
 
       expect(sourceOf(levels, 'commit')).toBe('source: this task');
-      expect(sourceOf({ ...levels, task: {} }, 'commit')).toBe('source: column "todo"');
+      // The commit step uses commitLanguage as a parameter, so it names that source too (T43).
+      expect(sourceOf({ ...levels, task: {} }, 'commit')).toBe(
+        'source: column "todo"; commitLanguage: default',
+      );
+      // With commit off the language is not used, so it is not named.
       expect(sourceOf({ ...levels, task: {}, status: {} }, 'commit')).toBe('source: board');
-      expect(sourceOf({}, 'commit')).toBe('source: default');
+      expect(sourceOf({}, 'commit')).toBe('source: default; commitLanguage: default');
     });
 
     it('takes the source from the effective settings and never works it out itself (INVARIANT)', () => {
@@ -576,7 +580,7 @@ describe('commitLanguage (T43)', () => {
       expect(stepFor({}, 'commit')).toBe(
         `${COMMIT_BASE} _(source: default; commitLanguage: default)_`,
       );
-      expect(stepFor({}, 'commit')).not.toMatch(/language|English/i);
+      expect(stepFor({}, 'commit')).not.toMatch(/Write the rest|English/);
     });
 
     it('a language adds the instruction, keeps the T<id>: prefix and names the board as its source', () => {

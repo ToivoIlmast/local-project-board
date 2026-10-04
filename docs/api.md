@@ -270,6 +270,7 @@ Response — 200, application/json:
     "finishStatus": null,
     "baseBranch": null,
     "checkCommand": "npm test",
+    "commitLanguage": null,
     "reportLanguage": null
   },
   "sources": {
@@ -283,6 +284,7 @@ Response — 200, application/json:
     "finishStatus": "default",
     "baseBranch": "default",
     "checkCommand": "board",
+    "commitLanguage": "default",
     "reportLanguage": "default"
   },
   "inactive": [
@@ -372,6 +374,7 @@ Response — 200, application/json:
     "finishStatus": null,
     "baseBranch": null,
     "checkCommand": null,
+    "commitLanguage": null,
     "reportLanguage": null
   },
   "board": {
@@ -423,6 +426,7 @@ Response — 200, application/json:
     "finishStatus": null,
     "baseBranch": null,
     "checkCommand": null,
+    "commitLanguage": null,
     "reportLanguage": null
   },
   "board": {

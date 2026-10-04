@@ -82,6 +82,7 @@ const exampleDefaults = {
   finishStatus: null,
   baseBranch: null,
   checkCommand: null,
+  commitLanguage: null,
   reportLanguage: null,
 };
 
@@ -254,6 +255,7 @@ export const routes = {
           finishStatus: 'default',
           baseBranch: 'default',
           checkCommand: 'board',
+          commitLanguage: 'default',
           reportLanguage: 'default',
         },
         inactive: ['branch', 'checks', 'commit', 'push'],
