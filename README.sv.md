@@ -1,4 +1,4 @@
-<!-- Based on README.md @ c298cf0b9a11e8cf88ee667f10d6b0455866e221 -->
+<!-- Based on README.md @ 5344cec7667659d41c04797b18512394cac33331 -->
 
 # local-project-board
 
@@ -58,7 +58,7 @@ på.
   köra kontrollerna, committa, pusha, skriva en rapport — för hela tavlan och för varje kolumn.
   Bara det du ändrar sparas, i `.board/workflow.yaml`; en kolumn kan helt enkelt följa tavlan. En
   enskild uppgift kan också avvika: öppna den för att se varifrån varje gällande värde kommer,
-  åsidosätt en inställning eller skicka tillbaka uppgiften till sin kolumns inställningar. Språket i agentens rapport är ett av 14 (engelska som standard) och kan ställas in för tavlan och för en enskild uppgift; det är inte språket på tavlans sida. Att
+  åsidosätt en inställning eller skicka tillbaka uppgiften till sin kolumns inställningar. Språket i agentens rapport är ett av 14 (engelska som standard) och kan ställas in för tavlan och för en enskild uppgift; det är inte språket på tavlans sida. Språket i commit-meddelanden är en separat inställning som bara gäller tavlan — samma 14, eller inget, vilket lämnar det åt projektets konvention; uppgiftens id, filnamn och trailers översätts aldrig, och grennamn förblir engelska. Att
   lämna ett formulär med osparade ändringar frågar först: Spara, Förkasta eller Avbryt.
 - **Skicka till AI.** I en uppgift, eller i menyn på dess kort, kopierar ett val handoffen —
   uppgiften, dess dokument och de steg som inställningarna kräver — redo att klistra in i vilken
