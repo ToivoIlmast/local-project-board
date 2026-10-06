@@ -80,7 +80,7 @@ export async function waitForRuns(
       try {
         // Looked for again: `claude` may have gone since the wait began.
         const program = await findClaude(env);
-        const code = await startSession(program, next.taskId, current, board.root, env);
+        const code = await startSession(program, next.taskId, current, board.root, env, next.model);
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
         writeError(error instanceof Error ? error.message : String(error));

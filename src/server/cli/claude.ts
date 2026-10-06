@@ -22,7 +22,8 @@ const PROGRAM = 'claude';
  * It checks everything that can be checked before the session starts — the id, the running
  * board, the task, `claude` itself — and says which of them is wrong. Then Claude Code is given
  * `--session-id <uuid> <prompt>`. No token, no handoff text, no other flags of its own: the
- * model and the permissions are the user's own settings of Claude Code.
+ * permissions are the user's own settings of Claude Code, and so is the model unless the run
+ * names one (T35, `startSession`).
  *
  * Resolves to the exit code the session ended with, so that the command ends as `claude` did.
  */
@@ -53,6 +54,11 @@ export async function launchClaude(
  * `claude --wait` alike. Generates a UUID, records the session on the board (begin), then
  * starts `claude --session-id <uuid> <prompt>` in the root of the project. Records the
  * process outcome on the board (end) before resolving (T33).
+ *
+ * `model` is the one choice of a run (T35): when given it is passed as `--model` and the model
+ * as two arguments, and recorded in `aiRun.model`; when not, neither happens and Claude Code
+ * uses the user's own settings. It was checked against the closed form by the contract; the
+ * CLI of `claude <ID>` has none.
  */
 export async function startSession(
   program: string,
@@ -60,13 +66,21 @@ export async function startSession(
   board: RuntimeState,
   root: string,
   env: NodeJS.ProcessEnv,
+  model?: string,
 ): Promise<number> {
   const sessionId = randomUUID();
   const prompt = claudeCodePrompt(id, board.url.replace(/\/+$/, ''));
 
-  const runId = await beginRun(board, id, sessionId);
+  const runId = await beginRun(board, id, sessionId, model);
 
-  return run(program, ['--session-id', sessionId, prompt], root, env, board, id, runId, sessionId);
+  // The prompt stays the last argument.
+  const args = [
+    ...(model === undefined ? [] : ['--model', model]),
+    '--session-id',
+    sessionId,
+    prompt,
+  ];
+  return run(program, args, root, env, board, id, runId, sessionId);
 }
 
 /** `claude` as the PATH finds it, or the reason there is none, in words a user can act on. */
@@ -127,8 +141,17 @@ async function postBoard(
  * Records the start of a session on the board; throws if the board refuses.
  * Called before spawn so that no session ever runs without a recorded run (T33).
  */
-async function beginRun(board: RuntimeState, taskId: string, sessionId: string): Promise<number> {
-  const response = await postBoard(board, `/tasks/${taskId}/ai-run`, { sessionId, mode: 'new' });
+async function beginRun(
+  board: RuntimeState,
+  taskId: string,
+  sessionId: string,
+  model: string | undefined,
+): Promise<number> {
+  const response = await postBoard(board, `/tasks/${taskId}/ai-run`, {
+    sessionId,
+    mode: 'new',
+    ...(model === undefined ? {} : { model }),
+  });
   if (response === undefined) {
     throw new Error(
       `The board did not answer when beginning run for ${taskId}. Is it still running?`,

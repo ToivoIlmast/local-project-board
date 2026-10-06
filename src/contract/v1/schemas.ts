@@ -132,17 +132,43 @@ export const deletedSchema = z.strictObject({ deleted: z.literal(true) });
  */
 const agentSchema = z.literal('claude-code');
 
-/** "Start this agent on this task": a name, never a program, an argument or a prompt (T27). */
-export const runTaskRequestSchema = z.strictObject({ agent: agentSchema });
+/**
+ * The model of a run (T35): the one value of a request that reaches the argv of `claude`, so
+ * only a closed form passes — a short alias, or a full `claude-…` name. It cannot start with a
+ * dash, hold a space or a `;`, or be long. The board keeps no list of full names: they come and
+ * go with Claude Code, and `claude` itself refuses one it does not know.
+ */
+export const CLAUDE_MODEL_ALIASES = ['opus', 'sonnet', 'fable', 'haiku'] as const;
+export const claudeModelSchema = z.union([
+  z.enum(CLAUDE_MODEL_ALIASES),
+  z
+    .string()
+    .max(64)
+    .regex(/^claude-[a-z0-9.-]+(\[1m\])?$/),
+]);
+
+/**
+ * "Start this agent on this task": a name, and at most a model of the closed form above; never
+ * a program, an argument or a prompt (T27). No model means the settings of Claude Code.
+ */
+export const runTaskRequestSchema = z.strictObject({
+  agent: agentSchema,
+  model: claudeModelSchema.optional(),
+});
 
 /** The request was handed to a runner; the session is its business from here on. */
-export const runStartedSchema = z.strictObject({ taskId: taskIdSchema, agent: agentSchema });
+export const runStartedSchema = z.strictObject({
+  taskId: taskIdSchema,
+  agent: agentSchema,
+  model: claudeModelSchema.optional(),
+});
 
 /** What a waiting runner receives on `GET /runs`, and nothing else ever. */
 export const runRequestSchema = z.strictObject({
   type: z.literal('run.requested'),
   taskId: taskIdSchema,
   agent: agentSchema,
+  model: claudeModelSchema.optional(),
 });
 
 /**
