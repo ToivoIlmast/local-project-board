@@ -64,6 +64,22 @@ describe('POST /tasks/:id/run with a runner waiting', () => {
     expect(waiting.events).toEqual([{ type: 'run.requested', taskId: 'T2', agent: 'claude-code' }]);
   });
 
+  it('hands the model with the task when one was chosen, and no model field when not (T35)', async () => {
+    const chosen = await runner();
+    const answer = await start('T1', { agent: 'claude-code', model: 'sonnet' }).expect(200);
+    expect(answer.body).toEqual({ taskId: 'T1', agent: 'claude-code', model: 'sonnet' });
+    await chosen.waitForEvents(1);
+    expect(chosen.events).toEqual([
+      { type: 'run.requested', taskId: 'T1', agent: 'claude-code', model: 'sonnet' },
+    ]);
+
+    const plain = await runner();
+    await start('T2').expect(200);
+    await plain.waitForEvents(1);
+    expect(plain.events).toEqual([{ type: 'run.requested', taskId: 'T2', agent: 'claude-code' }]);
+    expect(Object.keys(plain.events[0] ?? {})).not.toContain('model');
+  });
+
   it('gives one request to one runner and then lets it go: a runner starts one session at a time', async () => {
     const waiting = await runner();
 
@@ -159,6 +175,17 @@ describe('POST /tasks/:id/run refuses, and hands nothing to a runner', () => {
       expect(code(response.body)).toBe('INVALID_REQUEST');
     }
     expect(waiting.events).toEqual([]);
+  });
+
+  it('a model that is not a short alias or a full claude-… name: nothing reaches the runner (INVARIANT, T35)', async () => {
+    const waiting = await runner();
+
+    for (const model of ['--x', 'a b', 'a;b', '', 'a'.repeat(200)]) {
+      const response = await start('T1', { agent: 'claude-code', model }).expect(400);
+      expect(code(response.body)).toBe('INVALID_REQUEST');
+    }
+    expect(waiting.events).toEqual([]);
+    expect(waiting.ended()).toBe(false);
   });
 
   it('a request without the token, or from another page', async () => {
