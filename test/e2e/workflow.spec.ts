@@ -466,6 +466,10 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: 'Claude Code', exact: true }).focus();
     await page.keyboard.press('Enter');
+    // The dialog of the run (T38), left as it opens: the default of Claude Code, a new session.
+    const dialog = page.getByRole('dialog', { name: 'Start Claude Code on T1' });
+    await dialog.getByRole('button', { name: 'Start' }).focus();
+    await page.keyboard.press('Enter');
 
     await expect(details.getByText(/Claude Code is starting on T1/)).toBeVisible();
     await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();

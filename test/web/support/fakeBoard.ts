@@ -7,6 +7,7 @@ import type {
   GitStatus,
   Project,
   Report,
+  RunTaskRequest,
   Task,
   WorkflowOverrides,
   WorkflowState,
@@ -44,7 +45,7 @@ export interface FakeBoard {
   /** The overrides of the board and its columns, as the server would store them. */
   workflow: WorkflowOverrides;
   /** What was handed to a waiting runner, oldest first: the board of these tests always has one. */
-  runs: { taskId: string; agent: string }[];
+  runs: ({ taskId: string } & RunTaskRequest)[];
   /** Make the next call to one method fail, as a real board would. */
   fail(method: keyof BoardClient, error: ApiError): void;
   /** Hold the next call to one method open, to see what the page shows meanwhile. */
@@ -67,7 +68,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   );
   const listeners: ((event: BoardEvent) => void)[] = [];
   const calls: string[] = [];
-  const runs: { taskId: string; agent: string }[] = [];
+  const runs: ({ taskId: string } & RunTaskRequest)[] = [];
   const failures = new Map<string, ApiError>();
   const gates = new Map<string, Promise<void>>();
   let sequence = tasks.length;
@@ -195,11 +196,11 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         return state;
       }),
     taskWorkflow: (id) => record('taskWorkflow', () => effectiveOf(require(id))),
-    runTask: (id, agent) =>
+    runTask: (id, request) =>
       record('runTask', () => {
         require(id);
-        runs.push({ taskId: id, agent });
-        return { taskId: id, agent };
+        runs.push({ taskId: id, ...structuredClone(request) });
+        return { taskId: id, ...structuredClone(request) };
       }),
     handoff: (id) =>
       record('handoff', () => {

@@ -355,7 +355,7 @@ describe('starting an agent on a task (T27)', () => {
         : undefined,
     );
 
-    await expect(client.runTask('T7', 'claude-code')).resolves.toEqual({
+    await expect(client.runTask('T7', { agent: 'claude-code' })).resolves.toEqual({
       taskId: 'T7',
       agent: 'claude-code',
     });
@@ -367,13 +367,26 @@ describe('starting an agent on a task (T27)', () => {
     expect(JSON.parse(call?.body ?? '')).toEqual({ agent: 'claude-code' });
   });
 
+  it('posts a chosen model as one string next to the agent (T38)', async () => {
+    const { fake, client } = board((url, method) =>
+      method === 'POST' && url === `${BASE}/api/v1/tasks/T7/run`
+        ? { json: { taskId: 'T7', agent: 'claude-code', model: 'sonnet' } }
+        : undefined,
+    );
+
+    await client.runTask('T7', { agent: 'claude-code', model: 'sonnet' });
+
+    const call = fake.calls.find((recorded) => recorded.url.endsWith('/run'));
+    expect(JSON.parse(call?.body ?? '')).toEqual({ agent: 'claude-code', model: 'sonnet' });
+  });
+
   it('says what the board said when nothing waits to start it', async () => {
     const { client } = board(() => ({
       status: 409,
       json: errorBody('NO_AGENT_RUNNER', 'Nothing is waiting to start Claude Code.'),
     }));
 
-    await expect(client.runTask('T7', 'claude-code')).rejects.toMatchObject({
+    await expect(client.runTask('T7', { agent: 'claude-code' })).rejects.toMatchObject({
       status: 409,
       code: 'NO_AGENT_RUNNER',
       message: 'Nothing is waiting to start Claude Code.',
