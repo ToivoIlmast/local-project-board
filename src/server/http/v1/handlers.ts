@@ -92,8 +92,13 @@ export const handlers: Handlers = {
   // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
   'tasks.run': async (context, { params, body }) => {
     await context.tasks.get(params.id);
-    if (!context.runs.hand({ taskId: params.id, agent: body.agent })) throw noRunner(params.id);
-    return { taskId: params.id, agent: body.agent };
+    const request = {
+      taskId: params.id,
+      agent: body.agent,
+      ...(body.model === undefined ? {} : { model: body.model }),
+    };
+    if (!context.runs.hand(request)) throw noRunner(params.id);
+    return request;
   },
 
   // One text for one task, generated on every request from what the services read now and

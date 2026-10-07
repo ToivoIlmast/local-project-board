@@ -32,8 +32,11 @@ async function api(state: RuntimeState, method: string, path: string, body?: unk
 }
 
 /** What the page does when Claude Code is chosen in Send to AI; the same request, no more. */
-const sendToClaude = (state: RuntimeState, id: string) =>
-  api(state, 'POST', `/tasks/${id}/run`, { agent: 'claude-code' });
+const sendToClaude = (state: RuntimeState, id: string, model?: string) =>
+  api(state, 'POST', `/tasks/${id}/run`, {
+    agent: 'claude-code',
+    ...(model === undefined ? {} : { model }),
+  });
 
 async function runningState(root: string): Promise<RuntimeState> {
   const runtime = await readRuntime(root);
@@ -114,6 +117,44 @@ describe('local-project-board claude --wait', () => {
       expect(prompt).not.toContain('T1');
       expect(await realpath(call?.cwd ?? '')).toBe(await realpath(root));
       await runner.printed(/^Starting Claude Code on T2\./);
+    });
+
+    it("with no --model when none was chosen: the model is the user's own setting (INVARIANT, T35)", async () => {
+      const { root, state } = await boardWithTasks();
+      const claude = await fakeClaude();
+      const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+      await runner.printed(WAITING);
+
+      await sendToClaude(state, 'T1');
+
+      const [call] = await callsOf(claude, 1);
+      expect(call?.argv.some((argument) => argument.startsWith('--model'))).toBe(false);
+      expect(call?.argv).toHaveLength(3);
+      const task = (await (await api(state, 'GET', '/tasks/T1')).json()) as {
+        aiRun?: Record<string, unknown>;
+      };
+      expect(task.aiRun).not.toHaveProperty('model');
+    });
+
+    it('with --model and the model as two arguments of their own, and the same model in aiRun (INVARIANT, T35)', async () => {
+      const { root, state } = await boardWithTasks();
+      const claude = await fakeClaude();
+      const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+      await runner.printed(WAITING);
+
+      expect((await sendToClaude(state, 'T2', 'sonnet')).status).toBe(200);
+
+      const [call] = await callsOf(claude, 1);
+      const argv = call?.argv ?? [];
+      // Two elements, never `--model=sonnet`; the prompt stays last and whole.
+      expect(argv).toHaveLength(5);
+      expect(argv[argv.indexOf('--model') + 1]).toBe('sonnet');
+      expect(argv.filter((argument) => argument.includes('sonnet'))).toEqual(['sonnet']);
+      expect(argv[argv.length - 1]).toBe(claudeCodePrompt('T2', boardUrl(state)));
+      const task = (await (await api(state, 'GET', '/tasks/T2')).json()) as {
+        aiRun?: { model?: string };
+      };
+      expect(task.aiRun?.model).toBe('sonnet');
     });
 
     it('whose prompt leads to the handoff of that task: the task, its workflow, the AI instructions and the rules of the project', async () => {

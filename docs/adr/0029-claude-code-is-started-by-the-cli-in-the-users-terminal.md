@@ -35,7 +35,7 @@ directory with that prompt. It takes the model and the permissions from the user
 - **Nothing is configured.** The board passes no flags to `claude`: the model, the permission mode
   and the rest are the user's Claude Code settings. A second, independent way to choose a model
   would disagree with them; the AI workflow settings (ADR-0028) are about how an agent works on a
-  task, not about which agent it is.
+  task, not about which agent it is. _(The model is amended by T35 below; the rest stands.)_
 - **No registry of agents.** `AGENT_TARGETS` in the page and one command in the CLI; an
   abstraction waits for a second real agent (PHILOSOPHY §8).
 
@@ -106,3 +106,25 @@ routes that the board updates independently of the agent's self-report.
 - **Legacy `aiRun` records** without `runId` (T20, T28, T29, T30) are read fine; the absence
   of `runId` is treated as `runId: 0` when computing the next `runId`. The files are not
   rewritten.
+
+## Amendment (T35, 2026-10-06): the model is a parameter of the run
+
+"Nothing is configured" is replaced for the model only. A run may name one; the permission mode,
+effort and the rest stay the user's own settings.
+
+- **The model is a parameter of the run, not of the workflow** (ADR-0028): it is not stored with
+  the board or a column, only in `aiRun.model` of the run that used it.
+- **`model?` in `POST /tasks/:id/run`** and in the `run.requested` request the runner receives.
+  The value has a **closed form**: an alias from the short list `opus`, `sonnet`, `fable`,
+  `haiku`, or a full name matching `^claude-[a-z0-9.-]+(\[1m\])?$` of at most 64 characters. It
+  cannot begin with a dash, hold a space or a `;`. Anything else is refused with `400
+  INVALID_REQUEST` before a runner is asked, like any other body that is not this route's. The
+  board keeps **no list of full names**: they change with Claude Code, and `claude` refuses one it
+  does not know (the run ends as `failed{exit}`).
+- **No field means the default**: the runner passes no `--model`, and Claude Code uses the user's
+  settings. `claude <ID>` has no model.
+- **The runner passes `--model <model>` as two elements of argv** — never `--model=…` and never
+  through a shell — ahead of `--session-id`, so that the prompt stays the last argument. Begin
+  records the same value as `aiRun.model`.
+- The closed form is what keeps the argv safe: the one value of a request that reaches a program
+  is checked against it by the contract (a test lists the values that must fail).

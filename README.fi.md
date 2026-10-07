@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 5344cec7667659d41c04797b18512394cac33331 -->
+<!-- Based on README.md @ fadc9375f8ecc668d43f77101003889381c0844d -->
 
 # local-project-board
 
@@ -177,7 +177,7 @@ Hyvä tietää:
 - Yksi istunto kerrallaan: istunnon aikana **Lähetä tekoälylle → Claude Code** kertoo, ettei mikään
   odota, eikä käynnistä mitään. Samoin, jos odottajaa ei ole käynnistetty; silloin se kertoo yllä
   olevat kaksi komentoa.
-- Malli, käyttöoikeustila ja muu ovat omia Claude Code -asetuksiasi; taulu ei välitä mitään.
+- Malli on ajon parametri, ei workflow'n. Oletuksena se on oma Claude Code -asetuksesi, eikä taulu välitä mitään; jos ajo nimeää mallin, odottaja käynnistää `claude --model <malli>` ja ajo kirjaa sen kohtaan `aiRun.model`. Malli on joko alias (`opus`, `sonnet`, `fable`, `haiku`) tai muodon `claude-…` täysi nimi; muu hylätään. Nimi, jota `claude` itse ei tunne, päättää ajon epäonnistumiseen. Käyttöoikeustila ja muu ovat edelleen omia asetuksiasi.
   Kehotteessa tai argumenteissa ei ole tokenia.
 - Clauden on tehtävä HTTP-pyyntöjä osoitteeseen `127.0.0.1` — se käyttää `curl`ia Bash-työkalunsa
   kautta — ja Claude Code kysyy siihen oletuksena luvan. Salli `Bash(curl *)` istunnolle tai omissa

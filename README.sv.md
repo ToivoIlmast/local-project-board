@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 5344cec7667659d41c04797b18512394cac33331 -->
+<!-- Based on README.md @ fadc9375f8ecc668d43f77101003889381c0844d -->
 
 # local-project-board
 
@@ -172,8 +172,12 @@ Bra att veta:
 - En session i taget: medan en session körs säger **Skicka till AI → Claude Code** att ingenting
   väntar, och startar ingenting. Det gör den också när ingen väntare är startad; då nämner den de
   två kommandona ovan.
-- Modellen, behörighetsläget och resten är dina egna Claude Code-inställningar; tavlan skickar
-  inga. Det finns ingen token i prompten eller i argumenten.
+- Modellen är en parameter för körningen, inte för arbetsflödet. Som standard är den din egen
+  Claude Code-inställning och tavlan skickar ingen; nämner en körning en modell startar väntaren
+  `claude --model <modell>` och körningen noterar den som `aiRun.model`. Den är antingen ett alias
+  (`opus`, `sonnet`, `fable`, `haiku`) eller ett fullständigt namn på formen `claude-…`; allt annat
+  nekas. Ett namn som `claude` själv inte känner till gör att körningen misslyckas.
+  Behörighetsläget och resten är fortfarande dina egna inställningar. Det finns ingen token i prompten eller i argumenten.
 - Claude måste göra HTTP-anrop till `127.0.0.1` — den använder `curl` via sitt Bash-verktyg — och
   Claude Code frågar som standard om lov för det. Tillåt `Bash(curl *)` för sessionen, eller i
   dina Claude Code-inställningar om du inte vill ha frågor.

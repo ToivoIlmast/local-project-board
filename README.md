@@ -174,8 +174,12 @@ What to know:
 - One session at a time: while a session runs, **Send to AI → Claude Code** says that nothing is
   waiting, and starts nothing. So does it when no runner is started; it then tells you the two
   commands above.
-- The model, the permission mode and the rest are your own Claude Code settings; the board passes
-  none. There is no token in the prompt or in the arguments.
+- The model is a parameter of the run, not of the workflow. By default it is your own Claude Code
+  setting and the board passes none; if a run names one, the runner starts `claude --model <it>` and
+  the run records it as `aiRun.model`. It is either an alias (`opus`, `sonnet`, `fable`, `haiku`) or
+  a full name of the form `claude-…`; anything else is refused. A name that `claude` itself does not
+  know ends the run as failed. The permission mode and the rest are still your own settings. There
+  is no token in the prompt or in the arguments.
 - Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and
   Claude Code asks for permission for that by default. Allow `Bash(curl *)` for the session, or in
   your Claude Code settings if you want no questions.
