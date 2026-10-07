@@ -1,4 +1,4 @@
-<!-- Based on README.md @ fadc9375f8ecc668d43f77101003889381c0844d -->
+<!-- Based on README.md @ 41c5a58f2b4a5d117dbbcb0bb6643cc35259c91f -->
 
 # local-project-board
 
@@ -178,6 +178,12 @@ Bra att veta:
   (`opus`, `sonnet`, `fable`, `haiku`) eller ett fullständigt namn på formen `claude-…`; allt annat
   nekas. Ett namn som `claude` själv inte känner till gör att körningen misslyckas.
   Behörighetsläget och resten är fortfarande dina egna inställningar. Det finns ingen token i prompten eller i argumenten.
+- **Skicka till AI → Claude Code** öppnar först en liten dialog med tre kontroller: modellen
+  (Claude Codes standard, ett alias eller ett annat fullständigt namn; den förra körningens modell
+  om den hade en), rapportens språk och sessionen. Språket är en inställning för uppgiften: en
+  ändring sparas på uppgiften före starten, och kan den inte sparas startar ingenting. Sessionen är
+  tills vidare en ny: att fortsätta den förra (Resume) visas, men är avstängt tills väntaren kan
+  göra det. Lämnad som den öppnas startar dialogen exakt det som klicket startade före den.
 - Claude måste göra HTTP-anrop till `127.0.0.1` — den använder `curl` via sitt Bash-verktyg — och
   Claude Code frågar som standard om lov för det. Tillåt `Bash(curl *)` för sessionen, eller i
   dina Claude Code-inställningar om du inte vill ha frågor.
