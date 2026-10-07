@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { BoardProvider } from '../../../src/web/api/react';
-import { SendToAi, type AgentTarget } from '../../../src/web/features/tasks/index';
+import { SendToAi, type RunTarget } from '../../../src/web/features/tasks/index';
 import { aTask } from '../support/fixtures';
 import { fakeBoard, type FakeBoardOptions } from '../support/fakeBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
@@ -199,7 +199,7 @@ describe('the menu grows without being rebuilt', () => {
     const user = userEvent.setup();
     render(
       <BoardProvider client={board.client} connect={() => () => undefined}>
-        <SendToAi taskId="T1" targets={targets} />
+        <SendToAi task={todo()} targets={targets} />
       </BoardProvider>,
     );
     return { board, user };
@@ -218,7 +218,7 @@ describe('the menu grows without being rebuilt', () => {
   });
 
   it('shows a target that another task adds, after the copy, and runs it for this task', async () => {
-    const run = jest.fn<AgentTarget['run']>().mockResolvedValue(undefined);
+    const run = jest.fn<RunTarget['run']>().mockResolvedValue(undefined);
     const { board, user } = renderMenu([{ label: 'Another agent', run }]);
 
     await user.click(screen.getByRole('button', { name: 'Send to AI' }));
@@ -253,6 +253,9 @@ describe('Send to AI → Claude Code (T27)', () => {
   async function sendToClaude(rendered: RenderedBoard): Promise<void> {
     await rendered.user.click(sendMenu());
     await rendered.user.click(claudeItem());
+    // The dialog of the run (T38), left as it opens.
+    const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T1' });
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
   }
 
   it('asks the board to start Claude Code on this task, once, and says where it starts (INVARIANT)', async () => {
@@ -276,6 +279,8 @@ describe('Send to AI → Claude Code (T27)', () => {
 
     await rendered.user.click(within(panel).getByRole('button', { name: 'Send to AI' }));
     await rendered.user.click(claudeItem());
+    const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T2' });
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
 
     await within(panel).findByText(/^Claude Code is starting on T2 /);
     expect(rendered.board.runs).toEqual([{ taskId: 'T2', agent: 'claude-code' }]);
@@ -289,8 +294,11 @@ describe('Send to AI → Claude Code (T27)', () => {
     await sendToClaude(rendered);
     await within(details()).findByText(STARTING);
 
-    // The handoff is read by the session itself, from the board, when it starts.
-    expect(rendered.board.calls.slice(before)).toEqual(['runTask']);
+    // The handoff is read by the session itself, from the board, when it starts. The dialog
+    // reads the language in effect for the task (T38), and that is all it reads.
+    expect(rendered.board.calls.slice(before).filter((call) => call !== 'taskWorkflow')).toEqual([
+      'runTask',
+    ]);
     expect(await navigator.clipboard.readText()).toBe('what was there before');
   });
 
@@ -344,8 +352,9 @@ describe('Send to AI → Claude Code (T27)', () => {
     const release = rendered.board.hold('runTask');
 
     await sendToClaude(rendered);
-    await rendered.user.click(sendMenu());
-    expect(claudeItem()).toBeDisabled();
+    const start = within(screen.getByRole('dialog')).getByRole('button', { name: /^Start/ });
+    expect(start).toBeDisabled();
+    await rendered.user.click(start);
     release();
 
     await within(details()).findByText(STARTING);
@@ -360,6 +369,11 @@ describe('Send to AI → Claude Code (T27)', () => {
     await rendered.user.tab();
     await rendered.user.tab();
     expect(claudeItem()).toHaveFocus();
+    await rendered.user.keyboard('{Enter}');
+    // The dialog of the run takes the keyboard: its first field, then on to Start.
+    const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T1' });
+    expect(within(dialog).getByLabelText('Model')).toHaveFocus();
+    within(dialog).getByRole('button', { name: 'Start' }).focus();
     await rendered.user.keyboard('{Enter}');
 
     expect(await within(details()).findByText(STARTING)).toBeVisible();

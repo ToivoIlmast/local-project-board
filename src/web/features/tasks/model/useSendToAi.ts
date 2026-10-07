@@ -1,47 +1,23 @@
-import { useState } from 'react';
-import type { BoardClient } from '../../../api/index';
+import { createElement, useState, type ReactElement } from 'react';
+import type { Task } from '../../../../contract/v1/index';
 import { useBoardClient } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useCopyToClipboard } from '../../../shared/hooks/useCopyToClipboard';
 import type { MenuItem } from '../../../shared/ui/index';
+import { ClaudeCodeLaunch } from '../ui/ClaudeCodeLaunch';
+import type { AgentTarget, DialogTarget, RunTarget } from './agentTarget';
 
-/**
- * A way to hand a task to an agent. The menus list the ones they are given after their own: a
- * new one is one more entry in `AGENT_TARGETS`, not a change to a menu.
- */
-export interface AgentTarget {
-  label: string;
-  /**
-   * Does it for this task. A text it resolves with is said to the person as the result. What
-   * it may use is what the menu gives it; a target that needs more than that is not a menu entry.
-   */
-  run: (taskId: string, context: TargetContext) => Promise<string | void>;
-}
-
-export interface TargetContext {
-  /** Puts the text on the clipboard; false when the browser refused. */
-  copy: (text: string) => Promise<boolean>;
-  /** The board this page is served by. */
-  client: BoardClient;
-}
+export type { AgentTarget } from './agentTarget';
 
 /**
  * Claude Code. Neither the page nor the board's server can start a program (ADR-0029), so this
  * asks the board to hand the task to the runner the person started in a terminal of the project
  * (`npx local-project-board claude --wait`), and that runner starts the session there (T27). The
- * page sends the id of the task and the name of the agent; the prompt, the program and the
- * handoff are none of its business. When nothing waits, the board says what to do instead.
+ * dialog asks for the parameters of the run first (T38); the page sends the id of the task, the
+ * name of the agent and the chosen model. The prompt, the program and the handoff are none of
+ * its business. When nothing waits, the board says what to do instead.
  */
-const CLAUDE_CODE: AgentTarget = {
-  label: 'Claude Code',
-  run: async (id, { client }) => {
-    await client.runTask(id, 'claude-code');
-    return (
-      `Claude Code is starting on ${id} in the terminal where ` +
-      '`local-project-board claude --wait` runs.'
-    );
-  },
-};
+const CLAUDE_CODE: DialogTarget = { label: 'Claude Code', dialog: ClaudeCodeLaunch };
 
 /** The further ways to send a task, in the order the menus show them. */
 export const AGENT_TARGETS: readonly AgentTarget[] = [CLAUDE_CODE];
@@ -53,6 +29,8 @@ const CLIPBOARD_REFUSED = new Error(
 export interface SendToAiState {
   /** "Copy handoff" and the further targets, ready for a `Menu`. */
   items: MenuItem[];
+  /** The dialog of a target that asked for one, while it is open. */
+  dialog: ReactElement | null;
   /** What was done, for a live region; nothing while nothing was. */
   done: string | undefined;
   /** Why it was not, in the board's own words. */
@@ -66,14 +44,15 @@ export interface SendToAiState {
  * line's, and has no token (T15).
  */
 export function useSendToAi(
-  taskId: string,
+  task: Task,
   targets: readonly AgentTarget[] = AGENT_TARGETS,
 ): SendToAiState {
   const client = useBoardClient();
   const { copy } = useCopyToClipboard();
   const [done, setDone] = useState<string | undefined>(undefined);
+  const [open, setOpen] = useState<DialogTarget | undefined>(undefined);
 
-  const copyHandoff: AgentTarget = {
+  const copyHandoff: RunTarget = {
     label: 'Copy handoff',
     run: async (id) => {
       const text = await client.handoff(id);
@@ -82,17 +61,38 @@ export function useSendToAi(
     },
   };
 
-  const sending = useAsyncAction(async (target: AgentTarget) => {
+  const sending = useAsyncAction(async (target: RunTarget) => {
     setDone(undefined);
-    setDone((await target.run(taskId, { copy, client })) ?? undefined);
+    setDone((await target.run(task.id, { copy, client })) ?? undefined);
   });
+
+  const choose = (target: AgentTarget): void => {
+    if ('run' in target) {
+      void sending.run(target);
+      return;
+    }
+    setDone(undefined);
+    sending.clearError();
+    setOpen(target);
+  };
 
   return {
     items: [copyHandoff, ...targets].map((target) => ({
       label: target.label,
       disabled: sending.pending,
-      onSelect: () => void sending.run(target),
+      onSelect: () => choose(target),
     })),
+    dialog:
+      open === undefined
+        ? null
+        : createElement(open.dialog, {
+            task,
+            onClose: () => setOpen(undefined),
+            onDone: (text: string) => {
+              setOpen(undefined);
+              setDone(text);
+            },
+          }),
     done: sending.error === undefined ? done : undefined,
     error: sending.error,
   };

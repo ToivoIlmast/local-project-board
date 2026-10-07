@@ -34,7 +34,7 @@ export const TaskCard = memo(function TaskCard({
   onNudge,
   onDragStart,
 }: TaskCardProps) {
-  const sendToAi = useSendToAi(task.id);
+  const sendToAi = useSendToAi(task);
   const items: (MenuItem | 'separator')[] = [
     { label: 'Open', onSelect: () => onOpen(task.id) },
     { label: 'Edit', onSelect: () => onEdit(task.id) },
@@ -97,6 +97,10 @@ export const TaskCard = memo(function TaskCard({
         ) : null}
         {busy ? <span className="card__busy">saving…</span> : null}
       </div>
+      {sendToAi.dialog === null ? null : (
+        // A press inside the dialog is not the start of a drag of the card it is drawn in.
+        <div onPointerDown={(event) => event.stopPropagation()}>{sendToAi.dialog}</div>
+      )}
       {/* Always there, so that what is put into it is announced; empty, it takes no room. */}
       <p className="card__note" aria-live="polite">
         {sendToAi.done}

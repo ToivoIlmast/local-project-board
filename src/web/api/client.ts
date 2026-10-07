@@ -57,9 +57,10 @@ export interface BoardClient {
   handoff(id: string): Promise<string>;
   /**
    * Hands the task to the runner waiting in a terminal of the project, which starts the agent
-   * (T27). Only the name of the agent is sent; what starts is the runner's business.
+   * (T27). The name of the agent is sent, and the model when one was chosen (T38); what starts
+   * is the runner's business.
    */
-  runTask(id: string, agent: RunTaskRequest['agent']): Promise<RunStarted>;
+  runTask(id: string, request: RunTaskRequest): Promise<RunStarted>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string>;
@@ -162,7 +163,7 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     updateWorkflow: (body) => call('workflow.update', { body }),
     taskWorkflow: (id) => call('tasks.workflow', { params: { id } }),
     handoff: (id) => call('tasks.handoff', { params: { id } }),
-    runTask: (id, agent) => call('tasks.run', { params: { id }, body: { agent } }),
+    runTask: (id, body) => call('tasks.run', { params: { id }, body }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),
     readDocument: (id, name) => call('documents.read', { params: { id, name } }),

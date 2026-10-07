@@ -134,6 +134,8 @@ describe('"Send to AI → Claude Code" in the menu of a card (T19, T27)', () => 
 
     await rendered.user.click(screen.getByRole('button', { name: 'Actions for T2' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Send to AI: Claude Code' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T2' });
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
 
     expect(
       await within(cardOf('Other task')).findByText(/^Claude Code is starting on T2 /),
