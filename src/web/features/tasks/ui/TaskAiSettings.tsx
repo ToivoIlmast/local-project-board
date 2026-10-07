@@ -27,7 +27,7 @@ import {
 } from '../../settings/index';
 import { hasOwnSettings, sameSettings, settingsRequest } from '../model/taskWorkflow';
 import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
-import type { AgentTarget } from '../model/useSendToAi';
+import type { AgentTarget } from '../model/agentTarget';
 import { SendToAi } from './SendToAi';
 
 const taskKit: DraftKit<TaskWorkflowOverrides | undefined, TaskWorkflowOverrides> = {
@@ -133,7 +133,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
         <h3 className="ai__title" id={`ai-${task.id}`}>
           AI
         </h3>
-        <SendToAi taskId={task.id} targets={targets} />
+        <SendToAi task={task} targets={targets} />
       </div>
 
       {exceptions ? null : (
