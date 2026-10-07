@@ -180,6 +180,12 @@ What to know:
   a full name of the form `claude-…`; anything else is refused. A name that `claude` itself does not
   know ends the run as failed. The permission mode and the rest are still your own settings. There
   is no token in the prompt or in the arguments.
+- **Send to AI → Claude Code** first opens a small dialog with three controls: the model (the
+  Claude Code default, an alias or another full name; the model of the last run when it had one),
+  the report language and the session. The language is a setting of the task: a change is saved
+  to the task before the start, and when it cannot be saved nothing starts. The session is a new
+  one for now: continuing the last one (Resume) is shown, but disabled until the runner can do it.
+  Left as it opens, the dialog starts exactly what the click started before it.
 - Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and
   Claude Code asks for permission for that by default. Allow `Bash(curl *)` for the session, or in
   your Claude Code settings if you want no questions.
