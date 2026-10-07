@@ -267,3 +267,117 @@ describe('the board server never starts a process (ADR-0029, INVARIANT)', () => 
     ]);
   });
 });
+
+describe('POST /tasks/:id/run with mode: resume (T36)', () => {
+  const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+  const resume = (id: string, extra: Record<string, unknown> = {}) =>
+    start(id, { agent: 'claude-code', mode: 'resume', ...extra });
+
+  /** A run as the runner leaves it: begun with a session, and ended as the process ended. */
+  async function ranAndEnded(id: string, exitCode = 1): Promise<void> {
+    const begun = await board
+      .post(`${API}/tasks/${id}/ai-run`, { sessionId: SESSION, mode: 'new' })
+      .expect(200);
+    const runId = (begun.body as { runId: number }).runId;
+    await board.post(`${API}/tasks/${id}/ai-run/${runId}/end`, { exitCode }).expect(200);
+  }
+
+  it('hands the task and the mode to the runner when the run has a session and is over (INVARIANT)', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    const response = await resume('T1').expect(200);
+
+    expect(response.body).toEqual({ taskId: 'T1', agent: 'claude-code', mode: 'resume' });
+    await waiting.waitForEvents(1);
+    expect(waiting.events).toEqual([
+      { type: 'run.requested', taskId: 'T1', agent: 'claude-code', mode: 'resume' },
+    ]);
+  });
+
+  it('mode: new is the same as no mode, and is not put on the wire', async () => {
+    const waiting = await runner();
+
+    await start('T1', { agent: 'claude-code', mode: 'new' }).expect(200);
+
+    await waiting.waitForEvents(1);
+    expect(waiting.events).toEqual([{ type: 'run.requested', taskId: 'T1', agent: 'claude-code' }]);
+  });
+
+  it('a task that never ran: 409 NO_SESSION_TO_RESUME, and the runner is not asked (INVARIANT)', async () => {
+    const waiting = await runner();
+
+    const response = await resume('T1').expect(409);
+
+    expect(code(response.body)).toBe('NO_SESSION_TO_RESUME');
+    expect(message(response.body)).toContain('T1');
+    expect(waiting.events).toEqual([]);
+    expect(waiting.ended()).toBe(false);
+  });
+
+  it('a legacy run without a sessionId: the same 409 (INVARIANT)', async () => {
+    await board.storage.updateTask('T1', {
+      aiRun: { agent: 'claude-code', state: 'failed', startedAt: '2026-09-20T10:00:00Z' },
+    });
+    const waiting = await runner();
+
+    const response = await resume('T1').expect(409);
+
+    expect(code(response.body)).toBe('NO_SESSION_TO_RESUME');
+    expect(waiting.events).toEqual([]);
+  });
+
+  it('a run that is working: 409 AI_RUN_IN_PROGRESS, and the runner is not asked (INVARIANT)', async () => {
+    await board.post(`${API}/tasks/T1/ai-run`, { sessionId: SESSION, mode: 'new' }).expect(200);
+    const waiting = await runner();
+
+    const response = await resume('T1').expect(409);
+
+    expect(code(response.body)).toBe('AI_RUN_IN_PROGRESS');
+    expect(waiting.events).toEqual([]);
+    expect(waiting.ended()).toBe(false);
+  });
+
+  it('refuses resume of a session of another task: the session is the one of this task', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    expect(code((await resume('T2').expect(409)).body)).toBe('NO_SESSION_TO_RESUME');
+    expect(waiting.events).toEqual([]);
+  });
+
+  it('a mode that is not new or resume, or a session in the body: nothing reaches the runner (INVARIANT)', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    for (const extra of [
+      { mode: 'restart' },
+      { mode: 'continue' },
+      { mode: '' },
+      { sessionId: SESSION },
+      { fork: true },
+    ]) {
+      const response = await resume('T1', extra).expect(400);
+      expect(code(response.body)).toBe('INVALID_REQUEST');
+    }
+    expect(waiting.events).toEqual([]);
+  });
+
+  it('keeps the model when one is chosen', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    await resume('T1', { model: 'sonnet' }).expect(200);
+
+    await waiting.waitForEvents(1);
+    expect(waiting.events).toEqual([
+      {
+        type: 'run.requested',
+        taskId: 'T1',
+        agent: 'claude-code',
+        model: 'sonnet',
+        mode: 'resume',
+      },
+    ]);
+  });
+});

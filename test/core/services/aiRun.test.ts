@@ -148,3 +148,67 @@ describe('legacy aiRun normalization', () => {
     expect(run?.runId).toBe(1);
   });
 });
+
+describe('begin with mode: resume (T36)', () => {
+  const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+
+  it('keeps the session and takes the next runId (INVARIANT)', async () => {
+    const id = await createTask();
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await service.end(id, 1, { exitCode: 1 });
+
+    await service.begin(id, { sessionId: SESSION, mode: 'resume' });
+
+    expect(await getAiRun(id)).toMatchObject({
+      runId: 2,
+      sessionId: SESSION,
+      mode: 'resume',
+      state: 'working',
+    });
+  });
+
+  it('refuses a session that is not the one of the last run, and writes nothing (INVARIANT)', async () => {
+    const id = await createTask();
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await service.end(id, 1, { exitCode: 1 });
+    const before = await getAiRun(id);
+
+    await expect(
+      service.begin(id, { sessionId: '00000000-0000-4000-8000-000000000000', mode: 'resume' }),
+    ).rejects.toMatchObject({ code: 'NO_SESSION_TO_RESUME' });
+
+    expect(await getAiRun(id)).toEqual(before);
+  });
+
+  it('refuses when there is no earlier session at all', async () => {
+    const id = await createTask();
+    await expect(service.begin(id, { sessionId: SESSION, mode: 'resume' })).rejects.toMatchObject({
+      code: 'NO_SESSION_TO_RESUME',
+    });
+  });
+
+  it('requireResumable: the session of a run that is over; not of one that works, nor of none (INVARIANT)', async () => {
+    const id = await createTask();
+    await expect(service.requireResumable(id)).rejects.toMatchObject({
+      code: 'NO_SESSION_TO_RESUME',
+    });
+
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await expect(service.requireResumable(id)).rejects.toMatchObject({
+      code: 'AI_RUN_IN_PROGRESS',
+    });
+
+    await service.end(id, 1, { exitCode: 1 });
+    await expect(service.requireResumable(id)).resolves.toBe(SESSION);
+  });
+
+  it('requireResumable: a legacy run without sessionId is not resumable', async () => {
+    const id = await createTask();
+    await storage.updateTask(id, {
+      aiRun: { agent: 'old-agent', state: 'finished', startedAt: '2026-09-20T10:00:00Z' },
+    });
+    await expect(service.requireResumable(id)).rejects.toMatchObject({
+      code: 'NO_SESSION_TO_RESUME',
+    });
+  });
+});

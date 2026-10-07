@@ -15,12 +15,28 @@ const BOARD_ADDRESS = /^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/;
  * same, so that nothing but a task id and the loopback board ever gets into a command line.
  */
 export function claudeCodePrompt(taskId: string, boardUrl: string): string {
-  if (!isTaskId(taskId)) throw new Error(`"${taskId}" is not a task id.`);
-  if (!BOARD_ADDRESS.test(boardUrl)) {
-    throw new Error(`"${boardUrl}" is not a board address: http://127.0.0.1:<port> is expected.`);
-  }
+  checked(taskId, boardUrl);
   return (
     `Work on task ${taskId} of the local board: ` +
     `read GET ${boardUrl}${API_BASE_PATH}/tasks/${taskId}/handoff and follow it.`
   );
+}
+
+/**
+ * What a resumed session is told (T36): the same address, to be read again, because the handoff
+ * of a resumed run says what to keep. No token, and checked the same way as the first prompt.
+ */
+export function continuationPrompt(taskId: string, boardUrl: string): string {
+  checked(taskId, boardUrl);
+  return (
+    `Continue task ${taskId} of the local board: ` +
+    `re-read GET ${boardUrl}${API_BASE_PATH}/tasks/${taskId}/handoff and follow it.`
+  );
+}
+
+function checked(taskId: string, boardUrl: string): void {
+  if (!isTaskId(taskId)) throw new Error(`"${taskId}" is not a task id.`);
+  if (!BOARD_ADDRESS.test(boardUrl)) {
+    throw new Error(`"${boardUrl}" is not a board address: http://127.0.0.1:<port> is expected.`);
+  }
 }

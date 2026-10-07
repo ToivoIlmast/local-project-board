@@ -128,3 +128,22 @@ effort and the rest stay the user's own settings.
   records the same value as `aiRun.model`.
 - The closed form is what keeps the argv safe: the one value of a request that reaches a program
   is checked against it by the contract (a test lists the values that must fail).
+
+## Amendment (T36, 2026-10-07): Resume continues the session of the last run
+
+- **`mode?: 'new' | 'resume'` in `POST /tasks/:id/run`** (absent means `new`; `restart` comes later).
+  A `resume` request is checked **by the board before any runner is asked**: the last run must
+  have a `sessionId` (else `409 NO_SESSION_TO_RESUME`; a legacy run without one lands here) and
+  must not be `working` (else `409 AI_RUN_IN_PROGRESS`). The request carries no session: the
+  runner reads it from the board, so a client cannot name a session of its own.
+- **`run.requested` carries `mode: 'resume'`** only for Resume; for `new` the event is unchanged.
+- **The runner starts `claude [--model <m>] --resume <sessionId> <continuationPrompt>`**, in the
+  root of the project, without a shell. It begins a new run (`runId + 1`, `mode: resume`) with the
+  **same** `sessionId`; `begin` itself refuses `resume` with a session other than the last run's.
+- **`continuationPrompt(taskId, boardUrl)`** sits beside `claudeCodePrompt`: the same checked id
+  and loopback address, no token, "re-read the handoff and follow it".
+- Not used: `-c/--continue` ("the last session in the directory" is ambiguous) and
+  `--fork-session`.
+- Kept by Resume: the branch, the commits, uncommitted changes and `report.md`; the board does not
+  touch them. Sessions of Claude Code belong to the project directory, and the runner always starts
+  in the root, so a session begun by this runner is found again.

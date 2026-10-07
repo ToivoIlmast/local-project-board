@@ -914,3 +914,91 @@ describe('generateHandoff', () => {
     expect(first).not.toContain('undefined');
   });
 });
+
+describe('mode: resume (T36)', () => {
+  const RESUME: WorkflowFacts = { ...FACTS, resume: true };
+  const branchStep = (levels: Levels, facts: WorkflowFacts): string => {
+    const step = workflowSteps(effective(levels), facts).find(
+      (candidate) => candidate.key === 'branch',
+    );
+    if (!step) throw new Error('no step for branch');
+    return step.text;
+  };
+
+  it('branch on: the branch exists, is not made again, and the work goes on from its state (INVARIANT)', () => {
+    const text = branchStep({}, RESUME);
+
+    expect(text).toContain('`task/T13-ai-workflow-model` already exists');
+    expect(text).toContain('git status');
+    expect(text).toContain('git log');
+    expect(text).toContain('uncommitted changes are your previous work');
+    expect(text).toMatchInlineSnapshot(
+      `"The branch \`task/T13-ai-workflow-model\` already exists, from your earlier run: work in it. Do not make it again and do not go back to the base branch; if \`task/T13-ai-workflow-model\` is not the one checked out, check it out as it is. Run \`git status\` and \`git log\` and continue from the current state: uncommitted changes are your previous work, do not discard them. Never commit to the base branch. _(source: default; baseBranch: default)_"`,
+    );
+  });
+
+  it('branch on: says nothing about making the branch or going to the base (INVARIANT)', () => {
+    for (const levels of [{}, { task: { baseBranch: 'develop' } }] as Levels[]) {
+      const text = branchStep(levels, RESUME);
+      expect(text).not.toMatch(/switch to/i);
+      expect(text).not.toMatch(/create/i);
+      expect(text).not.toMatch(/based on/i);
+      expect(text).not.toContain('develop');
+      expect(text).not.toContain('pull from the remote');
+    }
+  });
+
+  it('branch off: stays where it is and still keeps the previous work', () => {
+    const text = branchStep({ task: { branch: false } }, RESUME);
+
+    expect(text).toContain('stay on the branch that is checked out now');
+    expect(text).toContain('git status');
+    expect(text).toContain('uncommitted changes are your previous work');
+    expect(text).not.toMatch(/switch to/i);
+    expect(text).toMatchInlineSnapshot(
+      `"Do not create a branch: stay on the branch that is checked out now. Run \`git status\` and \`git log\` and continue from the current state: uncommitted changes are your previous work, do not discard them. _(source: this task)_"`,
+    );
+  });
+
+  it('editCode off: the step is the same as for a new run', () => {
+    const levels = { task: { editCode: false } };
+    expect(branchStep(levels, RESUME)).toBe(branchStep(levels, FACTS));
+  });
+
+  it('a new run keeps the text of T28 byte for byte, and only the branch step differs (INVARIANT)', () => {
+    expect(branchStep({}, { ...FACTS, resume: false })).toBe(branchStep({}, FACTS));
+    expect(branchStep({}, FACTS)).toContain('create `task/T13-ai-workflow-model` from');
+    const resumed = lines(renderWorkflowSteps(effective(), RESUME));
+    const fresh = lines(renderWorkflowSteps(effective(), FACTS));
+    expect(resumed).toHaveLength(fresh.length);
+    expect(resumed.filter((line, index) => line !== fresh[index])).toHaveLength(1);
+  });
+
+  it('generateHandoff follows the mode of the current run of the task, and no other state (INVARIANT)', () => {
+    const task: Task = {
+      id: 'T13',
+      title: 'Model',
+      status: 'todo',
+      rank: 'a',
+      body: '',
+      labels: [],
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+      aiRun: { agent: 'runner', state: 'working', runId: 2, mode: 'resume' },
+    };
+    const make = (candidate: Task): string =>
+      generateHandoff({
+        task: candidate,
+        documents: [],
+        effective: effective(),
+        instructions: 'x',
+      });
+
+    expect(make(task)).toContain('already exists');
+    expect(make({ ...task, aiRun: { ...task.aiRun!, mode: 'new' } })).not.toContain(
+      'already exists',
+    );
+    const { aiRun: _none, ...bare } = task;
+    expect(make(bare)).not.toContain('already exists');
+  });
+});

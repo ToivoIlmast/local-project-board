@@ -23,6 +23,11 @@ export interface WorkflowFacts {
    * Undefined means there is no current run; the rule tells the agent to start one.
    */
   runId?: number | undefined;
+  /**
+   * The current run continues an earlier session (`aiRun.mode` is `resume`, T36): the branch and
+   * the working tree are the agent's own earlier work, not a state to set up.
+   */
+  resume?: boolean | undefined;
 }
 
 /** One numbered step; `key` is the setting that decides it, and null for a rule that is not one. */
@@ -85,7 +90,23 @@ const STEPS: Renderers = {
     if (inactive) {
       return 'Do not create a branch: without changes to the code there is nothing to put in one.';
     }
-    if (!value) return 'Do not create a branch: stay on the branch that is checked out now.';
+    // What a resumed run keeps: the branch, its commits and the changes not yet committed.
+    const continuation =
+      'Run `git status` and `git log` and continue from the current state: ' +
+      'uncommitted changes are your previous work, do not discard them.';
+    if (!value) {
+      return facts.resume === true
+        ? `Do not create a branch: stay on the branch that is checked out now. ${continuation}`
+        : 'Do not create a branch: stay on the branch that is checked out now.';
+    }
+    if (facts.resume === true) {
+      return (
+        `The branch \`${facts.branch}\` already exists, from your earlier run: work in it. ` +
+        'Do not make it again and do not go back to the base branch; ' +
+        `if \`${facts.branch}\` is not the one checked out, check it out as it is. ` +
+        `${continuation} Never commit to the base branch.`
+      );
+    }
     const base = parameter === null ? "the repository's default branch" : `\`${parameter}\``;
     return (
       `Work in a branch of your own, \`${facts.branch}\`, based on ${base}. ` +
@@ -264,6 +285,7 @@ export function generateHandoff({
     status: task.status,
     branch: task.branch ?? taskBranchName(task.id, task.title),
     runId: task.aiRun?.runId,
+    resume: task.aiRun?.mode === 'resume',
   };
   const lines = [`# Task ${task.id}: ${task.title}`, '', `- Status: \`${task.status}\``];
   if (task.labels.length > 0) {

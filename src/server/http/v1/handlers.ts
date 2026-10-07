@@ -92,10 +92,13 @@ export const handlers: Handlers = {
   // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
   'tasks.run': async (context, { params, body }) => {
     await context.tasks.get(params.id);
+    // Refused here, before any runner is asked: Resume needs a session that is over (T36).
+    if (body.mode === 'resume') await context.aiRun.requireResumable(params.id);
     const request = {
       taskId: params.id,
       agent: body.agent,
       ...(body.model === undefined ? {} : { model: body.model }),
+      ...(body.mode === 'resume' ? { mode: 'resume' as const } : {}),
     };
     if (!context.runs.hand(request)) throw noRunner(params.id);
     return request;
