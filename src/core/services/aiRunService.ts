@@ -26,6 +26,12 @@ export interface AiRunService {
   begin(taskId: string, input: BeginInput): Promise<AiRun>;
   end(taskId: string, runId: number, input: EndInput): Promise<AiRun>;
   report(taskId: string, runId: number, input: AiRunReport): Promise<Task>;
+  /**
+   * The session that Resume would continue: the one of the last run, which must be over (T36).
+   * Throws `NO_SESSION_TO_RESUME` when there is none (a task that never ran, or a legacy run)
+   * and `AI_RUN_IN_PROGRESS` when the run still works.
+   */
+  requireResumable(taskId: string): Promise<string>;
 }
 
 /** The current runId from a task's aiRun, normalizing legacy records (no runId → 0). */
@@ -43,7 +49,30 @@ export function createAiRunService({ storage, events }: AiRunServiceOptions): Ai
     return task;
   }
 
+  function noSession(taskId: string): BoardError {
+    return new BoardError(
+      'NO_SESSION_TO_RESUME',
+      `Task "${taskId}" has no session of Claude Code to resume: its last run did not record one. ` +
+        'Start a new run instead.',
+      { id: taskId },
+    );
+  }
+
   return {
+    async requireResumable(taskId) {
+      const task = await requireTask(taskId);
+      const sessionId = task.aiRun?.sessionId;
+      if (sessionId === undefined) throw noSession(taskId);
+      if (task.aiRun?.state === 'working') {
+        throw new BoardError(
+          'AI_RUN_IN_PROGRESS',
+          `Task "${taskId}" already has an AI run in progress.`,
+          { id: taskId },
+        );
+      }
+      return sessionId;
+    },
+
     async begin(taskId, input) {
       const task = await requireTask(taskId);
 
@@ -53,6 +82,11 @@ export function createAiRunService({ storage, events }: AiRunServiceOptions): Ai
           `Task "${taskId}" already has an AI run in progress.`,
           { id: taskId },
         );
+      }
+
+      // Resume continues the session of the last run; any other session would be a new one.
+      if (input.mode === 'resume' && task.aiRun?.sessionId !== input.sessionId) {
+        throw noSession(taskId);
       }
 
       const prevRunId = currentRunId(task.aiRun);

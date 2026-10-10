@@ -4,7 +4,7 @@ import { constants as fsConstants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { constants } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { API_BASE_PATH, claudeCodePrompt } from '../../contract/v1/index.js';
+import { API_BASE_PATH, claudeCodePrompt, continuationPrompt } from '../../contract/v1/index.js';
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
 import { findRunningBoard, get } from './running.js';
@@ -67,20 +67,39 @@ export async function startSession(
   root: string,
   env: NodeJS.ProcessEnv,
   model?: string,
+  mode: 'new' | 'resume' = 'new',
 ): Promise<number> {
-  const sessionId = randomUUID();
-  const prompt = claudeCodePrompt(id, board.url.replace(/\/+$/, ''));
+  const boardUrl = board.url.replace(/\/+$/, '');
+  // Resume continues the session the board recorded for the last run, never a new one (T36).
+  const resuming = mode === 'resume';
+  const sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
+  const prompt = resuming ? continuationPrompt(id, boardUrl) : claudeCodePrompt(id, boardUrl);
 
-  const runId = await beginRun(board, id, sessionId, model);
+  const runId = await beginRun(board, id, sessionId, model, mode);
 
   // The prompt stays the last argument.
   const args = [
     ...(model === undefined ? [] : ['--model', model]),
-    '--session-id',
+    ...(resuming ? ['--resume'] : ['--session-id']),
     sessionId,
     prompt,
   ];
   return run(program, args, root, env, board, id, runId, sessionId);
+}
+
+/** The session of the last run of the task, as the board has it; the board refuses what is not one. */
+async function sessionToResume(board: RuntimeState, taskId: string): Promise<string> {
+  const answer = await get(board, `/tasks/${taskId}`);
+  if (answer === undefined) {
+    throw new Error('The board did not answer. Is it still running? Try again in a moment.');
+  }
+  if (!answer.ok) throw new Error(await boardMessage(answer));
+  const task = (await answer.json()) as { aiRun?: { sessionId?: unknown; state?: unknown } };
+  const sessionId = task.aiRun?.sessionId;
+  if (typeof sessionId !== 'string' || task.aiRun?.state === 'working') {
+    throw new Error(`Task ${taskId} has no finished session of Claude Code to resume.`);
+  }
+  return sessionId;
 }
 
 /** `claude` as the PATH finds it, or the reason there is none, in words a user can act on. */
@@ -146,10 +165,11 @@ async function beginRun(
   taskId: string,
   sessionId: string,
   model: string | undefined,
+  mode: 'new' | 'resume',
 ): Promise<number> {
   const response = await postBoard(board, `/tasks/${taskId}/ai-run`, {
     sessionId,
-    mode: 'new',
+    mode,
     ...(model === undefined ? {} : { model }),
   });
   if (response === undefined) {

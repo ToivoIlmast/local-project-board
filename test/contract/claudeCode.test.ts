@@ -1,6 +1,10 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { API_BASE_PATH, claudeCodePrompt } from '../../src/contract/v1/index.js';
+import {
+  API_BASE_PATH,
+  claudeCodePrompt,
+  continuationPrompt,
+} from '../../src/contract/v1/index.js';
 
 const BOARD = 'http://127.0.0.1:7432';
 
@@ -64,6 +68,36 @@ describe('the prompt that starts Claude Code on a task (T19)', () => {
       'http://user:pw@127.0.0.1:7432',
     ]) {
       expect(() => claudeCodePrompt('T1', url)).toThrow(/board address/);
+    }
+  });
+});
+
+describe('the prompt that continues a session of Claude Code (T36)', () => {
+  it('names the task and points at the live handoff, to be read again', () => {
+    expect(continuationPrompt('T13', BOARD)).toBe(
+      'Continue task T13 of the local board: ' +
+        `re-read GET ${BOARD}${API_BASE_PATH}/tasks/T13/handoff and follow it.`,
+    );
+  });
+
+  it('carries no token and is short, like the first prompt (INVARIANT)', () => {
+    const prompt = continuationPrompt('T13', BOARD);
+    expect(prompt).not.toMatch(/token|authorization|bearer/i);
+    expect(prompt.length).toBeLessThan(200);
+    expect(prompt).toMatch(/^[\w :./-]+$/);
+  });
+
+  it('refuses an id that is not a task id, and an address that is not the loopback board (INVARIANT)', () => {
+    for (const id of ['', 'banana', 'T1; rm -rf /', '$(id)', 'T0', 'T1\nT2']) {
+      expect(() => continuationPrompt(id, BOARD)).toThrow(/task id/);
+    }
+    for (const url of [
+      '',
+      'http://example.com:7432',
+      'https://127.0.0.1:7432',
+      'http://127.0.0.1:7432/',
+    ]) {
+      expect(() => continuationPrompt('T1', url)).toThrow(/board address/);
     }
   });
 });

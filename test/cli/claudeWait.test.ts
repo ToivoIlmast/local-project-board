@@ -1,6 +1,6 @@
 import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { claudeCodePrompt } from '../../src/contract/v1/index.js';
+import { claudeCodePrompt, continuationPrompt } from '../../src/contract/v1/index.js';
 import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js';
 import { cli, cliInBackground, stopBoards } from '../support/cli.js';
 import { fakeClaude, type FakeClaude } from '../support/fakeClaude.js';
@@ -329,5 +329,132 @@ describe('local-project-board claude --wait', () => {
     expect((await sendToClaude(second.state, 'T2')).status).toBe(200);
     const [call] = await callsOf(claude, 1);
     expect(call?.argv[call.argv.length - 1]).toBe(claudeCodePrompt('T2', boardUrl(second.state)));
+  });
+});
+
+describe('local-project-board claude --wait: Resume (T36)', () => {
+  const sendResume = (state: RuntimeState, id: string, model?: string) =>
+    api(state, 'POST', `/tasks/${id}/run`, {
+      agent: 'claude-code',
+      mode: 'resume',
+      ...(model === undefined ? {} : { model }),
+    });
+
+  async function aiRunOf(state: RuntimeState, id: string) {
+    const task = (await (await api(state, 'GET', `/tasks/${id}`)).json()) as {
+      aiRun?: { runId?: number; sessionId?: string; mode?: string; state?: string };
+    };
+    return task.aiRun;
+  }
+
+  it('starts claude with exactly --resume <the session of the last run> <continuation prompt> (INVARIANT)', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended \(exit code 1\)\./);
+    await runner.printed(WAITING);
+    const first = await aiRunOf(state, 'T2');
+
+    expect((await sendResume(state, 'T2')).status).toBe(200);
+
+    const [, second] = await callsOf(claude, 2);
+    expect(second?.argv).toEqual([
+      '--resume',
+      first?.sessionId,
+      continuationPrompt('T2', boardUrl(state)),
+    ]);
+    expect(await realpath(second?.cwd ?? '')).toBe(await realpath(root));
+    expect(JSON.stringify(second?.argv)).not.toContain(state.token);
+  });
+
+  it('records a new run of the same session: runId + 1, the same sessionId, mode resume (INVARIANT)', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended/);
+    const first = await aiRunOf(state, 'T2');
+    await runner.printed(WAITING);
+
+    await sendResume(state, 'T2');
+    await until(
+      () => aiRunOf(state, 'T2'),
+      (run) => run?.runId === 2 && run.state === 'failed',
+    );
+
+    const second = await aiRunOf(state, 'T2');
+    expect(second).toMatchObject({ runId: 2, mode: 'resume', sessionId: first?.sessionId });
+    const [one, two] = await callsOf(claude, 2);
+    expect(two?.argv).not.toEqual(one?.argv);
+    expect(one?.argv[1]).toBe(first?.sessionId);
+  });
+
+  it('puts --model first, and keeps the prompt last', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended/);
+    await runner.printed(WAITING);
+    const first = await aiRunOf(state, 'T2');
+
+    await sendResume(state, 'T2', 'sonnet');
+
+    const [, second] = await callsOf(claude, 2);
+    expect(second?.argv).toEqual([
+      '--model',
+      'sonnet',
+      '--resume',
+      first?.sessionId,
+      continuationPrompt('T2', boardUrl(state)),
+    ]);
+  });
+
+  it('the agent that follows the prompt reads the handoff of a resumed run, with the branch that exists', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ agent: 'read', exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended/);
+    await runner.printed(WAITING);
+
+    await sendResume(state, 'T2');
+
+    const [, resumed] = await until(claude.reads, (reads) => reads.length >= 2);
+    expect(resumed?.handoff).toContain('already exists');
+    expect(resumed?.handoff).not.toMatch(/create `task\/T2-write-the-report` from/);
+  });
+
+  it('refuses a task without a session, and starts nothing (INVARIANT)', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+    await runner.printed(WAITING);
+
+    const answer = await sendResume(state, 'T1');
+
+    expect(answer.status).toBe(409);
+    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe(
+      'NO_SESSION_TO_RESUME',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(await claude.calls()).toEqual([]);
   });
 });

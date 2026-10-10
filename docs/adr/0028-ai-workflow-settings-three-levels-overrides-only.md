@@ -364,3 +364,17 @@ and one setting that gives it:
 - The number 0027 that the task text names was taken by the README translation check meanwhile.
 - A board whose config copied the eight built-in rules to add its own keeps working: the copies
   are not repeated. One that wrote its own instead of them now has the API rules as well.
+
+## Amendment (T36, 2026-10-07): the branch step of a resumed run
+
+`renderWorkflowSteps` stays the only description of the git workflow; Resume adds a fact to it,
+not a second text. `WorkflowFacts.resume` is true when `aiRun.mode` of the task is `resume`, so the
+handoff is still a function of the state of the board.
+
+- **branch on, resumed:** the branch `task.branch` already exists; do not make it again and do not
+  go back to the base branch; check `git status` and `git log` and continue from the current state;
+  uncommitted changes are the agent's earlier work and are not discarded. No "switch to base", no
+  "create", no pull.
+- **branch off, resumed:** the old text, plus the `git status` / `git log` / uncommitted-changes
+  sentence. **editCode off:** unchanged.
+- **A new run** keeps the text of T28 byte for byte; only the branch step differs for Resume.
