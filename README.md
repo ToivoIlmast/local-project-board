@@ -22,13 +22,14 @@ npx local-project-board
 The board starts on `http://127.0.0.1:7432/` (the next free port if that one is taken) and opens
 in your browser. No sign-up, no account, no database, no network beyond your own machine.
 
-| Command                                 | What it does                                              |
-| --------------------------------------- | --------------------------------------------------------- |
-| `npx local-project-board`               | Start the board                                           |
-| `npx local-project-board instructions`  | Print the API instructions to hand to an AI agent         |
-| `npx local-project-board claude <ID>`   | Start Claude Code on a task, in this terminal             |
-| `npx local-project-board claude --wait` | Start Claude Code here on each task sent from the board   |
-| `npx local-project-board export`        | Print a snapshot of the board (`--out <file>` to save it) |
+| Command                                         | What it does                                              |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| `npx local-project-board`                       | Start the board                                           |
+| `npx local-project-board instructions`          | Print the API instructions to hand to an AI agent         |
+| `npx local-project-board claude <ID>`           | Start Claude Code on a task, in this terminal             |
+| `npx local-project-board claude --wait`         | Start Claude Code here on each task sent from the board   |
+| `npx local-project-board claude --recover <ID>` | Check a run whose runner died; mark it lost on proof      |
+| `npx local-project-board export`                | Print a snapshot of the board (`--out <file>` to save it) |
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
 `--no-open` (do not open a browser), `--help`.
@@ -191,6 +192,16 @@ What to know:
   your Claude Code settings if you want no questions.
 - The session works in your checkout of the project, so the branch it creates is the branch that
   is checked out afterwards. A worktree for each task is not done yet.
+- If the runner dies mid-session (its terminal is closed, the machine sleeps, it is killed), the
+  task stays **working** and nothing can start on it. Run
+  `npx local-project-board claude --recover <ID>` in a terminal of the project. It first delivers
+  any end the runner wrote down and could not send (the runner keeps it in `.board/runner/`, so it
+  survives the runner and a restart of the board), then looks at this machine: **alive** — the
+  board is left alone; **lost** — the runner and `claude` it recorded are gone, and the run is
+  marked `failed` (`failure.kind: lost`) with the evidence; **unknown** — this machine cannot show
+  it (no `/proc`, another OS or PID namespace, a run started elsewhere), and nothing changes unless
+  you add `--confirm-stopped`, which the run then records. The run keeps its `runId` and session,
+  so Resume continues it as the next run. The age of a run is never taken as a sign it is lost.
 
 ## Principles
 

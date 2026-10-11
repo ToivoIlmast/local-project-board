@@ -147,3 +147,51 @@ effort and the rest stay the user's own settings.
 - Kept by Resume: the branch, the commits, uncommitted changes and `report.md`; the board does not
   touch them. Sessions of Claude Code belong to the project directory, and the runner always starts
   in the root, so a session begun by this runner is found again.
+
+## Amendment (T45, 2026-10-11): a run whose runner died is recovered by the CLI, on proof
+
+T37 was left `working` for good: its runner ended without an `end`, and Resume and Restart both
+refuse a run that works. The only way out was to edit `task.md` by hand, past every check.
+
+- **The server still looks at no process.** Whether a run is alive is a question about this
+  machine, so it is answered by **`local-project-board claude --recover <ID>`**, the person's own
+  command, by reading `/proc` and nothing more: no signal is sent and nothing is stopped. The
+  board only learns the answer.
+- **The verdict is `alive`, `lost` or `unknown`**, and only `lost` changes the board without a
+  word from the person. `lost` needs proof: the runner's journal of this run, on this host and in
+  this PID namespace, whose runner and `claude` are both gone — identified by pid **and start
+  time**, so a reused pid is not taken for them — or a boot since the run began; and no process
+  of this user that holds the session (`--session-id`, `--resume`, `-r`, as two arguments or as
+  `flag=value`; a substring of a command line is not enough). No `/proc`, another OS, another
+  namespace or host, no journal, a process that cannot be read: `unknown`. Only then may the
+  person add **`--confirm-stopped`**, and the run records that it was their word. A process that
+  is seen alive is never overridden. **The age of a run is not evidence**; a long session is not a
+  lost one, and nothing polls, beats or leases.
+- **`POST /tasks/:id/ai-run/:runId/abandon`** `{sessionId, message}` is the board's half: a
+  compare-and-set on runId, session and `working`. It writes `state: failed`,
+  `failure: {kind: lost, message}`, and keeps `runId` and `sessionId`, so Resume continues the
+  session as the next run (`runId + 1`). A stale runId or another session → `409 STALE_AI_RUN`; a
+  run that is over → `409 AI_RUN_ALREADY_FINAL`; nothing is written either way. Not given to
+  agents.
+- **The runner keeps a journal**, `.board/runner/<ID>-<runId>.json` (untracked, owner-only, no
+  token): who the runner and `claude` are, and, when `claude` ends, how — written and synced to
+  disk **before** the board is told. Memory is not enough: the case to cover is a runner that
+  died. The runner retries `end` for ~30 s and looks the board up afresh each time (a restarted
+  board has another address and token); an end it could not deliver stays in the journal and is
+  delivered by the next `claude --wait` (on every connection), `claude <ID>` or `claude --recover`.
+  A journal whose run the board has replaced is dropped.
+- **The lifecycle is serialized per task**: begin, end, report, abandon and the checks of
+  `POST /run` read and write the run under one lock, which the task service shares for
+  `PATCH {aiRun: null}`. Two begins at once make one run. Every change of the lifecycle is
+  published as `task.updated`.
+- **`end` names its session** (`sessionId`, and `endedAt` when delivered late); an end of another
+  session is `409 STALE_AI_RUN`. It is optional only for runners of an earlier version. A late
+  end or report of an abandoned run cannot touch the run that replaced it (another runId), and a
+  late end of the abandoned run itself keeps `failed{lost}`.
+- **`POST /tasks/:id/run` refuses `409 AI_RUN_IN_PROGRESS` while a run works, for every mode**,
+  before a runner is asked (T36 did it for `resume` only).
+- **`PATCH /tasks/:id {"aiRun": null}` is refused while a runner's run works** (`409
+  AI_RUN_IN_PROGRESS`): clearing it would hide a live run and start runId again from 1. A run an
+  agent reported itself before T31 (no runId) may still be cleared that way. Clearing a run that
+  is over still starts the numbering again; the session check of `end` keeps a late end of the
+  cleared run from touching a new one.
