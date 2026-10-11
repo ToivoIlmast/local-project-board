@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 41c5a58f2b4a5d117dbbcb0bb6643cc35259c91f -->
+<!-- Based on README.md @ 264ca6e8e9040194d3a7dc925cc64b0f5d1593f1 -->
 
 # local-project-board
 
@@ -25,13 +25,14 @@ Taulu käynnistyy osoitteessa `http://127.0.0.1:7432/` (tai seuraavassa vapaassa
 on varattu) ja avautuu selaimeen. Ei rekisteröitymistä, ei tiliä, ei tietokantaa, ei verkkoa oman
 koneen ulkopuolelle.
 
-| Komento                                 | Mitä se tekee                                                          |
-| --------------------------------------- | ---------------------------------------------------------------------- |
-| `npx local-project-board`               | Käynnistää taulun                                                      |
-| `npx local-project-board instructions`  | Tulostaa API-ohjeet tekoälyagentille annettavaksi                      |
-| `npx local-project-board claude <ID>`   | Käynnistää Claude Coden tehtävään tässä terminaalissa                  |
-| `npx local-project-board claude --wait` | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään |
-| `npx local-project-board export`        | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)     |
+| Komento                                         | Mitä se tekee                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `npx local-project-board`                       | Käynnistää taulun                                                                     |
+| `npx local-project-board instructions`          | Tulostaa API-ohjeet tekoälyagentille annettavaksi                                     |
+| `npx local-project-board claude <ID>`           | Käynnistää Claude Coden tehtävään tässä terminaalissa                                 |
+| `npx local-project-board claude --wait`         | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään                |
+| `npx local-project-board claude --recover <ID>` | Tarkistaa ajon, jonka odottaja kuoli; merkitsee sen kadonneeksi todisteen perusteella |
+| `npx local-project-board export`                | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)                    |
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
 `--no-open` (älä avaa selainta), `--help`.
@@ -190,6 +191,17 @@ Hyvä tietää:
   Claude Code -asetuksissasi, jos et halua kysymyksiä.
 - Istunto työskentelee projektisi työkopiossa, joten sen luoma haara on sen jälkeen uloskirjattuna.
   Työpuuta kutakin tehtävää varten ei ole vielä tehty.
+- Jos odottaja kuolee kesken istunnon (sen terminaali suljetaan, kone menee lepotilaan, se
+  tapetaan), tehtävä jää tilaan **working** eikä siihen voi käynnistää mitään. Aja
+  `npx local-project-board claude --recover <ID>` projektin terminaalissa. Se toimittaa ensin
+  lopun, jonka odottaja kirjasi muttei saanut lähetettyä (odottaja säilyttää sen hakemistossa
+  `.board/runner/`, joten se säilyy odottajan ja taulun uudelleenkäynnistyksen yli), ja katsoo
+  sitten tätä konetta: **alive** — taulu jätetään ennalleen; **lost** — odottaja ja sen kirjaama
+  `claude` ovat poissa, ja ajo merkitään tilaan `failed` (`failure.kind: lost`) todisteineen;
+  **unknown** — tämä kone ei pysty näyttämään sitä (ei `/proc`ia, toinen käyttöjärjestelmä tai
+  PID-nimiavaruus, muualla aloitettu ajo), eikä mikään muutu, ellet lisää valitsinta
+  `--confirm-stopped`, jonka ajo silloin kirjaa. Ajo säilyttää `runId`:nsä ja istuntonsa, joten
+  Resume jatkaa sitä seuraavana ajona. Ajon ikää ei koskaan pidetä merkkinä sen katoamisesta.
 
 ## Periaatteet
 
