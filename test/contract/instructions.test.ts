@@ -47,6 +47,7 @@ describe('generated AI instructions', () => {
     // Settings page's request, not something an agent should do to the rules it works under.
     expect(excluded.map((r) => r.id).sort()).toEqual([
       // Runner lifecycle routes: not for agents, only for the runner process (T31).
+      'ai-run.abandon',
       'ai-run.begin',
       'ai-run.end',
       'ai-run.report',

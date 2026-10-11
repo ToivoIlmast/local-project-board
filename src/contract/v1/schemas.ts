@@ -228,10 +228,30 @@ export const aiRunBeginRequestSchema = z.strictObject({
 export const aiRunEndRequestSchema = z.strictObject({
   exitCode: z.number().int().optional(),
   launchError: z.string().min(1).optional(),
+  /**
+   * When the process ended, by the runner's clock; sent when the end is delivered later than it
+   * happened, from the runner's journal (T45). Absent means now.
+   */
+  endedAt: z.iso.datetime({ offset: true }).optional(),
+  /**
+   * The session of the run that ended (T45). The runner always sends it, and the board then
+   * refuses an end of any other run; it is optional only for a runner of an earlier version.
+   */
+  sessionId: z.string().uuid().optional(),
+});
+
+/**
+ * `claude --recover` → abandon: the run with this runId and this session is lost (T45). The
+ * message is the evidence, or the person's confirmation; it is what `failure.message` keeps.
+ */
+export const aiRunAbandonRequestSchema = z.strictObject({
+  sessionId: z.string().uuid(),
+  message: z.string().min(1).max(2000),
 });
 
 export type AiRunBeginRequest = z.infer<typeof aiRunBeginRequestSchema>;
 export type AiRunEndRequest = z.infer<typeof aiRunEndRequestSchema>;
+export type AiRunAbandonRequest = z.infer<typeof aiRunAbandonRequestSchema>;
 
 export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
 export type UpdateTaskRequest = z.infer<typeof updateTaskRequestSchema>;

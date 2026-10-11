@@ -353,6 +353,38 @@ export const routes = {
     ai: { include: false },
   }),
 
+  'ai-run.abandon': route({
+    id: 'ai-run.abandon',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/abandon',
+    summary: 'Recovery: mark the working run with this runId and session as failed{lost}',
+    params: z.strictObject({ id: s.taskIdSchema, runId: z.coerce.number().int().nonnegative() }),
+    request: s.aiRunAbandonRequestSchema,
+    response: json(s.aiRunSchema),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: {
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        message: 'lost: claude (pid 4242) and its runner (pid 4200) no longer exist',
+      },
+      response: {
+        agent: 'runner',
+        state: 'failed',
+        runId: 1,
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+        startedAt: '2026-09-21T09:00:00.000Z',
+        failure: {
+          kind: 'lost',
+          message: 'lost: claude (pid 4242) and its runner (pid 4200) no longer exist',
+        },
+      },
+    },
+    // Called by `local-project-board claude --recover`, never by an agent at work.
+    ai: { include: false },
+  }),
+
   'ai-run.report': route({
     id: 'ai-run.report',
     method: 'PATCH',
