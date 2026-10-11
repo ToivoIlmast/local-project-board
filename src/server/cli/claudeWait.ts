@@ -1,6 +1,7 @@
 import { API_BASE_PATH, runRequestSchema, type RunRequest } from '../../contract/v1/index.js';
 import type { ResolvedBoard } from './board.js';
 import { boardNotRunning, findClaude, startSession } from './claude.js';
+import { deliverPendingEnds } from './runEnd.js';
 import { findRunningBoard } from './running.js';
 import type { RuntimeState } from './runtime.js';
 
@@ -60,6 +61,9 @@ export async function waitForRuns(
       }
 
       const current = running;
+      // Ends that a runner before this one, or this one before the board restarted, could not
+      // deliver: the board is here now (T45).
+      await deliverPendingEnds(board.root);
       const next = await nextRequest(current, stop.signal, () => {
         toldGone = false;
         write(

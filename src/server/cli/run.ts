@@ -6,6 +6,8 @@ import { exportBoard } from './export.js';
 import { printHandoff } from './handoff.js';
 import { printInstructions } from './instructions.js';
 import { openBrowser as spawnBrowser } from './openBrowser.js';
+import { procProbe, type ProcessProbe } from './processProbe.js';
+import { recoverRun } from './recover.js';
 import { startBoard } from './serve.js';
 
 export interface CliEnvironment {
@@ -17,6 +19,8 @@ export interface CliEnvironment {
   openBrowser?: ((url: string) => void) | undefined;
   /** Ends a command that waits (`claude --wait`), as Ctrl+C would; a test's way to stop it. */
   signal?: AbortSignal | undefined;
+  /** What `claude --recover` sees of this machine's processes; a test passes its own (T45). */
+  processProbe?: ProcessProbe | undefined;
 }
 
 export interface CliResult {
@@ -49,6 +53,17 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
         await printHandoff(board, args.id as string, environment.write);
         return { exitCode: 0 };
       case 'claude':
+        if (args.recover === true) {
+          // Looks at this machine and tells the board a run is lost only on proof (T45).
+          return {
+            exitCode: await recoverRun(board, args.id as string, {
+              confirmStopped: args.confirmStopped === true,
+              write: environment.write,
+              writeError: environment.writeError,
+              probe: environment.processProbe ?? procProbe(),
+            }),
+          };
+        }
         if (args.wait === true) {
           // Runs until it is stopped: each task sent from the board is a session here (T27).
           return {

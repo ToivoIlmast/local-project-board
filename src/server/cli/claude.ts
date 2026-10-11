@@ -2,13 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
-import { constants } from 'node:os';
+import { constants, hostname } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { API_BASE_PATH, claudeCodePrompt, continuationPrompt } from '../../contract/v1/index.js';
+import { claudeCodePrompt, continuationPrompt } from '../../contract/v1/index.js';
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
-import { findRunningBoard, get } from './running.js';
+import { identify, procProbe } from './processProbe.js';
+import { deliverEnd, deliverPendingEnds } from './runEnd.js';
+import { boardMessage, findRunningBoard, get, post } from './running.js';
 import type { RuntimeState } from './runtime.js';
+import { writeJournal, type RunJournal } from './runJournal.js';
 
 /** The one program this command starts. It is never taken from the command line (T19). */
 const PROGRAM = 'claude';
@@ -44,6 +47,8 @@ export async function launchClaude(
     throw new Error('The board did not answer. Is it still running? Try again in a moment.');
   }
   if (!answer.ok) throw new Error(await boardMessage(answer));
+  // An end that an earlier runner recorded and could not deliver goes first (T45).
+  await deliverPendingEnds(board.root);
 
   const program = await findClaude(environment.env);
   return startSession(program, id, running, board.root, environment.env);
@@ -84,7 +89,57 @@ export async function startSession(
     sessionId,
     prompt,
   ];
-  return run(program, args, root, env, board, id, runId, sessionId);
+  const journal = await startJournal(root, id, runId, sessionId);
+  return run(program, args, root, env, journal);
+}
+
+/**
+ * The journal of a run that is about to start (T45): what `claude --recover` needs to find its
+ * processes, and where its end waits when the board cannot take it. A disk that refuses it does
+ * not stop the session: the end is still sent from memory, and recovery says `unknown`.
+ */
+async function startJournal(
+  root: string,
+  taskId: string,
+  runId: number,
+  sessionId: string,
+): Promise<{ root: string; record: RunJournal; kept: boolean }> {
+  const probe = procProbe();
+  const bootId = await probe.bootId();
+  const pidNamespace = await probe.pidNamespace();
+  const record: RunJournal = {
+    formatVersion: 1,
+    taskId,
+    runId,
+    sessionId,
+    host: hostname(),
+    platform: process.platform,
+    ...(bootId === undefined ? {} : { bootId }),
+    ...(pidNamespace === undefined ? {} : { pidNamespace }),
+    runner: await identify(probe, process.pid),
+  };
+  const journal = { root, record, kept: true };
+  await keep(journal, record);
+  return journal;
+}
+
+async function keep(
+  journal: { root: string; record: RunJournal; kept: boolean },
+  record: RunJournal,
+): Promise<void> {
+  journal.record = record;
+  try {
+    await writeJournal(journal.root, record);
+  } catch (error) {
+    if (journal.kept) {
+      process.stderr.write(
+        `Warning: the runner journal of ${record.taskId} could not be written ` +
+          `(${error instanceof Error ? error.message : String(error)}). If this runner dies, ` +
+          '`claude --recover` will not be able to tell whether the run is lost.\n',
+      );
+    }
+    journal.kept = false;
+  }
 }
 
 /** The session of the last run of the task, as the board has it; the board refuses what is not one. */
@@ -121,41 +176,6 @@ export function boardNotRunning(): Error {
   );
 }
 
-/** The board says what is wrong in its own words; a board that says nothing is quoted by status. */
-async function boardMessage(answer: Response): Promise<string> {
-  try {
-    const body = (await answer.json()) as { error?: { message?: unknown } };
-    if (typeof body.error?.message === 'string') return body.error.message;
-  } catch {
-    // Not the board's own error: the status is all there is to say.
-  }
-  return `The board answered ${answer.status} when asked for the task.`;
-}
-
-/**
- * POST to the board with the session token; nothing when the network fails.
- * Never puts the token in a URL or a log.
- */
-async function postBoard(
-  state: RuntimeState,
-  path: string,
-  body: unknown,
-): Promise<Response | undefined> {
-  try {
-    return await fetch(`${state.url}${API_BASE_PATH.slice(1)}${path}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Records the start of a session on the board; throws if the board refuses.
  * Called before spawn so that no session ever runs without a recorded run (T33).
@@ -167,7 +187,7 @@ async function beginRun(
   model: string | undefined,
   mode: 'new' | 'resume',
 ): Promise<number> {
-  const response = await postBoard(board, `/tasks/${taskId}/ai-run`, {
+  const response = await post(board, `/tasks/${taskId}/ai-run`, {
     sessionId,
     mode,
     ...(model === undefined ? {} : { model }),
@@ -187,39 +207,43 @@ async function beginRun(
   return body.runId;
 }
 
-/** How long to retry end before giving up and printing a manual-recovery message. */
+/** How long to retry end before leaving it to the journal. */
 const END_RETRY_MS = 30_000;
 const END_RETRY_INITIAL_DELAY_MS = 200;
 
 /**
- * Records the end of a session on the board, retrying for ~30 s on network failure.
- * If all retries fail, prints a recovery message to stderr — the one case that cannot
- * be recorded (T33).
+ * Records the end of a session (T33): first in the journal, on the disk, then on the board,
+ * retrying for ~30 s and looking for the board afresh each time, since a board that restarted
+ * has another address and token. An end the board did not take stays in the journal and is
+ * delivered by the next runner, `claude <ID>` or `claude --recover` (T45).
  */
 async function endRun(
-  board: RuntimeState,
-  taskId: string,
-  runId: number,
+  journal: { root: string; record: RunJournal; kept: boolean },
   input: { exitCode?: number; launchError?: string },
-  sessionId: string,
 ): Promise<void> {
+  await keep(journal, {
+    ...journal.record,
+    outcome: { ...input, endedAt: new Date().toISOString() },
+  });
+  const { taskId, runId } = journal.record;
   const deadline = Date.now() + END_RETRY_MS;
   let delay = END_RETRY_INITIAL_DELAY_MS;
   for (;;) {
-    const response = await postBoard(board, `/tasks/${taskId}/ai-run/${runId}/end`, input);
-    if (response?.ok) return;
+    if ((await deliverEnd(journal.root, journal.record)) !== 'pending') return;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await new Promise<void>((resolve) => {
-      const ms = Math.min(delay, remaining);
-      setTimeout(resolve, ms);
+      setTimeout(resolve, Math.min(delay, remaining));
     });
     delay = Math.min(delay * 2, 5_000);
   }
   process.stderr.write(
-    `Warning: could not record run end for task ${taskId}.\n` +
-      `  taskId: ${taskId}  runId: ${runId}  sessionId: ${sessionId}\n` +
-      `  Recover: PATCH /api/v1/tasks/${taskId}/ai-run/${runId}/end manually.\n`,
+    `Warning: the board did not take the end of run ${runId} of ${taskId}.\n` +
+      (journal.kept
+        ? '  It is kept in .board/runner/ and is delivered by the next ' +
+          '`local-project-board claude --wait` or `claude <ID>`, or now by:\n'
+        : '  It could not be kept on disk either. When the board is back, run:\n') +
+      `    local-project-board claude --recover ${taskId}\n`,
   );
 }
 
@@ -255,13 +279,19 @@ function run(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
-  board: RuntimeState,
-  taskId: string,
-  runId: number,
-  sessionId: string,
+  journal: { root: string; record: RunJournal; kept: boolean },
 ): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(program, args, { cwd, env, stdio: 'inherit', shell: false });
+    // Who claude is, by pid and start time, for `claude --recover` if this runner dies (T45).
+    let recorded: Promise<void> = Promise.resolve();
+    child.once('spawn', () => {
+      const pid = child.pid;
+      if (pid === undefined) return;
+      recorded = identify(procProbe(), pid).then((identity) =>
+        keep(journal, { ...journal.record, child: identity }),
+      );
+    });
     const forwarded = (['SIGTERM', 'SIGHUP'] as const).map((signal) => {
       const forward = (): void => void child.kill(signal);
       process.on(signal, forward);
@@ -283,7 +313,8 @@ function run(
       if (ended) return;
       ended = true;
       release();
-      endRun(board, taskId, runId, input, sessionId)
+      recorded
+        .then(() => endRun(journal, input))
         .then(() => resolve(code))
         .catch(() => resolve(code));
     };
