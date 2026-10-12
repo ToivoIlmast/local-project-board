@@ -32,6 +32,11 @@ export interface AiRunService {
    * and `AI_RUN_IN_PROGRESS` when the run still works.
    */
   requireResumable(taskId: string): Promise<string>;
+  /**
+   * Restart starts the work of the last run over in a new session (T37): there must be a last
+   * run, and it must be over. Throws `NO_RUN_TO_RESTART` or `AI_RUN_IN_PROGRESS`.
+   */
+  requireRestartable(taskId: string): Promise<void>;
 }
 
 /** The current runId from a task's aiRun, normalizing legacy records (no runId → 0). */
@@ -58,31 +63,44 @@ export function createAiRunService({ storage, events }: AiRunServiceOptions): Ai
     );
   }
 
+  function noRun(taskId: string): BoardError {
+    return new BoardError(
+      'NO_RUN_TO_RESTART',
+      `Task "${taskId}" has no earlier AI run to start over. Start a new run instead.`,
+      { id: taskId },
+    );
+  }
+
+  function inProgress(taskId: string): BoardError {
+    return new BoardError(
+      'AI_RUN_IN_PROGRESS',
+      `Task "${taskId}" already has an AI run in progress.`,
+      { id: taskId },
+    );
+  }
+
   return {
     async requireResumable(taskId) {
       const task = await requireTask(taskId);
       const sessionId = task.aiRun?.sessionId;
       if (sessionId === undefined) throw noSession(taskId);
-      if (task.aiRun?.state === 'working') {
-        throw new BoardError(
-          'AI_RUN_IN_PROGRESS',
-          `Task "${taskId}" already has an AI run in progress.`,
-          { id: taskId },
-        );
-      }
+      if (task.aiRun?.state === 'working') throw inProgress(taskId);
       return sessionId;
+    },
+
+    async requireRestartable(taskId) {
+      const task = await requireTask(taskId);
+      if (task.aiRun === undefined) throw noRun(taskId);
+      if (task.aiRun.state === 'working') throw inProgress(taskId);
     },
 
     async begin(taskId, input) {
       const task = await requireTask(taskId);
 
-      if (task.aiRun?.state === 'working') {
-        throw new BoardError(
-          'AI_RUN_IN_PROGRESS',
-          `Task "${taskId}" already has an AI run in progress.`,
-          { id: taskId },
-        );
-      }
+      if (task.aiRun?.state === 'working') throw inProgress(taskId);
+
+      // Restart starts an earlier run over; the handoff names its archive after that run.
+      if (input.mode === 'restart' && task.aiRun === undefined) throw noRun(taskId);
 
       // Resume continues the session of the last run; any other session would be a new one.
       if (input.mode === 'resume' && task.aiRun?.sessionId !== input.sessionId) {

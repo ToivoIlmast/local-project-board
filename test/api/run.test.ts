@@ -346,12 +346,11 @@ describe('POST /tasks/:id/run with mode: resume (T36)', () => {
     expect(waiting.events).toEqual([]);
   });
 
-  it('a mode that is not new or resume, or a session in the body: nothing reaches the runner (INVARIANT)', async () => {
+  it('a mode that is not new, resume or restart, or a session in the body: nothing reaches the runner (INVARIANT)', async () => {
     await ranAndEnded('T1');
     const waiting = await runner();
 
     for (const extra of [
-      { mode: 'restart' },
       { mode: 'continue' },
       { mode: '' },
       { sessionId: SESSION },
@@ -379,5 +378,63 @@ describe('POST /tasks/:id/run with mode: resume (T36)', () => {
         mode: 'resume',
       },
     ]);
+  });
+});
+
+describe('POST /tasks/:id/run with mode: restart (T37)', () => {
+  const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+  const restart = (id: string, extra: Record<string, unknown> = {}) =>
+    start(id, { agent: 'claude-code', mode: 'restart', ...extra });
+
+  async function ranAndEnded(id: string): Promise<void> {
+    const begun = await board
+      .post(`${API}/tasks/${id}/ai-run`, { sessionId: SESSION, mode: 'new' })
+      .expect(200);
+    const runId = (begun.body as { runId: number }).runId;
+    await board.post(`${API}/tasks/${id}/ai-run/${runId}/end`, { exitCode: 1 }).expect(200);
+  }
+
+  it('hands the task and the mode to the runner when the last run is over (INVARIANT)', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    const response = await restart('T1', { model: 'opus' }).expect(200);
+
+    const request = { taskId: 'T1', agent: 'claude-code', model: 'opus', mode: 'restart' };
+    expect(response.body).toEqual(request);
+    await waiting.waitForEvents(1);
+    expect(waiting.events).toEqual([{ type: 'run.requested', ...request }]);
+  });
+
+  it('a task that never ran: 409 NO_RUN_TO_RESTART, and the runner is not asked (INVARIANT)', async () => {
+    await ranAndEnded('T2');
+    const waiting = await runner();
+
+    const response = await restart('T1').expect(409);
+
+    expect(code(response.body)).toBe('NO_RUN_TO_RESTART');
+    expect(message(response.body)).toContain('T1');
+    expect(waiting.events).toEqual([]);
+    expect(waiting.ended()).toBe(false);
+  });
+
+  it('a run that is working: 409 AI_RUN_IN_PROGRESS, and the runner is not asked (INVARIANT)', async () => {
+    await board.post(`${API}/tasks/T1/ai-run`, { sessionId: SESSION, mode: 'new' }).expect(200);
+    const waiting = await runner();
+
+    const response = await restart('T1').expect(409);
+
+    expect(code(response.body)).toBe('AI_RUN_IN_PROGRESS');
+    expect(waiting.events).toEqual([]);
+  });
+
+  it('a session in the body is refused: the runner makes a new one', async () => {
+    await ranAndEnded('T1');
+    const waiting = await runner();
+
+    expect(code((await restart('T1', { sessionId: SESSION }).expect(400)).body)).toBe(
+      'INVALID_REQUEST',
+    );
+    expect(waiting.events).toEqual([]);
   });
 });

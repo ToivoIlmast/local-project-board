@@ -19,6 +19,8 @@ export const BOARD_ERROR_CODES = [
   'AI_RUN_ALREADY_FINAL',
   /** Resume was asked for a task whose last run has no session to continue (T36). */
   'NO_SESSION_TO_RESUME',
+  /** Restart was asked for a task that has no earlier run to start over (T37). */
+  'NO_RUN_TO_RESTART',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

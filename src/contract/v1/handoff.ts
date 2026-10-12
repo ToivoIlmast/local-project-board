@@ -28,6 +28,19 @@ export interface WorkflowFacts {
    * the working tree are the agent's own earlier work, not a state to set up.
    */
   resume?: boolean | undefined;
+  /**
+   * The current run starts the task over (`aiRun.mode` is `restart`, T37) and keeps the earlier
+   * attempt: `branch` above is the branch of that attempt, to be archived under the number of the
+   * run before this one; the work goes on in `restart.branch`, the name the title gives.
+   */
+  restart?: RestartFacts | undefined;
+}
+
+export interface RestartFacts {
+  /** The run whose work is kept: it names the archived branch and report. */
+  previousRunId: number;
+  /** The branch the new attempt is made in, again from the base. */
+  branch: string;
 }
 
 /** One numbered step; `key` is the setting that decides it, and null for a rule that is not one. */
@@ -108,16 +121,38 @@ const STEPS: Renderers = {
       );
     }
     const base = parameter === null ? "the repository's default branch" : `\`${parameter}\``;
+    // The sequence of T28: a branch is always made from the base, never from what is checked out.
+    const fromBase = (branch: string): string =>
+      `switch to ${base} and pull from the remote if available ` +
+      '(if unreachable, use it as it is); ' +
+      `create \`${branch}\` from ${base} if it does not exist yet ` +
+      '(not from the current branch); ' +
+      `switch to \`${branch}\`. ` +
+      `Record it in the task: ${patch(facts, { branch })}.`;
+    if (facts.restart !== undefined) {
+      // Nothing of the earlier attempt is lost: a dirty tree stops the run, the old branch is
+      // renamed, never deleted or reset (T37).
+      const fresh = facts.restart.branch;
+      const archive = `${facts.branch}-attempt-${facts.restart.previousRunId}`;
+      return (
+        'This run starts the task over and keeps the earlier attempt. ' +
+        `Work in a new branch of your own, \`${fresh}\`, based on ${base}. ` +
+        'Before doing anything else, once, at the start of this run: run `git status`; ' +
+        'if the working tree has uncommitted changes, they belong to the earlier attempt: ' +
+        'leave them exactly as they are, change nothing, and stop here: report the run as ' +
+        '`failed` with a `message` that names the changed files, so that the user decides what ' +
+        'becomes of them. ' +
+        `Otherwise, if the branch \`${facts.branch}\` exists and \`${archive}\` does not, ` +
+        'keep the earlier attempt by renaming its branch, with its commits: ' +
+        `\`git branch -m ${facts.branch} ${archive}\`. ` +
+        `Then ${fromBase(fresh)} ` +
+        'Never commit to the branch it is based on, and never delete a branch.'
+      );
+    }
     return (
       `Work in a branch of your own, \`${facts.branch}\`, based on ${base}. ` +
       'Before doing anything else, run this sequence: ' +
-      'ensure the working tree is clean; ' +
-      `switch to ${base} and pull from the remote if available ` +
-      '(if unreachable, use it as it is); ' +
-      `create \`${facts.branch}\` from ${base} if it does not exist yet ` +
-      '(not from the current branch); ' +
-      `switch to \`${facts.branch}\`. ` +
-      `Record it in the task: ${patch(facts, { branch: facts.branch })}. ` +
+      `ensure the working tree is clean; ${fromBase(facts.branch)} ` +
       'Never commit to the branch it is based on.'
     );
   },
@@ -156,9 +191,16 @@ const STEPS: Renderers = {
   report: ({ value, parameter, facts }) => {
     if (!value) return 'Do not write a `report.md` for this task.';
     const langNote = parameter !== null ? ` Write in ${languageName(parameter)}.` : '';
+    // A restart keeps the report of the earlier attempt beside the new one (T37).
+    const write =
+      'what you did, what you checked and what is left into the document `report.md` ' +
+      `of this task: \`PUT ${tasks(facts)}/documents/report.md\`.${langNote}`;
+    if (facts.restart === undefined) return `Write ${write}`;
     return (
-      'Write what you did, what you checked and what is left into the document `report.md` ' +
-      `of this task: \`PUT ${tasks(facts)}/documents/report.md\`.${langNote}`
+      'First keep the report of the earlier attempt: if ' +
+      `\`GET ${tasks(facts)}/documents/report.md\` answers with one, put the same content into ` +
+      `\`PUT ${tasks(facts)}/documents/report-attempt-${facts.restart.previousRunId}.md\`. ` +
+      `Then write ${write}`
     );
   },
 
@@ -286,6 +328,10 @@ export function generateHandoff({
     branch: task.branch ?? taskBranchName(task.id, task.title),
     runId: task.aiRun?.runId,
     resume: task.aiRun?.mode === 'resume',
+    restart:
+      task.aiRun?.mode === 'restart' && task.aiRun.runId !== undefined
+        ? { previousRunId: task.aiRun.runId - 1, branch: taskBranchName(task.id, task.title) }
+        : undefined,
   };
   const lines = [`# Task ${task.id}: ${task.title}`, '', `- Status: \`${task.status}\``];
   if (task.labels.length > 0) {

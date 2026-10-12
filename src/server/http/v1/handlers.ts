@@ -94,11 +94,13 @@ export const handlers: Handlers = {
     await context.tasks.get(params.id);
     // Refused here, before any runner is asked: Resume needs a session that is over (T36).
     if (body.mode === 'resume') await context.aiRun.requireResumable(params.id);
+    // And Restart needs a run that is over, to start its work over (T37).
+    if (body.mode === 'restart') await context.aiRun.requireRestartable(params.id);
     const request = {
       taskId: params.id,
       agent: body.agent,
       ...(body.model === undefined ? {} : { model: body.model }),
-      ...(body.mode === 'resume' ? { mode: 'resume' as const } : {}),
+      ...(body.mode === undefined || body.mode === 'new' ? {} : { mode: body.mode }),
     };
     if (!context.runs.hand(request)) throw noRunner(params.id);
     return request;
