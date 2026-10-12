@@ -190,8 +190,10 @@ refuse a run that works. The only way out was to edit `task.md` by hand, past ev
   late end of the abandoned run itself keeps `failed{lost}`.
 - **`POST /tasks/:id/run` refuses `409 AI_RUN_IN_PROGRESS` while a run works, for every mode**,
   before a runner is asked (T36 did it for `resume` only).
-- **`PATCH /tasks/:id {"aiRun": null}` is refused while a runner's run works** (`409
-  AI_RUN_IN_PROGRESS`): clearing it would hide a live run and start runId again from 1. A run an
-  agent reported itself before T31 (no runId) may still be cleared that way. Clearing a run that
-  is over still starts the numbering again; the session check of `end` keeps a late end of the
-  cleared run from touching a new one.
+- **`PATCH /tasks/:id {"aiRun": null}` is refused for any run with a runId**, working or over
+  (`409 AI_RUN_NOT_CLEARABLE`; nothing is written). Clearing it would hide a live run, or start
+  runId again from 1 — and then a late end or report of the cleared run would name a runId the
+  new run has too. The session check of `end` does not make that safe: a resumed run keeps the
+  session, and `end` without a session and `report` check none. Such a run is replaced by the
+  next one instead, and a lost one is ended by abandon. A run an agent reported itself before
+  T31 (no runId) has no numbering to keep and may still be cleared that way.

@@ -182,15 +182,76 @@ describe('end names its session (T45)', () => {
   });
 });
 
-describe('PATCH aiRun: null while a run works (T45)', () => {
-  it('is refused with 409 AI_RUN_IN_PROGRESS: clearing would restart runId and hide a live run (INVARIANT)', async () => {
-    // Mutation: allow null while working → the run and its runId disappear → fails.
-    await begin();
-    const before = await task();
+describe('PATCH aiRun: null (T45)', () => {
+  const REPORT = {
+    agent: 'claude-code',
+    state: 'finished',
+    checks: 'passed',
+    finishedAt: '2026-09-26T11:00:00.000Z',
+  };
+  const states: [string, () => Promise<unknown>][] = [
+    ['working', async () => begin()],
+    [
+      'finished',
+      async () => {
+        await begin();
+        await board.patch(`${API}/tasks/T1/ai-run/1/report`, REPORT).expect(200);
+      },
+    ],
+    [
+      'failed',
+      async () => {
+        await begin();
+        await board
+          .post(`${API}/tasks/T1/ai-run/1/end`, { exitCode: 2, sessionId: SESSION })
+          .expect(200);
+      },
+    ],
+  ];
 
-    const response = await board.patch(`${API}/tasks/T1`, { aiRun: null }).expect(409);
+  it.each(states)(
+    'a %s run with a runId is refused with 409 AI_RUN_NOT_CLEARABLE, and nothing changes (INVARIANT)',
+    async (_state, setUp) => {
+      // Mutation: allow null for a run with a runId → the run disappears, runId restarts → fails.
+      await setUp();
+      const before = await task();
+      const published = board.events.events.length;
 
-    expect(code(response.body)).toBe('AI_RUN_IN_PROGRESS');
-    expect(await task()).toEqual(before);
-  });
+      for (const patch of [{ aiRun: null }, { aiRun: null, title: 'Renamed' }]) {
+        const response = await board.patch(`${API}/tasks/T1`, patch).expect(409);
+        expect(code(response.body)).toBe('AI_RUN_NOT_CLEARABLE');
+      }
+
+      expect(await task()).toEqual(before);
+      expect(board.events.events.length).toBe(published);
+    },
+  );
+
+  it.each(states.filter(([state]) => state !== 'working'))(
+    'after a refused clear of a %s run, the next run takes the next runId (INVARIANT)',
+    async (_state, setUp) => {
+      await setUp();
+      await board.patch(`${API}/tasks/T1`, { aiRun: null }).expect(409);
+
+      await board
+        .post(`${API}/tasks/T1/ai-run`, { sessionId: SESSION, mode: 'resume' })
+        .expect(200);
+
+      expect((await task())['aiRun']).toMatchObject({ runId: 2, state: 'working' });
+    },
+  );
+
+  it.each(['working', 'finished', 'failed'] as const)(
+    'a legacy %s run without a runId is still cleared (user cleanup, before T31)',
+    async (state) => {
+      await board.storage.updateTask('T1', {
+        aiRun: { agent: 'claude-code', state, startedAt: '2026-09-20T10:00:00Z' },
+      });
+
+      const response = await board.patch(`${API}/tasks/T1`, { aiRun: null }).expect(200);
+
+      expect(response.body).not.toHaveProperty('aiRun');
+      expect(await task()).not.toHaveProperty('aiRun');
+    },
+  );
 });

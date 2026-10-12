@@ -68,16 +68,16 @@ export function createTaskService({
 
   async function change(id: string, patch: UpdateTaskInput): Promise<Task> {
     const current = await require(id);
-    // A run the runner began has a runId; one an agent reported itself (before T31) has none
-    // to keep, and stays a thing the person may clear.
-    if (
-      patch.aiRun === null &&
-      current.aiRun?.state === 'working' &&
-      current.aiRun.runId !== undefined
-    ) {
-      throw new BoardError('AI_RUN_IN_PROGRESS', `Task "${id}" has an AI run in progress.`, {
-        id,
-      });
+    // A run the runner began has a runId, working or over: clearing it would start runId again
+    // from 1, and a late end or report of it could then touch a new run with the same runId.
+    // One an agent reported itself (before T31) has none to keep, and stays a thing the person
+    // may clear.
+    if (patch.aiRun === null && current.aiRun?.runId !== undefined) {
+      throw new BoardError(
+        'AI_RUN_NOT_CLEARABLE',
+        `The AI run of task "${id}" has a runId and cannot be cleared; the next run replaces it.`,
+        { id, runId: current.aiRun.runId },
+      );
     }
     if (patch.status !== undefined) assertKnownStatus(patch.status, statuses);
     const movedToAnotherColumn = patch.status !== undefined && patch.status !== current.status;
@@ -119,8 +119,8 @@ export function createTaskService({
     },
 
     update(id, patch) {
-      // Clearing the run waits for its lifecycle, and is refused while it works: it would hide
-      // a live run and start runId again from 1 (T45). A lost run is ended by abandon instead.
+      // Clearing the run waits for its lifecycle, and is refused for any run with a runId: it
+      // would hide a live run or start runId again from 1 (T45). A lost run is ended by abandon.
       if (patch.aiRun === null) return locks.run(id, () => change(id, patch));
       return change(id, patch);
     },

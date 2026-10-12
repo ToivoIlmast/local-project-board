@@ -97,7 +97,10 @@ export const updateTaskRequestSchema = z
     branch: z.string().min(1).nullable().optional(),
     /** An object replaces the task's overrides whole, as `labels` does; null removes them all. */
     workflow: taskWorkflowSchema.nullable().optional(),
-    /** null clears the run (user cleanup). An object is rejected — use the report route (T32). */
+    /**
+     * null clears a legacy run without a runId (user cleanup); a run with a runId is refused,
+     * 409 AI_RUN_NOT_CLEARABLE (T45). An object is rejected — use the report route (T32).
+     */
     aiRun: z.null().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');

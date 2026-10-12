@@ -22,6 +22,7 @@ const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   AI_RUN_IN_PROGRESS: 409,
   NO_SESSION_TO_RESUME: 409,
   AI_RUN_ALREADY_FINAL: 409,
+  AI_RUN_NOT_CLEARABLE: 409,
 };
 
 /** An error the transport itself raises; the domain raises BoardError instead. */

@@ -11,7 +11,8 @@ import { cleanTmpDirs } from '../support/tmp.js';
 /**
  * How an agent gives the result of its work back to the board (T27, the model of T20, updated
  * in T32): the agent sends its report to the dedicated report route so it cannot overwrite
- * runner fields. PATCH aiRun now only accepts null (user cleanup).
+ * runner fields. PATCH aiRun now only accepts null (user cleanup), and since T45 only for a
+ * legacy run without a runId.
  */
 
 let board: TestBoard;
@@ -92,13 +93,17 @@ describe('aiRun: the result of an agent via the report route (T27 updated in T32
     });
   });
 
-  it('is removed by null via PATCH (user cleanup)', async () => {
+  it('a run with a runId is not removed by null via PATCH: 409 AI_RUN_NOT_CLEARABLE (T45, INVARIANT)', async () => {
     const { id, runId } = await createTaskWithRun();
     await board.patch(`${API}/tasks/${id}/ai-run/${runId}/report`, reportBody).expect(200);
 
-    const response = await board.patch(`${API}/tasks/${id}`, { aiRun: null }).expect(200);
+    const response = await board.patch(`${API}/tasks/${id}`, { aiRun: null }).expect(409);
 
-    expect(response.body).not.toHaveProperty('aiRun');
+    expect(code(response.body)).toBe('AI_RUN_NOT_CLEARABLE');
+    expect((await board.get(`${API}/tasks/${id}`).expect(200)).body.aiRun).toMatchObject({
+      runId,
+      state: 'finished',
+    });
   });
 
   it('PATCH aiRun with an object is rejected — use the report route (INVARIANT)', async () => {
