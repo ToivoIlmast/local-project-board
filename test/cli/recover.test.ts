@@ -7,6 +7,8 @@ import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js'
 import {
   journalDir,
   listJournals,
+  readJournal,
+  removeJournal,
   runJournalSchema,
   writeJournal,
   type RunJournal,
@@ -335,6 +337,36 @@ describe('the taskId of a journal (T45)', () => {
     expect(await readFile(victim, 'utf8')).toBe('keep me');
     expect(await readFile(planted, 'utf8')).toContain('../../victim');
     expect((await aiRun(state))?.runId).toBe(before?.runId);
+  });
+
+  it('readJournal and removeJournal touch no file for such a taskId, and only the journal for a task id (INVARIANT)', async () => {
+    const root = await tmpDir();
+    const content = JSON.stringify(journal());
+    // Where each taskId would point if it were joined into a path: outside the journals, or
+    // inside them under a name no task has.
+    const victims = { '../../victim': join(root, 'victim-1.json'), 'T1/../planted': '' };
+    await writeFile(victims['../../victim'], content);
+    await mkdir(journalDir(root), { recursive: true });
+    const planted = join(journalDir(root), 'planted-1.json');
+    await writeFile(planted, content);
+    const absolute = join(root, 'abs');
+    await mkdir(absolute);
+    await writeFile(join(absolute, 'x-1.json'), content);
+    const taskIds = [...NOT_TASK_IDS, 'planted', join(absolute, 'x'), `${journalDir(root)}/T1`];
+
+    for (const taskId of taskIds) {
+      expect(await readJournal(root, taskId, 1)).toBeUndefined();
+      await removeJournal(root, taskId, 1);
+    }
+    expect(await readFile(victims['../../victim'], 'utf8')).toBe(content);
+    expect(await readFile(planted, 'utf8')).toBe(content);
+    expect(await readFile(join(absolute, 'x-1.json'), 'utf8')).toBe(content);
+
+    await writeJournal(root, journal());
+    expect(await readJournal(root, 'T1', 1)).toEqual(journal());
+    await removeJournal(root, 'T1', 1);
+    expect(await readJournal(root, 'T1', 1)).toBeUndefined();
+    expect((await readdir(journalDir(root))).sort()).toEqual(['planted-1.json']);
   });
 });
 

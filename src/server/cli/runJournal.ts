@@ -99,12 +99,17 @@ async function syncDir(dir: string): Promise<void> {
   }
 }
 
-/** The journal of this run, or nothing when there is none or it cannot be read as one. */
+/**
+ * The journal of this run, or nothing when there is none or it cannot be read as one. A taskId
+ * that is not a task id has none: it is never made into a path, which it could lead out of the
+ * journals.
+ */
 export async function readJournal(
   root: string,
   taskId: string,
   runId: number,
 ): Promise<RunJournal | undefined> {
+  if (!isTaskId(taskId)) return undefined;
   return parse(journalPath(root, taskId, runId));
 }
 
@@ -124,7 +129,9 @@ export async function listJournals(root: string): Promise<RunJournal[]> {
   return records.filter((record): record is RunJournal => record !== undefined);
 }
 
+/** Removes the journal of this run; a taskId that is not a task id has none to remove. */
 export async function removeJournal(root: string, taskId: string, runId: number): Promise<void> {
+  if (!isTaskId(taskId)) return;
   await rm(journalPath(root, taskId, runId), { force: true });
 }
 
