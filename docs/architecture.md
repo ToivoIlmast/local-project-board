@@ -30,14 +30,14 @@ and what is generated from them: [api.md](api.md) and the AI instructions (ADR-0
 
 ## The server
 
-| Directory                                 | Role                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/server/storage`                      | Implements `Storage`; the markdown adapter (ADR-0002/0004)                                 |
-| `src/server/git`                          | Implements `GitReader` over the system `git` (ADR-0007)                                    |
-| `src/server/events`                       | Implements `EventSink`; in-process bus for the SSE stream                                  |
-| `src/server/config`, `src/server/project` | Configuration and board-root discovery (ADR-0021/0024)                                     |
-| `src/server/http`                         | Express: routes, errors, security, SSE, the runners waiting for Send to AI                 |
-| `src/server/cli`                          | Arguments, the composition root, listening, `runtime.json`, `claude <ID>`, `claude --wait` |
+| Directory                                 | Role                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/server/storage`                      | Implements `Storage`; the markdown adapter (ADR-0002/0004)                                       |
+| `src/server/git`                          | Implements `GitReader` over the system `git` (ADR-0007)                                          |
+| `src/server/events`                       | Implements `EventSink`; in-process bus for the SSE stream                                        |
+| `src/server/config`, `src/server/project` | Configuration and board-root discovery (ADR-0021/0024)                                           |
+| `src/server/http`                         | Express: routes, errors, security, SSE, the runners waiting for Send to AI                       |
+| `src/server/cli`                          | Arguments, the composition root, listening, `runtime.json`, `claude <ID>`, `--wait`, `--recover` |
 
 `src/server/cli/serve.ts` is the only place where the pieces are put together: it creates the
 event bus and the storage, builds the services, and hands `http` a `BoardContext`. A route can
@@ -47,7 +47,10 @@ token. Security is in `http/security.ts` (ADR-0008).
 No module of the server starts a process for a request. Send to AI → Claude Code reaches a
 process only through a runner the person started (`claude --wait`): `http/runs.ts` hands a task
 id to one waiting runner, and `cli/claudeWait.ts` starts the session with `cli/claude.ts`, the
-same way `claude <ID>` does (ADR-0029, amended by T27).
+same way `claude <ID>` does (ADR-0029, amended by T27). Nor does any module of the server look at
+a process: whether a run whose runner died is still alive is read from `/proc` by
+`cli/recover.ts` (`claude --recover <ID>`), with the runner's journal of `cli/runJournal.ts`, and
+the board is only told the verdict (ADR-0029, amended by T45).
 
 ## The contract between the server and the page
 

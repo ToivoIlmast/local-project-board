@@ -19,6 +19,8 @@ export const BOARD_ERROR_CODES = [
   'AI_RUN_ALREADY_FINAL',
   /** Resume was asked for a task whose last run has no session to continue (T36). */
   'NO_SESSION_TO_RESUME',
+  /** PATCH aiRun: null on a run with a runId, in any state: its runId must not restart (T45). */
+  'AI_RUN_NOT_CLEARABLE',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

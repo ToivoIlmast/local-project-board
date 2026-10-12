@@ -15,6 +15,10 @@ export interface ParsedArgs {
   id?: string;
   /** Only for claude, instead of an id: wait for Send to AI in the board (T27). */
   wait?: boolean;
+  /** Only for claude, with an id: look at a run whose runner died and recover it (T45). */
+  recover?: boolean;
+  /** Only with --recover: the person says the session is stopped when this machine cannot tell. */
+  confirmStopped?: boolean;
 }
 
 export const USAGE = [
@@ -27,6 +31,10 @@ export const USAGE = [
   '  claude <id>            start Claude Code on a task, in this terminal',
   '  claude --wait          start Claude Code in this terminal on each task sent from the',
   '                         board with Send to AI → Claude Code, one after another',
+  '  claude --recover <id>  check whether the AI run of a task is still alive on this machine,',
+  '                         and mark it lost on the board when it certainly is not',
+  '      --confirm-stopped  with --recover: you know the session has stopped, though this',
+  '                         machine cannot show it; the board records your confirmation',
   '  export                 print a snapshot of the board',
   '',
   'Options:',
@@ -60,6 +68,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         'no-open': { type: 'boolean' },
         out: { type: 'string' },
         wait: { type: 'boolean' },
+        recover: { type: 'boolean' },
+        'confirm-stopped': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
     });
@@ -75,8 +85,19 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const [name, ...rest] = positionals;
   const command: Command = name === undefined ? 'serve' : asCommand(name);
   const wait = values.wait === true;
+  const recover = values.recover === true;
+  const confirmStopped = values['confirm-stopped'] === true;
   if (wait && command !== 'claude') {
     throw new UsageError('The --wait flag belongs to the claude command.');
+  }
+  if (recover && command !== 'claude') {
+    throw new UsageError('The --recover flag belongs to the claude command.');
+  }
+  if (recover && wait) {
+    throw new UsageError('claude --recover takes one task and cannot wait: leave out --wait.');
+  }
+  if (confirmStopped && !recover) {
+    throw new UsageError('The --confirm-stopped flag belongs to claude --recover <id>.');
   }
   // The commands that take a positional argument take the task they are about; a runner that
   // waits is told its tasks by the board, one at a time.
@@ -109,6 +130,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(values.out === undefined ? {} : { out: values.out }),
     ...(id === undefined ? {} : { id }),
     ...(wait ? { wait } : {}),
+    ...(recover ? { recover } : {}),
+    ...(confirmStopped ? { confirmStopped } : {}),
   };
 }
 

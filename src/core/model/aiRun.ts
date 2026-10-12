@@ -5,7 +5,8 @@ export const AI_RUN_STATES = ['working', 'finished', 'failed', 'needs-review'] a
 /** What the checks of the project said, as far as the agent ran them. */
 export const AI_RUN_CHECKS = ['passed', 'failed', 'skipped'] as const;
 export const AI_RUN_MODES = ['new', 'resume', 'restart'] as const;
-export const AI_RUN_FAILURE_KINDS = ['launch', 'exit', 'agent'] as const;
+/** `lost`: the runner died without an end, and `claude --recover` said so (T45). */
+export const AI_RUN_FAILURE_KINDS = ['launch', 'exit', 'agent', 'lost'] as const;
 
 /** What the runner records when a process failed (T31). */
 export const aiRunFailureSchema = z.strictObject({
