@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { isTaskId } from '../../core/rules/ids.js';
 
 /**
  * What a runner writes down about the run it started, on the disk of this machine (T45), so
@@ -28,7 +29,8 @@ const processSchema = z.strictObject({
 
 export const runJournalSchema = z.strictObject({
   formatVersion: z.literal(1),
-  taskId: z.string().min(1),
+  /** Names the journal's file and the board's URL: a task id, or the journal is not read. */
+  taskId: z.string().refine(isTaskId, 'Must be a task id, e.g. "T12"'),
   runId: z.int().nonnegative(),
   sessionId: z.uuid(),
   host: z.string(),

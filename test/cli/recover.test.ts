@@ -1,9 +1,16 @@
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { jest } from '@jest/globals';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCli } from '../../src/server/cli/run.js';
 import { procProbe, type ProcessProbe } from '../../src/server/cli/processProbe.js';
 import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js';
-import { journalDir, writeJournal, type RunJournal } from '../../src/server/cli/runJournal.js';
+import {
+  journalDir,
+  listJournals,
+  runJournalSchema,
+  writeJournal,
+  type RunJournal,
+} from '../../src/server/cli/runJournal.js';
 import { cli, cliInBackground, stopBoards } from '../support/cli.js';
 import { fakeClaude } from '../support/fakeClaude.js';
 import { freePort, releasePorts } from '../support/ports.js';
@@ -272,6 +279,58 @@ describe('the runner journal (T45)', () => {
     await session.done;
     // Delivered: nothing is left to deliver.
     expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+  });
+});
+
+describe('the taskId of a journal (T45)', () => {
+  const NOT_TASK_IDS = ['../../victim', 'T1/../../x', '..', 't1', 'T0', 'T1?x=1', 'T1#x', ''];
+
+  it('a journal whose taskId is not a task id is rejected by the schema (INVARIANT)', () => {
+    for (const taskId of NOT_TASK_IDS) {
+      expect(runJournalSchema.safeParse(journal({ taskId })).success).toBe(false);
+    }
+    expect(runJournalSchema.safeParse(journal()).success).toBe(true);
+  });
+
+  it('is never written: writeJournal refuses it, and nothing lands outside the journals', async () => {
+    const root = await tmpDir();
+    await expect(writeJournal(root, journal({ taskId: '../../victim' }))).rejects.toThrow();
+    expect(await readdir(root)).toEqual(['.board']);
+    expect(await readdir(journalDir(root))).toEqual([]);
+  });
+
+  it('a planted journal with such a taskId is not read, deletes nothing outside the journals and is never sent in a URL (INVARIANT)', async () => {
+    const { root, state } = await boardWithWorkingRun();
+    const before = await aiRun(state);
+    const victim = join(root, 'victim-1.json');
+    await writeFile(victim, 'keep me');
+    await mkdir(journalDir(root), { recursive: true });
+    const planted = join(journalDir(root), 'planted.json');
+    await writeFile(
+      planted,
+      JSON.stringify(
+        journal({
+          taskId: '../../victim',
+          outcome: { exitCode: 1, endedAt: '2026-10-11T10:00:00.000Z' },
+        }),
+      ),
+    );
+    expect(await listJournals(root)).toEqual([]);
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    try {
+      await recover(root, machine());
+      const urls = fetchSpy.mock.calls.map(([input]) =>
+        input instanceof Request ? input.url : String(input),
+      );
+      expect(urls.some((url) => url.includes('victim') || url.includes('..'))).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(await readFile(victim, 'utf8')).toBe('keep me');
+    expect(await readFile(planted, 'utf8')).toContain('../../victim');
+    expect((await aiRun(state))?.runId).toBe(before?.runId);
   });
 });
 
