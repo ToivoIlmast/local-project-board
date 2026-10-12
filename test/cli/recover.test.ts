@@ -248,7 +248,11 @@ describe('the runner journal (T45)', () => {
       const deadline = Date.now() + 10_000;
       let record: RunJournal | undefined;
       while (Date.now() < deadline) {
-        const files = await readdir(journalDir(root)).catch(() => [] as string[]);
+        // Journals only, as listJournals reads them: the writer's temp file is renamed away
+        // between this readdir and a read of it.
+        const files = (await readdir(journalDir(root)).catch(() => [] as string[])).filter((name) =>
+          name.endsWith('.json'),
+        );
         if (files.length === 1) {
           const parsed = JSON.parse(
             await readFile(join(journalDir(root), files[0]!), 'utf8'),
