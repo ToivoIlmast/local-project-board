@@ -159,10 +159,10 @@ export const runTaskRequestSchema = z.strictObject({
   model: claudeModelSchema.optional(),
   /**
    * `new` (also when absent) starts a session; `resume` continues the session of the last run
-   * of the task (T36). `restart` is not accepted here yet. The session itself is never sent:
-   * the runner reads it from the board.
+   * of the task (T36); `restart` starts the work of the last run over in a new session (T37).
+   * A session itself is never sent: the runner reads it from the board, or makes a new one.
    */
-  mode: z.enum(['new', 'resume']).optional(),
+  mode: z.enum(['new', 'resume', 'restart']).optional(),
 });
 
 /** The request was handed to a runner; the session is its business from here on. */
@@ -170,8 +170,8 @@ export const runStartedSchema = z.strictObject({
   taskId: taskIdSchema,
   agent: agentSchema,
   model: claudeModelSchema.optional(),
-  /** The board answers with it only for `resume`: a new session needs no word (T36). */
-  mode: z.enum(['new', 'resume']).optional(),
+  /** The board answers with it only for `resume` and `restart`: a new run needs no word (T36). */
+  mode: z.enum(['new', 'resume', 'restart']).optional(),
 });
 
 /** What a waiting runner receives on `GET /runs`, and nothing else ever. */
@@ -180,7 +180,7 @@ export const runRequestSchema = z.strictObject({
   taskId: taskIdSchema,
   agent: agentSchema,
   model: claudeModelSchema.optional(),
-  mode: z.literal('resume').optional(),
+  mode: z.enum(['resume', 'restart']).optional(),
 });
 
 /**

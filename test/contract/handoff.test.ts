@@ -1002,3 +1002,179 @@ describe('mode: resume (T36)', () => {
     expect(make(bare)).not.toContain('already exists');
   });
 });
+
+describe('mode: restart (T37)', () => {
+  /** Run 4 restarts the work of run 3 on a task whose branch was recorded under its title. */
+  const RESTART: WorkflowFacts = {
+    ...FACTS,
+    restart: { previousRunId: 3, branch: 'task/T13-ai-workflow-model' },
+  };
+  const stepOf = (key: string, levels: Levels, facts: WorkflowFacts): string => {
+    const step = workflowSteps(effective(levels), facts).find((candidate) => candidate.key === key);
+    if (!step) throw new Error(`no step for ${key}`);
+    return step.text;
+  };
+
+  /**
+   * What would lose the earlier attempt: its commits, its uncommitted changes or its report.
+   * The text of a restart must not contain any of them, in any combination of the settings.
+   */
+  const DESTRUCTIVE = [
+    'branch -D',
+    'branch -d',
+    'branch -M',
+    'branch --delete',
+    'reset --hard',
+    'reset --keep',
+    'checkout -- .',
+    'checkout -f',
+    'restore',
+    'clean',
+    'stash',
+    '--force',
+    'DELETE ',
+    'push',
+  ];
+  const variants: [string, Levels][] = [
+    ['branch on, report on', {}],
+    ['branch on, report off', { task: { report: false } }],
+    ['branch off, report on', { task: { branch: false } }],
+    ['branch off, report off', { task: { branch: false, report: false } }],
+    ['base branch set', { board: { baseBranch: 'develop' } }],
+  ];
+
+  it.each(variants)(
+    '%s: no command that destroys the earlier attempt (INVARIANT)',
+    (_name, levels) => {
+      const steps = lines(renderWorkflowSteps(effective(levels), RESTART)).filter(
+        // The push step is a setting of its own, and says that nothing is pushed.
+        (line) => !line.includes('Do not push'),
+      );
+      const text = steps.join('\n');
+      for (const command of DESTRUCTIVE) expect(text).not.toContain(command);
+    },
+  );
+
+  it('branch on: archives the old branch by renaming it, then makes the branch again from the base (INVARIANT)', () => {
+    const text = stepOf('branch', {}, RESTART);
+
+    expect(text).toContain(
+      '`git branch -m task/T13-ai-workflow-model task/T13-ai-workflow-model-attempt-3`',
+    );
+    expect(text).toContain(
+      "create `task/T13-ai-workflow-model` from the repository's default branch",
+    );
+    expect(text).toContain(
+      '`PATCH /api/v1/tasks/T13` with `{"branch":"task/T13-ai-workflow-model"}`',
+    );
+    // The renaming comes before the new branch: otherwise there would be two of the same name.
+    expect(text.indexOf('git branch -m')).toBeLessThan(text.indexOf('create `'));
+    expect(text).toMatchInlineSnapshot(
+      `"This run starts the task over and keeps the earlier attempt. Work in a new branch of your own, \`task/T13-ai-workflow-model\`, based on the repository's default branch. Before doing anything else, once, at the start of this run: run \`git status\`; if the working tree has uncommitted changes, they belong to the earlier attempt: leave them exactly as they are, change nothing, and stop here: report the run as \`failed\` with a \`message\` that names the changed files, so that the user decides what becomes of them. Otherwise, if the branch \`task/T13-ai-workflow-model\` exists and \`task/T13-ai-workflow-model-attempt-3\` does not, keep the earlier attempt by renaming its branch, with its commits: \`git branch -m task/T13-ai-workflow-model task/T13-ai-workflow-model-attempt-3\`. Then switch to the repository's default branch and pull from the remote if available (if unreachable, use it as it is); create \`task/T13-ai-workflow-model\` from the repository's default branch if it does not exist yet (not from the current branch); switch to \`task/T13-ai-workflow-model\`. Record it in the task: \`PATCH /api/v1/tasks/T13\` with \`{"branch":"task/T13-ai-workflow-model"}\`. Never commit to the branch it is based on, and never delete a branch. _(source: default; baseBranch: default)_"`,
+    );
+  });
+
+  it('the archive is named after the branch the task records and the run before this one', () => {
+    const facts: WorkflowFacts = {
+      ...FACTS,
+      branch: 'feature/old-name',
+      restart: { previousRunId: 7, branch: 'task/T13-new-title' },
+    };
+    const text = stepOf('branch', { board: { baseBranch: 'develop' } }, facts);
+
+    expect(text).toContain('`git branch -m feature/old-name feature/old-name-attempt-7`');
+    expect(text).toContain('create `task/T13-new-title` from `develop`');
+    expect(text).toContain('{"branch":"task/T13-new-title"}');
+  });
+
+  it('a dirty working tree: stop and report failed, nothing is discarded (INVARIANT)', () => {
+    const text = stepOf('branch', {}, RESTART);
+
+    expect(text).toContain('if the working tree has uncommitted changes');
+    expect(text).toContain('leave them exactly as they are');
+    expect(text).toContain('stop here: report the run as `failed`');
+    // The check comes first: nothing is renamed or switched while changes are there.
+    expect(text.indexOf('uncommitted changes')).toBeLessThan(text.indexOf('git branch -m'));
+    expect(text.indexOf('uncommitted changes')).toBeLessThan(text.indexOf('switch to'));
+  });
+
+  it('branch off: says nothing about branches beyond a new run, and archives nothing (INVARIANT)', () => {
+    const levels = { task: { branch: false } };
+    const text = stepOf('branch', levels, RESTART);
+
+    expect(text).toBe(stepOf('branch', levels, FACTS));
+    expect(text).not.toContain('attempt');
+    expect(text).not.toContain('git branch');
+  });
+
+  it('editCode off: the branch step is the one of a new run', () => {
+    const levels = { task: { editCode: false } };
+    expect(stepOf('branch', levels, RESTART)).toBe(stepOf('branch', levels, FACTS));
+  });
+
+  it('report on: the earlier report.md is kept as report-attempt-<n>.md before the new one is written (INVARIANT)', () => {
+    const text = stepOf('report', {}, RESTART);
+
+    expect(text).toContain('`GET /api/v1/tasks/T13/documents/report.md`');
+    expect(text).toContain('`PUT /api/v1/tasks/T13/documents/report-attempt-3.md`');
+    expect(text.indexOf('report-attempt-3.md')).toBeLessThan(
+      text.indexOf('`PUT /api/v1/tasks/T13/documents/report.md`'),
+    );
+    expect(text).toMatchInlineSnapshot(
+      `"First keep the report of the earlier attempt: if \`GET /api/v1/tasks/T13/documents/report.md\` answers with one, put the same content into \`PUT /api/v1/tasks/T13/documents/report-attempt-3.md\`. Then write what you did, what you checked and what is left into the document \`report.md\` of this task: \`PUT /api/v1/tasks/T13/documents/report.md\`. _(source: default; reportLanguage: default)_"`,
+    );
+  });
+
+  it('report on: the language is still asked for', () => {
+    expect(stepOf('report', { task: { reportLanguage: 'ru' } }, RESTART)).toContain(
+      'Write in Russian.',
+    );
+  });
+
+  it('report off: the step is the one of a new run', () => {
+    const levels = { task: { report: false } };
+    expect(stepOf('report', levels, RESTART)).toBe(stepOf('report', levels, FACTS));
+  });
+
+  it('only the branch and report steps differ from a new run', () => {
+    const restarted = lines(renderWorkflowSteps(effective(), RESTART));
+    const fresh = lines(renderWorkflowSteps(effective(), FACTS));
+    expect(restarted).toHaveLength(fresh.length);
+    const changed = restarted.flatMap((line, index) => (line === fresh[index] ? [] : [index]));
+    expect(changed.map((index) => workflowSteps(effective(), FACTS)[index]?.key)).toEqual([
+      'branch',
+      'report',
+    ]);
+  });
+
+  it('generateHandoff follows the mode of the current run: the archive names the run before it (INVARIANT)', () => {
+    const task: Task = {
+      id: 'T13',
+      title: 'Model',
+      status: 'todo',
+      rank: 'a',
+      body: '',
+      labels: [],
+      branch: 'task/T13-old',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+      aiRun: { agent: 'runner', state: 'working', runId: 5, mode: 'restart' },
+    };
+    const make = (candidate: Task): string =>
+      generateHandoff({
+        task: candidate,
+        documents: [],
+        effective: effective(),
+        instructions: 'x',
+      });
+
+    const text = make(task);
+    expect(text).toContain('`git branch -m task/T13-old task/T13-old-attempt-4`');
+    expect(text).toContain('create `task/T13-model` from');
+    expect(text).toContain('report-attempt-4.md');
+    expect(make(task)).toBe(text);
+    for (const mode of ['new', 'resume'] as const) {
+      expect(make({ ...task, aiRun: { ...task.aiRun!, mode } })).not.toContain('attempt');
+    }
+  });
+});

@@ -458,3 +458,90 @@ describe('local-project-board claude --wait: Resume (T36)', () => {
     expect(await claude.calls()).toEqual([]);
   });
 });
+
+describe('local-project-board claude --wait: Restart (T37)', () => {
+  const sendRestart = (state: RuntimeState, id: string, model?: string) =>
+    api(state, 'POST', `/tasks/${id}/run`, {
+      agent: 'claude-code',
+      mode: 'restart',
+      ...(model === undefined ? {} : { model }),
+    });
+
+  async function aiRunOf(state: RuntimeState, id: string) {
+    const task = (await (await api(state, 'GET', `/tasks/${id}`)).json()) as {
+      aiRun?: { runId?: number; sessionId?: string; mode?: string; state?: string };
+    };
+    return task.aiRun;
+  }
+
+  it('starts claude in a new session, with the prompt of a new run, and records mode restart (INVARIANT)', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended \(exit code 1\)\./);
+    await runner.printed(WAITING);
+    const first = await aiRunOf(state, 'T2');
+
+    expect((await sendRestart(state, 'T2', 'sonnet')).status).toBe(200);
+    await until(
+      () => aiRunOf(state, 'T2'),
+      (run) => run?.runId === 2 && run.state === 'failed',
+    );
+
+    const second = await aiRunOf(state, 'T2');
+    expect(second).toMatchObject({ runId: 2, mode: 'restart' });
+    expect(second?.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second?.sessionId).not.toBe(first?.sessionId);
+    const [, call] = await callsOf(claude, 2);
+    expect(call?.argv).toEqual([
+      '--model',
+      'sonnet',
+      '--session-id',
+      second?.sessionId,
+      claudeCodePrompt('T2', boardUrl(state)),
+    ]);
+    expect(call?.argv).not.toContain('--resume');
+  });
+
+  it('the agent reads the handoff of a restart: the old branch is archived, not destroyed', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ agent: 'read', exit: 1 }),
+    });
+    await runner.printed(WAITING);
+    await sendToClaude(state, 'T2');
+    await runner.printed(/^The session on T2 ended/);
+    await runner.printed(WAITING);
+
+    await sendRestart(state, 'T2');
+
+    const [, restarted] = await until(claude.reads, (reads) => reads.length >= 2);
+    expect(restarted?.handoff).toContain(
+      '`git branch -m task/T2-write-the-report task/T2-write-the-report-attempt-1`',
+    );
+    expect(restarted?.handoff).toContain('report-attempt-1.md');
+  });
+
+  it('refuses a task that never ran, and starts nothing (INVARIANT)', async () => {
+    const { root, state } = await boardWithTasks();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+    await runner.printed(WAITING);
+
+    const answer = await sendRestart(state, 'T1');
+
+    expect(answer.status).toBe(409);
+    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe(
+      'NO_RUN_TO_RESTART',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(await claude.calls()).toEqual([]);
+  });
+});

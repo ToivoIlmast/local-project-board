@@ -214,6 +214,71 @@ describe('begin with mode: resume (T36)', () => {
   });
 });
 
+describe('begin with mode: restart (T37)', () => {
+  const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+  const OTHER = '00000000-0000-4000-8000-000000000000';
+
+  it('takes a new session and the next runId (INVARIANT)', async () => {
+    const id = await createTask();
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await service.end(id, 1, { exitCode: 1 });
+
+    await service.begin(id, { sessionId: OTHER, mode: 'restart' });
+
+    expect(await getAiRun(id)).toMatchObject({
+      runId: 2,
+      sessionId: OTHER,
+      mode: 'restart',
+      state: 'working',
+    });
+  });
+
+  it('refuses a task that never ran, and writes nothing (INVARIANT)', async () => {
+    const id = await createTask();
+
+    await expect(service.begin(id, { sessionId: OTHER, mode: 'restart' })).rejects.toMatchObject({
+      code: 'NO_RUN_TO_RESTART',
+    });
+    expect(await getAiRun(id)).toBeUndefined();
+  });
+
+  it('requireRestartable: a run that is over, legacy or not; not one that works, nor none (INVARIANT)', async () => {
+    const id = await createTask();
+    await expect(service.requireRestartable(id)).rejects.toMatchObject({
+      code: 'NO_RUN_TO_RESTART',
+    });
+
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await expect(service.requireRestartable(id)).rejects.toMatchObject({
+      code: 'AI_RUN_IN_PROGRESS',
+    });
+
+    await service.end(id, 1, { exitCode: 1 });
+    await expect(service.requireRestartable(id)).resolves.toBeUndefined();
+
+    // A legacy run has no session, but it is a run: its work can be started over.
+    await storage.updateTask(id, {
+      aiRun: { agent: 'old-agent', state: 'failed', startedAt: '2026-09-20T10:00:00Z' },
+    });
+    await expect(service.requireRestartable(id)).resolves.toBeUndefined();
+  });
+
+  it('requireRestartable reads under the lock of the task: a begin before it is seen (INVARIANT)', async () => {
+    // Mutation: requireRestartable outside the lock → it reads the run before begin writes it.
+    const id = await createTask();
+    await service.begin(id, { sessionId: SESSION, mode: 'new' });
+    await service.end(id, 1, { exitCode: 1 });
+
+    const [begun, checked] = await Promise.allSettled([
+      service.begin(id, { sessionId: OTHER, mode: 'restart' }),
+      service.requireRestartable(id),
+    ]);
+
+    expect(begun.status).toBe('fulfilled');
+    expect(checked).toMatchObject({ status: 'rejected', reason: { code: 'AI_RUN_IN_PROGRESS' } });
+  });
+});
+
 describe('lost runs: abandon, CAS and the lifecycle lock (T45)', () => {
   const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
   const OTHER = '00000000-0000-4000-8000-000000000000';

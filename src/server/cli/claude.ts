@@ -72,10 +72,11 @@ export async function startSession(
   root: string,
   env: NodeJS.ProcessEnv,
   model?: string,
-  mode: 'new' | 'resume' = 'new',
+  mode: 'new' | 'resume' | 'restart' = 'new',
 ): Promise<number> {
   const boardUrl = board.url.replace(/\/+$/, '');
-  // Resume continues the session the board recorded for the last run, never a new one (T36).
+  // Resume continues the session the board recorded for the last run, never a new one (T36);
+  // Restart, like a new run, always makes a new one (T37).
   const resuming = mode === 'resume';
   const sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
   const prompt = resuming ? continuationPrompt(id, boardUrl) : claudeCodePrompt(id, boardUrl);
@@ -185,7 +186,7 @@ async function beginRun(
   taskId: string,
   sessionId: string,
   model: string | undefined,
-  mode: 'new' | 'resume',
+  mode: 'new' | 'resume' | 'restart',
 ): Promise<number> {
   const response = await post(board, `/tasks/${taskId}/ai-run`, {
     sessionId,
