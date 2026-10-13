@@ -9,6 +9,7 @@ import {
   createWorkflowService,
 } from '../../core/index.js';
 import { createAiRunService } from '../../core/services/aiRunService.js';
+import { createTaskLocks } from '../../core/services/taskLocks.js';
 import { assertNoOrphanedStatuses } from '../../core/rules/status.js';
 import { createEventBus } from '../events/index.js';
 import { gitReader } from '../git/index.js';
@@ -61,8 +62,10 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
     assertNoOrphanedStatuses(await storage.listTasks(), config.statuses);
 
     const git = gitReader({ root });
+    // One lock per task for the lifecycle of its run, whichever service changes it (T45).
+    const locks = createTaskLocks();
     const context = {
-      tasks: createTaskService({ storage, events, statuses: config.statuses }),
+      tasks: createTaskService({ storage, events, statuses: config.statuses, locks }),
       workflow: createWorkflowService({ storage, events, statuses: config.statuses }),
       documents: createDocumentService({ storage, events }),
       reports: createReportService({ storage, events }),
@@ -81,7 +84,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
       git,
       events,
       ai: { rules: config.ai.rules },
-      aiRun: createAiRunService({ storage, statuses: config.statuses, events }),
+      aiRun: createAiRunService({ storage, statuses: config.statuses, events, locks }),
     };
 
     const token = createSessionToken();

@@ -60,6 +60,8 @@ const calls: Record<RouteId, Call | NotCalled> = {
   // Runner lifecycle routes (T31/T32); begin needs a real task to set up state.
   'ai-run.begin': 'needs a runner',
   'ai-run.end': 'needs a runner',
+  // Recovery of a lost run (T45); test/api/aiRunRecovery.test.ts sets up the run it needs.
+  'ai-run.abandon': 'needs a runner',
   'ai-run.report': 'needs a runner',
   // A stream has no single answer to compare; test/api/sse.test.ts reads it frame by frame.
   'events.stream': 'streamed',
@@ -111,6 +113,7 @@ describe('every route in the contract', () => {
       'tasks.run',
       'ai-run.begin',
       'ai-run.end',
+      'ai-run.abandon',
       'ai-run.report',
     ]);
     for (const route of routeList) {

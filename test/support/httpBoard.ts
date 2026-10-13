@@ -12,6 +12,7 @@ import {
   createWorkflowService,
 } from '../../src/core/index.js';
 import { createAiRunService } from '../../src/core/services/aiRunService.js';
+import { createTaskLocks } from '../../src/core/services/taskLocks.js';
 import type { EventSink, GitReader, Storage } from '../../src/core/ports.js';
 import { closeServer } from '../../src/server/cli/listen.js';
 import { createEventBus, type EventBus } from '../../src/server/events/index.js';
@@ -90,8 +91,9 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
   await storage.init();
 
   const git = options.git ?? nullGitReader();
+  const locks = createTaskLocks();
   const context: BoardContext = {
-    tasks: createTaskService({ storage, events: sink, statuses }),
+    tasks: createTaskService({ storage, events: sink, statuses, locks }),
     workflow: createWorkflowService({ storage, events: sink, statuses }),
     documents: createDocumentService({ storage, events: sink }),
     reports: createReportService({ storage, events: sink }),
@@ -105,7 +107,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     git,
     events: bus,
     ai: { rules: options.rules ?? [] },
-    aiRun: createAiRunService({ storage, statuses, events: sink }),
+    aiRun: createAiRunService({ storage, statuses, events: sink, locks }),
   };
 
   // The app needs the bound port, so the server starts first and gets its handler after.

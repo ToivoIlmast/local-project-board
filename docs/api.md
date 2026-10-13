@@ -794,6 +794,40 @@ Response — 200, application/json:
 }
 ```
 
+### POST /api/v1/tasks/:id/ai-run/:runId/abandon
+
+Recovery: mark the working run with this runId and session as failed{lost}
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/abandon
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "message": "lost: claude (pid 4242) and its runner (pid 4200) no longer exist"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "agent": "runner",
+  "state": "failed",
+  "runId": 1,
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "mode": "new",
+  "startedAt": "2026-09-21T09:00:00.000Z",
+  "failure": {
+    "kind": "lost",
+    "message": "lost: claude (pid 4242) and its runner (pid 4200) no longer exist"
+  }
+}
+```
+
 ### PATCH /api/v1/tasks/:id/ai-run/:runId/report
 
 Agent: report the result of a run; runId must match the current run; runner fields are rejected
@@ -871,6 +905,7 @@ nothing else. The code is one of:
 - AI_RUN_ALREADY_FINAL
 - NO_SESSION_TO_RESUME
 - NO_RUN_TO_RESTART
+- AI_RUN_NOT_CLEARABLE
 - INVALID_REQUEST
 - INVALID_JSON
 - UNAUTHORIZED

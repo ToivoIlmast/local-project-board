@@ -5,12 +5,15 @@ import type { TaskWorkflowOverrides } from '../model/workflow.js';
 import type { EventSink, Storage } from '../ports.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import { assertKnownStatus } from '../rules/status.js';
+import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
 export interface TaskServiceOptions {
   storage: Storage;
   events: EventSink;
   /** The configured statuses, in board order. */
   statuses: string[];
+  /** The locks of the AI run lifecycle, shared with the aiRun service (T45). */
+  locks?: TaskLocks | undefined;
 }
 
 export interface CreateTaskInput {
@@ -47,7 +50,12 @@ export interface TaskService {
   remove(id: string): Promise<void>;
 }
 
-export function createTaskService({ storage, events, statuses }: TaskServiceOptions): TaskService {
+export function createTaskService({
+  storage,
+  events,
+  statuses,
+  locks = createTaskLocks(),
+}: TaskServiceOptions): TaskService {
   async function column(status: string): Promise<Task[]> {
     return (await storage.listTasks()).filter((task) => task.status === status);
   }
@@ -55,6 +63,32 @@ export function createTaskService({ storage, events, statuses }: TaskServiceOpti
   async function require(id: string): Promise<Task> {
     const task = await storage.getTask(id);
     if (!task) throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
+    return task;
+  }
+
+  async function change(id: string, patch: UpdateTaskInput): Promise<Task> {
+    const current = await require(id);
+    // A run the runner began has a runId, working or over: clearing it would start runId again
+    // from 1, and a late end or report of it could then touch a new run with the same runId.
+    // One an agent reported itself (before T31) has none to keep, and stays a thing the person
+    // may clear.
+    if (patch.aiRun === null && current.aiRun?.runId !== undefined) {
+      throw new BoardError(
+        'AI_RUN_NOT_CLEARABLE',
+        `The AI run of task "${id}" has a runId and cannot be cleared; the next run replaces it.`,
+        { id, runId: current.aiRun.runId },
+      );
+    }
+    if (patch.status !== undefined) assertKnownStatus(patch.status, statuses);
+    const movedToAnotherColumn = patch.status !== undefined && patch.status !== current.status;
+    const task = await storage.updateTask(id, {
+      ...patch,
+      // A plain status change lands at the end of the new column; /move places it precisely.
+      ...(movedToAnotherColumn
+        ? { rank: rankForPosition(await column(patch.status as string), {}, id) }
+        : {}),
+    });
+    events.publish({ type: 'task.updated', task });
     return task;
   }
 
@@ -84,19 +118,11 @@ export function createTaskService({ storage, events, statuses }: TaskServiceOpti
       return task;
     },
 
-    async update(id, patch) {
-      const current = await require(id);
-      if (patch.status !== undefined) assertKnownStatus(patch.status, statuses);
-      const movedToAnotherColumn = patch.status !== undefined && patch.status !== current.status;
-      const task = await storage.updateTask(id, {
-        ...patch,
-        // A plain status change lands at the end of the new column; /move places it precisely.
-        ...(movedToAnotherColumn
-          ? { rank: rankForPosition(await column(patch.status as string), {}, id) }
-          : {}),
-      });
-      events.publish({ type: 'task.updated', task });
-      return task;
+    update(id, patch) {
+      // Clearing the run waits for its lifecycle, and is refused for any run with a runId: it
+      // would hide a live run or start runId again from 1 (T45). A lost run is ended by abandon.
+      if (patch.aiRun === null) return locks.run(id, () => change(id, patch));
+      return change(id, patch);
     },
 
     async move(id, { status, after, before }) {

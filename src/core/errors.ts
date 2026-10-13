@@ -21,6 +21,8 @@ export const BOARD_ERROR_CODES = [
   'NO_SESSION_TO_RESUME',
   /** Restart was asked for a task that has no earlier run to start over (T37). */
   'NO_RUN_TO_RESTART',
+  /** PATCH aiRun: null on a run with a runId, in any state: its runId must not restart (T45). */
+  'AI_RUN_NOT_CLEARABLE',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

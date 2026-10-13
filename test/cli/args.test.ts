@@ -65,6 +65,27 @@ describe('the command line', () => {
     expect(() => parseCliArgs(['claude', '--wait', '--port', '8080'])).toThrow(UsageError);
   });
 
+  it('takes --recover <id> for the claude command, and --confirm-stopped only with it (T45)', () => {
+    expect(parseCliArgs(['claude', '--recover', 'T37'])).toEqual({
+      command: 'claude',
+      id: 'T37',
+      recover: true,
+    });
+    expect(parseCliArgs(['claude', '--recover', 'T37', '--confirm-stopped'])).toEqual({
+      command: 'claude',
+      id: 'T37',
+      recover: true,
+      confirmStopped: true,
+    });
+    expect(() => parseCliArgs(['claude', '--recover'])).toThrow(/id of a task/);
+    expect(() => parseCliArgs(['claude', '--recover', '--wait'])).toThrow(/--recover/);
+    expect(() => parseCliArgs(['claude', 'T1', '--confirm-stopped'])).toThrow(/--recover/);
+    expect(() => parseCliArgs(['handoff', 'T1', '--recover'])).toThrow(/claude/);
+    expect(() => parseCliArgs(['claude', '--recover', 'T1', 'T2'])).toThrow(
+      'Unexpected argument: T2',
+    );
+  });
+
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });

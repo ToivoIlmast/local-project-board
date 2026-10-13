@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 41c5a58f2b4a5d117dbbcb0bb6643cc35259c91f -->
+<!-- Based on README.md @ 264ca6e8e9040194d3a7dc925cc64b0f5d1593f1 -->
 
 # local-project-board
 
@@ -24,13 +24,14 @@ npx local-project-board
 Tavlan startar på `http://127.0.0.1:7432/` (nästa lediga port om den är upptagen) och öppnas i
 webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk utanför din egen dator.
 
-| Kommando                                | Vad det gör                                                      |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| `npx local-project-board`               | Startar tavlan                                                   |
-| `npx local-project-board instructions`  | Skriver ut API-instruktionerna att ge till en AI-agent           |
-| `npx local-project-board claude <ID>`   | Startar Claude Code på en uppgift, i den här terminalen          |
-| `npx local-project-board claude --wait` | Startar Claude Code här på varje uppgift som skickas från tavlan |
-| `npx local-project-board export`        | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)          |
+| Kommando                                        | Vad det gör                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| `npx local-project-board`                       | Startar tavlan                                                            |
+| `npx local-project-board instructions`          | Skriver ut API-instruktionerna att ge till en AI-agent                    |
+| `npx local-project-board claude <ID>`           | Startar Claude Code på en uppgift, i den här terminalen                   |
+| `npx local-project-board claude --wait`         | Startar Claude Code här på varje uppgift som skickas från tavlan          |
+| `npx local-project-board claude --recover <ID>` | Kontrollerar en körning vars väntare dog; markerar den förlorad vid bevis |
+| `npx local-project-board export`                | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)                   |
 
 Flaggor: `--port <nummer>` (porten du anger måste vara ledig, annars stannar tavlan med ett fel),
 `--no-open` (öppna ingen webbläsare), `--help`.
@@ -189,6 +190,17 @@ Bra att veta:
   dina Claude Code-inställningar om du inte vill ha frågor.
 - Sessionen arbetar i din utcheckning av projektet, så grenen den skapar är den som är utcheckad
   efteråt. Ett arbetsträd för varje uppgift är inte gjort än.
+- Om väntaren dör mitt i en session (dess terminal stängs, datorn somnar, den dödas) blir
+  uppgiften kvar som **working** och inget kan startas på den. Kör
+  `npx local-project-board claude --recover <ID>` i en terminal i projektet. Den levererar först
+  ett slut som väntaren skrev ned men inte kunde skicka (väntaren sparar det i `.board/runner/`,
+  så det överlever väntaren och en omstart av tavlan), och tittar sedan på den här datorn:
+  **alive** — tavlan lämnas orörd; **lost** — väntaren och den `claude` den registrerade är borta,
+  och körningen markeras `failed` (`failure.kind: lost`) med beviset; **unknown** — den här
+  datorn kan inte visa det (ingen `/proc`, ett annat OS eller PID-namnrymd, en körning startad
+  någon annanstans), och inget ändras om du inte lägger till `--confirm-stopped`, vilket
+  körningen då registrerar. Körningen behåller sitt `runId` och sin session, så Resume fortsätter
+  den som nästa körning. En körnings ålder tas aldrig som tecken på att den är förlorad.
 
 ## Principer
 
