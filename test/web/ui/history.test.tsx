@@ -120,6 +120,39 @@ describe('the version select', () => {
   });
 });
 
+describe('a history that cannot be read', () => {
+  it('says so instead of showing an empty list, and reads it again on Try again', async () => {
+    const rendered = await renderBoard({ tasks: [aTaskWithHistory()], versions: twoVersions });
+    const { user, board } = rendered;
+    board.fail('versions', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await openTask(rendered);
+
+    const versions = await within(panel()).findByRole('region', { name: 'Versions' });
+    expect(await within(versions).findByRole('alert')).toHaveTextContent('not answering');
+    expect(within(versions).queryByRole('listitem')).not.toBeInTheDocument();
+
+    await user.click(within(versions).getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(within(versions).queryByRole('alert')).not.toBeInTheDocument());
+    expect(within(versions).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('takes the message away when the board answers by itself, as after a reconnect', async () => {
+    const rendered = await renderBoard({ tasks: [aTaskWithHistory()], versions: twoVersions });
+    const { board, store } = rendered;
+    board.fail('versions', new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'));
+    await openTask(rendered);
+    const versions = await within(panel()).findByRole('region', { name: 'Versions' });
+    expect(await within(versions).findByRole('alert')).toBeInTheDocument();
+
+    // The page reads the whole board again, as it does when the stream comes back.
+    await store.load();
+
+    await waitFor(() => expect(within(versions).queryByRole('alert')).not.toBeInTheDocument());
+    expect(within(versions).getAllByRole('listitem')).toHaveLength(2);
+  });
+});
+
 describe('restoring a version', () => {
   it('asks first, says that a new version is made, and keeps the status (INVARIANT)', async () => {
     const rendered = await renderBoard({

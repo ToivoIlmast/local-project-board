@@ -18,21 +18,20 @@ export function useTaskHistory(taskId: string): {
   retry: () => void;
 } {
   const { state, store } = useBoard();
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [attempt, setAttempt] = useState(0);
   const history = state.history[taskId];
-
-  // What the board has said since is newer than a failure: a read that landed — the page's own,
-  // or the one the store makes when the board is back — takes the message away.
-  useEffect(() => {
-    if (history !== undefined) setError(undefined);
-  }, [history]);
+  // A failure belongs to what the page knew when it happened: a read that lands after it — the
+  // page's own, or the one the store makes when the board is back — is newer, and the message is
+  // no longer shown.
+  const [failure, setFailure] = useState<{ message: string; seen: unknown } | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
     store.loadHistory(taskId).then(
-      () => alive && setError(undefined),
-      (failure: unknown) => alive && setError(messageOf(failure)),
+      () => alive && setFailure(undefined),
+      (problem: unknown) =>
+        alive &&
+        setFailure({ message: messageOf(problem), seen: store.getState().history[taskId] }),
     );
     return () => {
       alive = false;
@@ -41,7 +40,7 @@ export function useTaskHistory(taskId: string): {
 
   return {
     history,
-    error,
+    error: failure !== undefined && failure.seen === history ? failure.message : undefined,
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
 }
@@ -78,19 +77,20 @@ export function useCheck(
   number: number,
 ): { check: Check | undefined; error: string | undefined; retry: () => void } {
   const { state, store } = useBoard();
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [attempt, setAttempt] = useState(0);
   const check = state.checks[`${taskId}/${number}`];
-
-  useEffect(() => {
-    if (check !== undefined) setError(undefined);
-  }, [check]);
+  const [failure, setFailure] = useState<{ message: string; seen: unknown } | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
     store.loadCheck(taskId, number).then(
-      () => alive && setError(undefined),
-      (failure: unknown) => alive && setError(messageOf(failure)),
+      () => alive && setFailure(undefined),
+      (problem: unknown) =>
+        alive &&
+        setFailure({
+          message: messageOf(problem),
+          seen: store.getState().checks[`${taskId}/${number}`],
+        }),
     );
     return () => {
       alive = false;
@@ -99,7 +99,7 @@ export function useCheck(
 
   return {
     check,
-    error,
+    error: failure !== undefined && failure.seen === check ? failure.message : undefined,
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
 }
