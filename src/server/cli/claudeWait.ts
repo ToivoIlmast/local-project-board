@@ -1,6 +1,8 @@
 import { API_BASE_PATH, runRequestSchema, type RunRequest } from '../../contract/v1/index.js';
 import type { ResolvedBoard } from './board.js';
 import { boardNotRunning, findClaude, startSession } from './claude.js';
+import { deliverPendingCheckEnds } from './checkEnd.js';
+import { startCheckSession } from './checkSession.js';
 import { deliverPendingEnds } from './runEnd.js';
 import { findRunningBoard } from './running.js';
 import type { RuntimeState } from './runtime.js';
@@ -64,6 +66,7 @@ export async function waitForRuns(
       // Ends that a runner before this one, or this one before the board restarted, could not
       // deliver: the board is here now (T45).
       await deliverPendingEnds(board.root);
+      await deliverPendingCheckEnds(board.root);
       const next = await nextRequest(current, stop.signal, () => {
         toldGone = false;
         write(
@@ -79,20 +82,27 @@ export async function waitForRuns(
         continue;
       }
 
-      write(`Starting Claude Code on ${next.taskId}.`);
+      write(
+        next.kind === 'check'
+          ? `Starting Claude Code on a check of ${next.taskId}.`
+          : `Starting Claude Code on ${next.taskId}.`,
+      );
       inSession = true;
       try {
         // Looked for again: `claude` may have gone since the wait began.
         const program = await findClaude(env);
-        const code = await startSession(
-          program,
-          next.taskId,
-          current,
-          board.root,
-          env,
-          next.model,
-          next.mode ?? 'new',
-        );
+        const code =
+          next.kind === 'check'
+            ? await startCheckSession(program, next.taskId, current, board.root, env, next.model)
+            : await startSession(
+                program,
+                next.taskId,
+                current,
+                board.root,
+                env,
+                next.model,
+                next.mode ?? 'new',
+              );
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
         writeError(error instanceof Error ? error.message : String(error));

@@ -58,6 +58,8 @@ const json = <S extends z.ZodType>(schema: S): RouteResponse<S> => ({
 const taskParams = z.strictObject({ id: s.taskIdSchema });
 const documentParams = z.strictObject({ id: s.taskIdSchema, name: s.documentNameSchema });
 const reportParams = z.strictObject({ id: s.reportIdSchema });
+const versionParams = z.strictObject({ id: s.taskIdSchema, n: z.coerce.number().int().min(1) });
+const checkParams = z.strictObject({ id: s.taskIdSchema, n: z.coerce.number().int().min(1) });
 
 const exampleTask = {
   id: 'T12',
@@ -104,6 +106,85 @@ const exampleReport = {
   title: 'Dependency audit',
   format: 'html' as const,
   createdAt: '2026-09-21T11:30:00.000Z',
+};
+
+const exampleSession = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+
+const exampleSnapshot = {
+  title: 'Extract the git adapter',
+  body: '## Context\n\nThe status parser still lives in the HTTP layer.\n',
+  labels: ['refactor'],
+};
+
+const exampleVersionSummary = {
+  taskId: 'T12',
+  number: 2,
+  createdAt: '2026-09-21T11:30:00.000Z',
+  source: 'edit' as const,
+  changed: ['body' as const],
+  hash: '8a2f6c1d90b34e57',
+};
+
+const exampleRepo = { branch: 'feat/git-adapter', head: '9f1c1a2b3c4d5e6f', clean: true };
+
+const exampleBegin = {
+  taskId: 'T12',
+  number: 1,
+  version: 2,
+  createdAt: '2026-09-21T11:40:00.000Z',
+  agent: 'claude-code',
+  sessionId: exampleSession,
+  repo: exampleRepo,
+};
+
+const exampleReportContent = {
+  agent: 'claude-code',
+  verdict: 'partly-outdated' as const,
+  summary: 'The description still matches the code, but one path moved.',
+  uncertainty: 'The test suite was not run.',
+  findings: [
+    {
+      id: 'f1',
+      title: 'The adapter was moved',
+      explanation: 'The task names src/git.ts, which now lives in src/server/git/.',
+      evidence: [{ kind: 'file' as const, ref: 'src/server/git/reader.ts', note: 'new location' }],
+    },
+  ],
+  recommendations: [
+    {
+      id: 'r1',
+      findings: ['f1'],
+      text: 'Update the path in the description.',
+      edit: {
+        field: 'body' as const,
+        find: 'The status parser',
+        replace: 'The status parser (src/server/git/)',
+      },
+    },
+  ],
+};
+
+const exampleCheck = {
+  state: 'reported' as const,
+  begin: exampleBegin,
+  report: {
+    ...exampleReportContent,
+    taskId: 'T12',
+    check: 1,
+    version: 2,
+    createdAt: '2026-09-21T11:45:00.000Z',
+    repo: exampleRepo,
+  },
+  decisions: [
+    {
+      taskId: 'T12',
+      check: 1,
+      number: 1,
+      recommendation: 'r1',
+      decision: 'accepted' as const,
+      createdAt: '2026-09-21T11:50:00.000Z',
+    },
+  ],
 };
 
 function route<
@@ -194,7 +275,8 @@ export const routes = {
     id: 'tasks.update',
     method: 'PATCH',
     path: '/tasks/:id',
-    summary: 'Change a task; only the given fields are written (last-write-wins)',
+    summary:
+      'Change a task; only the given fields are written (last-write-wins, unless `ifContentHash` is sent)',
     params: taskParams,
     request: s.updateTaskRequestSchema,
     response: json(s.taskSchema),
@@ -408,6 +490,192 @@ export const routes = {
     },
     // The report route is described in the handoff with the specific runId; agents do not call
     // it without a current run, and the general instructions cannot embed a runId.
+    ai: { include: false },
+  }),
+
+  'versions.list': route({
+    id: 'versions.list',
+    method: 'GET',
+    path: '/tasks/:id/versions',
+    summary: "List the versions of a task's content and say whether the task is at the latest",
+    params: taskParams,
+    response: json(s.versionListSchema),
+    example: {
+      params: { id: 'T12' },
+      response: {
+        current: { hash: '8a2f6c1d90b34e57', version: 2 },
+        versions: [
+          { ...exampleVersionSummary, number: 1, source: 'create', changed: [] },
+          exampleVersionSummary,
+        ],
+      },
+    },
+    ai: { include: false },
+  }),
+
+  'versions.get': route({
+    id: 'versions.get',
+    method: 'GET',
+    path: '/tasks/:id/versions/:n',
+    summary: 'Read one version of a task: its content as it was',
+    params: versionParams,
+    response: json(s.taskVersionSchema),
+    example: {
+      params: { id: 'T12', n: 2 },
+      response: {
+        taskId: 'T12',
+        number: 2,
+        createdAt: '2026-09-21T11:30:00.000Z',
+        source: 'edit',
+        changed: ['body'],
+        snapshot: exampleSnapshot,
+      },
+    },
+    ai: { include: false },
+  }),
+
+  'versions.restore': route({
+    id: 'versions.restore',
+    method: 'POST',
+    path: '/tasks/:id/versions/:n/restore',
+    summary:
+      'Write the content of a version as the content of the task, as a new version; the status stays',
+    params: versionParams,
+    request: s.restoreVersionRequestSchema,
+    response: json(s.restoreVersionResponseSchema),
+    example: {
+      params: { id: 'T12', n: 1 },
+      body: { ifContentHash: '8a2f6c1d90b34e57' },
+      response: { task: exampleTask, changed: true },
+    },
+    ai: { include: false },
+  }),
+
+  'checks.list': route({
+    id: 'checks.list',
+    method: 'GET',
+    path: '/tasks/:id/checks',
+    summary: 'List the actuality checks of a task, with their state and the version each read',
+    params: taskParams,
+    response: json(z.array(s.checkSummarySchema)),
+    example: {
+      params: { id: 'T12' },
+      response: [
+        {
+          taskId: 'T12',
+          number: 1,
+          state: 'reported',
+          version: 2,
+          createdAt: '2026-09-21T11:40:00.000Z',
+          agent: 'claude-code',
+          verdict: 'partly-outdated',
+        },
+      ],
+    },
+    ai: { include: false },
+  }),
+
+  'checks.get': route({
+    id: 'checks.get',
+    method: 'GET',
+    path: '/tasks/:id/checks/:n',
+    summary: 'Read one actuality check: its begin, its report as the agent sent it, its decisions',
+    params: checkParams,
+    response: json(s.checkSchema),
+    example: { params: { id: 'T12', n: 1 }, response: exampleCheck },
+    ai: { include: false },
+  }),
+
+  'checks.begin': route({
+    id: 'checks.begin',
+    method: 'POST',
+    path: '/tasks/:id/checks',
+    summary: 'Runner: begin an actuality check, pinned to the version that is on disk',
+    params: taskParams,
+    request: s.checkBeginRequestSchema,
+    response: json(s.checkBeginResponseSchema),
+    example: {
+      params: { id: 'T12' },
+      body: { agent: 'claude-code', sessionId: exampleSession, model: 'opus' },
+      response: { number: 1, version: 2 },
+    },
+    // The runner starts a check; an agent at work does not start another.
+    ai: { include: false },
+  }),
+
+  'checks.handoff': route({
+    id: 'checks.handoff',
+    method: 'GET',
+    path: '/tasks/:id/checks/:n/handoff',
+    summary:
+      'Read what the agent of a check is told: the version under review, the rules, the report format',
+    params: checkParams,
+    response: { schema: z.string(), media: 'text/markdown' },
+    example: {
+      params: { id: 'T12', n: 1 },
+      response:
+        '# Check T12-C1: is task T12 still current?\n\n' +
+        'You are checking whether the description of task T12 still matches the repository, as of version v2 of the task.\n',
+    },
+    ai: { include: false },
+  }),
+
+  'checks.report': route({
+    id: 'checks.report',
+    method: 'POST',
+    path: '/tasks/:id/checks/:n/report',
+    summary:
+      'Agent: send the report of a check, once; it is checked against the version that was read',
+    params: checkParams,
+    request: s.checkReportRequestSchema,
+    response: json(s.checkSchema),
+    example: {
+      params: { id: 'T12', n: 1 },
+      body: exampleReportContent,
+      response: exampleCheck,
+    },
+    // Described in the handoff of the check, with the number of the check in the URL.
+    ai: { include: false },
+  }),
+
+  'checks.end': route({
+    id: 'checks.end',
+    method: 'POST',
+    path: '/tasks/:id/checks/:n/end',
+    summary: 'Runner: end a check, once; the session must be the one that began it',
+    params: checkParams,
+    request: s.checkEndRequestSchema,
+    response: json(s.checkSchema),
+    example: {
+      params: { id: 'T12', n: 1 },
+      body: { sessionId: exampleSession, exitCode: 0, endedAt: '2026-09-21T11:46:00.000Z' },
+      response: {
+        ...exampleCheck,
+        end: {
+          taskId: 'T12',
+          check: 1,
+          sessionId: exampleSession,
+          exitCode: 0,
+          endedAt: '2026-09-21T11:46:00.000Z',
+        },
+      },
+    },
+    ai: { include: false },
+  }),
+
+  'checks.decide': route({
+    id: 'checks.decide',
+    method: 'POST',
+    path: '/tasks/:id/checks/:n/decisions',
+    summary: 'Accept or reject one recommendation of a reported check; it changes no task',
+    params: checkParams,
+    request: s.decisionRequestSchema,
+    response: json(s.decisionSchema),
+    example: {
+      params: { id: 'T12', n: 1 },
+      body: { recommendation: 'r1', decision: 'accepted' },
+      response: exampleCheck.decisions[0],
+    },
     ai: { include: false },
   }),
 

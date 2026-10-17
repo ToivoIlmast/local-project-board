@@ -1,0 +1,349 @@
+import type {
+  Check,
+  CheckBegin,
+  CheckEnd,
+  CheckReport,
+  CheckReportContent,
+  CheckState,
+  ContentField,
+  Decision,
+  Recommendation,
+  TaskContent,
+} from '../model/history.js';
+import { CONTENT_FIELDS } from '../model/history.js';
+import { isTaskId } from './ids.js';
+
+/** The content of a task, whole or in part: the three fields a version holds (ADR-0030 §1). */
+export function contentOf(task: TaskContent): TaskContent {
+  return { title: task.title, body: task.body, labels: [...task.labels] };
+}
+
+const FNV_OFFSET = 0xcbf29ce484222325n;
+const FNV_PRIME = 0x100000001b3n;
+const MASK_64 = 0xffffffffffffffffn;
+
+/**
+ * A short name for "the content I saw": FNV-1a, 64 bits, over the canonical JSON of
+ * `[title, body, labels]`, as 16 hex digits. Not a security mechanism. The same function runs in
+ * the server and in the page, so the page never asks for a hash (ADR-0030 §1).
+ */
+export function contentHash(content: TaskContent): string {
+  const text = JSON.stringify([content.title, content.body, content.labels]);
+  let hash = FNV_OFFSET;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= BigInt(text.charCodeAt(index));
+    hash = (hash * FNV_PRIME) & MASK_64;
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
+/** Exact comparison: a string differs in one character, labels as ordered arrays. */
+export function sameContent(a: TaskContent, b: TaskContent): boolean {
+  return changedFields(a, b).length === 0;
+}
+
+/** The fields of `after` that differ from `before`, in the fixed order of the model. */
+export function changedFields(before: TaskContent, after: TaskContent): ContentField[] {
+  return CONTENT_FIELDS.filter((field) =>
+    field === 'labels'
+      ? before.labels.length !== after.labels.length ||
+        before.labels.some((label, index) => label !== after.labels[index])
+      : before[field] !== after[field],
+  );
+}
+
+/** The content with the fields of a patch put over it; fields the patch does not carry stay. */
+export function applyContentPatch(
+  content: TaskContent,
+  patch: { title?: string | undefined; body?: string | undefined; labels?: string[] | undefined },
+): TaskContent {
+  return {
+    title: patch.title ?? content.title,
+    body: patch.body ?? content.body,
+    labels: [...(patch.labels ?? content.labels)],
+  };
+}
+
+// --- diff ----------------------------------------------------------------------------------
+
+export type DiffKind = 'same' | 'add' | 'remove';
+
+export interface DiffLine {
+  kind: DiffKind;
+  text: string;
+}
+
+/** Above this many cells the table of the exact diff is not built; the change is shown whole. */
+const MAX_DIFF_CELLS = 4_000_000;
+
+/**
+ * A line diff of two texts. Lines are split on `\n`; the common head and tail are not compared,
+ * so a small edit in a long text stays cheap. Pure, so the page can show a draft against the
+ * current content without a request (ADR-0030 §9).
+ */
+export function diffLines(before: string, after: string): DiffLine[] {
+  if (before === after) return before === '' ? [] : split(before).map((text) => same(text));
+  const a = before === '' ? [] : split(before);
+  const b = after === '' ? [] : split(after);
+
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
+  let tail = 0;
+  while (
+    tail < a.length - head &&
+    tail < b.length - head &&
+    a[a.length - 1 - tail] === b[b.length - 1 - tail]
+  ) {
+    tail += 1;
+  }
+
+  const middleA = a.slice(head, a.length - tail);
+  const middleB = b.slice(head, b.length - tail);
+  return [
+    ...a.slice(0, head).map(same),
+    ...diffMiddle(middleA, middleB),
+    ...a.slice(a.length - tail).map(same),
+  ];
+}
+
+function split(text: string): string[] {
+  return text.split('\n');
+}
+
+function same(text: string): DiffLine {
+  return { kind: 'same', text };
+}
+
+function diffMiddle(a: string[], b: string[]): DiffLine[] {
+  if (a.length === 0) return b.map((text) => ({ kind: 'add' as const, text }));
+  if (b.length === 0) return a.map((text) => ({ kind: 'remove' as const, text }));
+  if (a.length * b.length > MAX_DIFF_CELLS) {
+    return [
+      ...a.map((text) => ({ kind: 'remove' as const, text })),
+      ...b.map((text) => ({ kind: 'add' as const, text })),
+    ];
+  }
+
+  // Longest common subsequence, filled from the end so the walk below goes forward.
+  const width = b.length + 1;
+  const table = new Uint32Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      table[i * width + j] =
+        a[i] === b[j]
+          ? (table[(i + 1) * width + j + 1] ?? 0) + 1
+          : Math.max(table[(i + 1) * width + j] ?? 0, table[i * width + j + 1] ?? 0);
+    }
+  }
+
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      lines.push(same(a[i] as string));
+      i += 1;
+      j += 1;
+    } else if ((table[(i + 1) * width + j] ?? 0) >= (table[i * width + j + 1] ?? 0)) {
+      lines.push({ kind: 'remove', text: a[i] as string });
+      i += 1;
+    } else {
+      lines.push({ kind: 'add', text: b[j] as string });
+      j += 1;
+    }
+  }
+  for (; i < a.length; i += 1) lines.push({ kind: 'remove', text: a[i] as string });
+  for (; j < b.length; j += 1) lines.push({ kind: 'add', text: b[j] as string });
+  return lines;
+}
+
+export interface ContentDiff {
+  /** The fields that differ, as `changedFields` says. */
+  changed: ContentField[];
+  title: { before: string; after: string } | null;
+  body: DiffLine[] | null;
+  labels: { added: string[]; removed: string[]; reordered: boolean } | null;
+}
+
+/** What differs between two contents, field by field; a field that is equal is `null`. */
+export function diffContent(before: TaskContent, after: TaskContent): ContentDiff {
+  const changed = changedFields(before, after);
+  const labelsChanged = changed.includes('labels');
+  return {
+    changed,
+    title: changed.includes('title') ? { before: before.title, after: after.title } : null,
+    body: changed.includes('body') ? diffLines(before.body, after.body) : null,
+    labels: labelsChanged
+      ? {
+          added: after.labels.filter((label) => !before.labels.includes(label)),
+          removed: before.labels.filter((label) => !after.labels.includes(label)),
+          reordered:
+            before.labels.length === after.labels.length &&
+            before.labels.every((label) => after.labels.includes(label)),
+        }
+      : null,
+  };
+}
+
+// --- recommendations -------------------------------------------------------------------------
+
+export type NotApplied = 'advice' | 'not-found' | 'ambiguous' | 'blank-title';
+
+export interface AppliedRecommendations {
+  content: TaskContent;
+  /** Ids of the recommendations whose edit was applied, in order. */
+  applied: string[];
+  /** Ids of those that were not, with the reason; they are for the person to look at. */
+  notApplied: { id: string; reason: NotApplied }[];
+}
+
+/** How many times `find` occurs in `text`, without overlapping. */
+export function occurrences(text: string, find: string): number {
+  if (find === '') return 0;
+  let count = 0;
+  for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, at + find.length)) {
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * Applies the `edit`s of the given recommendations, in order, onto the content (ADR-0030 §7).
+ * A body `find` has to occur exactly once in the text as it is after the earlier edits; if it
+ * does not, that recommendation is left out and named. A recommendation without an `edit` is
+ * advice and is never applied. The caller passes the accepted ones only.
+ */
+export function applyRecommendations(
+  content: TaskContent,
+  recommendations: readonly Pick<Recommendation, 'id' | 'edit'>[],
+): AppliedRecommendations {
+  let draft = contentOf(content);
+  const applied: string[] = [];
+  const notApplied: AppliedRecommendations['notApplied'] = [];
+
+  for (const { id, edit } of recommendations) {
+    if (edit === undefined) {
+      notApplied.push({ id, reason: 'advice' });
+    } else if (edit.field === 'title') {
+      if (!/\S/.test(edit.value)) {
+        notApplied.push({ id, reason: 'blank-title' });
+      } else {
+        draft = { ...draft, title: edit.value };
+        applied.push(id);
+      }
+    } else if (edit.field === 'labels') {
+      const labels = draft.labels.filter((label) => !edit.remove.includes(label));
+      for (const label of edit.add) if (!labels.includes(label)) labels.push(label);
+      draft = { ...draft, labels };
+      applied.push(id);
+    } else {
+      const count = occurrences(draft.body, edit.find);
+      if (count === 0) {
+        notApplied.push({ id, reason: 'not-found' });
+      } else if (count > 1) {
+        notApplied.push({ id, reason: 'ambiguous' });
+      } else {
+        const at = draft.body.indexOf(edit.find);
+        draft = {
+          ...draft,
+          body: draft.body.slice(0, at) + edit.replace + draft.body.slice(at + edit.find.length),
+        };
+        applied.push(id);
+      }
+    }
+  }
+  return { content: draft, applied, notApplied };
+}
+
+// --- checks ----------------------------------------------------------------------------------
+
+/** The state follows from which files exist; it is never stored (ADR-0030 §2). */
+export function checkState(parts: { report?: unknown; end?: unknown }): CheckState {
+  if (parts.report !== undefined) return 'reported';
+  return parts.end !== undefined ? 'failed' : 'working';
+}
+
+export function assembleCheck(parts: {
+  begin: CheckBegin;
+  report?: CheckReport | undefined;
+  end?: CheckEnd | undefined;
+  decisions: Decision[];
+}): Check {
+  return {
+    state: checkState(parts),
+    begin: parts.begin,
+    ...(parts.report === undefined ? {} : { report: parts.report }),
+    ...(parts.end === undefined ? {} : { end: parts.end }),
+    decisions: [...parts.decisions].sort((a, b) => a.number - b.number),
+  };
+}
+
+/** The latest decision per recommendation: the current state of each; earlier ones stay in history. */
+export function latestDecisions(decisions: readonly Decision[]): Map<string, Decision> {
+  const latest = new Map<string, Decision>();
+  for (const decision of [...decisions].sort((a, b) => a.number - b.number)) {
+    latest.set(decision.recommendation, decision);
+  }
+  return latest;
+}
+
+/**
+ * A report is stale when the task now holds other content than the version it was made on
+ * (ADR-0030 §7). A comparison of two hashes, not a flag anyone sets.
+ */
+export function isReportStale(current: TaskContent, pinned: TaskContent): boolean {
+  return !sameContent(current, pinned);
+}
+
+const COMMIT_REF = /^[0-9a-f]{7,64}$/;
+
+/** What is wrong with a report against the snapshot it was made on; empty when nothing is. */
+export function reportProblems(report: CheckReportContent, snapshot: TaskContent): string[] {
+  const problems: string[] = [];
+  const findingIds = new Set<string>();
+  for (const finding of report.findings) {
+    if (findingIds.has(finding.id)) problems.push(`Finding id "${finding.id}" is used twice.`);
+    findingIds.add(finding.id);
+    for (const evidence of finding.evidence) {
+      const problem = evidenceProblem(evidence.kind, evidence.ref);
+      if (problem !== undefined) problems.push(`Finding "${finding.id}": ${problem}`);
+    }
+  }
+
+  const recommendationIds = new Set<string>();
+  for (const recommendation of report.recommendations) {
+    const label = `Recommendation "${recommendation.id}"`;
+    if (recommendationIds.has(recommendation.id)) problems.push(`${label} is used twice.`);
+    recommendationIds.add(recommendation.id);
+    for (const finding of recommendation.findings) {
+      if (!findingIds.has(finding))
+        problems.push(`${label} names an unknown finding "${finding}".`);
+    }
+    const edit = recommendation.edit;
+    if (edit?.field === 'title' && !/\S/.test(edit.value)) {
+      problems.push(`${label}: a title edit must not be blank.`);
+    } else if (edit?.field === 'body') {
+      const count = occurrences(snapshot.body, edit.find);
+      if (count !== 1) {
+        problems.push(
+          `${label}: "find" must occur exactly once in the body of the version that was ` +
+            `checked, but it occurs ${count} times.`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+function evidenceProblem(kind: 'file' | 'commit' | 'task', ref: string): string | undefined {
+  if (kind === 'commit') {
+    return COMMIT_REF.test(ref) ? undefined : `"${ref}" is not a commit SHA.`;
+  }
+  if (kind === 'task') {
+    return isTaskId(ref) ? undefined : `"${ref}" is not a task id.`;
+  }
+  // A file is a path in the project, relative to its root; it is not looked up.
+  return ref.startsWith('/') || ref.includes('\0') || ref.split(/[\\/]/).includes('..')
+    ? `"${ref}" is not a path inside the project.`
+    : undefined;
+}

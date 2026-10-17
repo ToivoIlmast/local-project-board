@@ -450,5 +450,240 @@ export function runStorageConformance(harness: StorageHarness): void {
         await expectCode(storage.deleteReport('R404'), 'REPORT_NOT_FOUND');
       });
     });
+
+    describe('history (ADR-0030)', () => {
+      const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+      const snapshot = { title: 'T', body: 'body\n', labels: ['a'] };
+      const version = (over: Partial<Parameters<Storage['appendVersion']>[1]> = {}) => ({
+        source: 'edit' as const,
+        changed: ['body' as const],
+        snapshot,
+        ...over,
+      });
+      const reportContent = (over: object = {}) => ({
+        agent: 'claude-code',
+        verdict: 'current' as const,
+        summary: 'Fine.',
+        findings: [],
+        recommendations: [
+          { id: 'r1', findings: [], text: 'Do it.', edit: { field: 'title' as const, value: 'N' } },
+        ],
+        version: 1,
+        repo: null,
+        ...over,
+      });
+      let taskId: string;
+
+      beforeEach(async () => {
+        taskId = (await storage.createTask(newTask())).id;
+      });
+
+      async function begun(): Promise<number> {
+        await storage.appendVersion(taskId, version({ source: 'baseline', changed: [] }));
+        return (
+          await storage.beginCheck(taskId, {
+            version: 1,
+            agent: 'claude-code',
+            sessionId: SESSION,
+            repo: { branch: 'main', head: '9f1c1a2b', clean: true },
+          })
+        ).number;
+      }
+
+      it('numbers versions per task from 1, in order, and reads them back (INVARIANT)', async () => {
+        const other = (await storage.createTask(newTask())).id;
+        const first = await storage.appendVersion(
+          taskId,
+          version({ source: 'baseline', changed: [] }),
+        );
+        const second = await storage.appendVersion(taskId, version());
+        const foreign = await storage.appendVersion(
+          other,
+          version({ source: 'create', changed: [] }),
+        );
+
+        expect([first.number, second.number, foreign.number]).toEqual([1, 2, 1]);
+        expect(await storage.listVersions(taskId)).toEqual([first, second]);
+        expect(await storage.readVersion(taskId, 2)).toEqual(second);
+        expect(await storage.readVersion(taskId, 3)).toBeNull();
+        expect(first).toMatchObject({ taskId, source: 'baseline', snapshot });
+      });
+
+      it('keeps restoredFrom and fromCheck on the version', async () => {
+        const fromCheck = { check: 1, recommendations: ['r1'], basis: 'report' as const };
+        const saved = await storage.appendVersion(
+          taskId,
+          version({ source: 'restore', restoredFrom: 1, fromCheck }),
+        );
+        expect(await storage.readVersion(taskId, saved.number)).toMatchObject({
+          restoredFrom: 1,
+          fromCheck,
+        });
+      });
+
+      it('keeps its numbers across a reopen: a number is never given twice', async () => {
+        await storage.appendVersion(taskId, version());
+        await storage.appendVersion(taskId, version());
+        const reopened = await reopen(storage);
+        expect((await reopened.appendVersion(taskId, version())).number).toBe(3);
+        expect((await reopened.listVersions(taskId)).map((v) => v.number)).toEqual([1, 2, 3]);
+      });
+
+      it('has no way to change or remove a record: a returned version is a copy', async () => {
+        const saved = await storage.appendVersion(taskId, version());
+        saved.snapshot.title = 'tampered';
+        expect((await storage.readVersion(taskId, 1))?.snapshot.title).toBe('T');
+      });
+
+      it('does not offer history for a task that does not exist', async () => {
+        await expectCode(storage.appendVersion('T404', version()), 'TASK_NOT_FOUND');
+        await expectCode(storage.listVersions('T404'), 'TASK_NOT_FOUND');
+        await expectCode(storage.listChecks('T404'), 'TASK_NOT_FOUND');
+      });
+
+      it('numbers checks per task, and reads one with its state derived (INVARIANT)', async () => {
+        const number = await begun();
+        expect(number).toBe(1);
+        expect(await storage.readCheck(taskId, 1)).toMatchObject({
+          state: 'working',
+          begin: { version: 1, agent: 'claude-code', sessionId: SESSION },
+          decisions: [],
+        });
+        expect(await storage.readCheck(taskId, 2)).toBeNull();
+        const second = await storage.beginCheck(taskId, {
+          version: 1,
+          agent: 'claude-code',
+          sessionId: SESSION,
+          model: 'opus',
+          repo: null,
+        });
+        expect(second.number).toBe(2);
+        expect((await storage.listChecks(taskId)).map((c) => c.begin.number)).toEqual([1, 2]);
+      });
+
+      it('takes one report of a working check and refuses a second (INVARIANT)', async () => {
+        const number = await begun();
+        const report = await storage.writeCheckReport(taskId, number, reportContent());
+        expect(report).toMatchObject({ taskId, check: number, verdict: 'current', version: 1 });
+        expect((await storage.readCheck(taskId, number))?.state).toBe('reported');
+
+        await expectCode(
+          storage.writeCheckReport(taskId, number, reportContent({ summary: 'Other.' })),
+          'CHECK_ALREADY_FINAL',
+        );
+        expect((await storage.readCheck(taskId, number))?.report?.summary).toBe('Fine.');
+      });
+
+      it('takes one end and refuses a second; an end after a report keeps it reported (INVARIANT)', async () => {
+        const number = await begun();
+        await storage.writeCheckReport(taskId, number, reportContent());
+        const end = await storage.endCheck(taskId, number, { sessionId: SESSION, exitCode: 0 });
+        expect(end).toMatchObject({ check: number, sessionId: SESSION, exitCode: 0 });
+        expect((await storage.readCheck(taskId, number))?.state).toBe('reported');
+        await expectCode(
+          storage.endCheck(taskId, number, { sessionId: SESSION }),
+          'CHECK_ALREADY_FINAL',
+        );
+      });
+
+      it('calls a check with an end and no report failed, and takes no report after it', async () => {
+        const number = await begun();
+        await storage.endCheck(taskId, number, { sessionId: SESSION, exitCode: 1 });
+        expect((await storage.readCheck(taskId, number))?.state).toBe('failed');
+        await expectCode(
+          storage.writeCheckReport(taskId, number, reportContent()),
+          'CHECK_ALREADY_FINAL',
+        );
+      });
+
+      it('refuses a report, an end or a decision for a check that does not exist', async () => {
+        await expectCode(storage.writeCheckReport(taskId, 9, reportContent()), 'CHECK_NOT_FOUND');
+        await expectCode(storage.endCheck(taskId, 9, { sessionId: SESSION }), 'CHECK_NOT_FOUND');
+        await expectCode(
+          storage.appendDecision(taskId, 9, { recommendation: 'r1', decision: 'accepted' }),
+          'CHECK_NOT_FOUND',
+        );
+      });
+
+      it('appends decisions and keeps all of them, in order', async () => {
+        const number = await begun();
+        await storage.writeCheckReport(taskId, number, reportContent());
+        const first = await storage.appendDecision(taskId, number, {
+          recommendation: 'r1',
+          decision: 'accepted',
+        });
+        const second = await storage.appendDecision(taskId, number, {
+          recommendation: 'r1',
+          decision: 'rejected',
+          note: 'changed my mind',
+        });
+        expect([first.number, second.number]).toEqual([1, 2]);
+        expect((await storage.readCheck(taskId, number))?.decisions).toEqual([first, second]);
+      });
+
+      it('keeps the numbers of checks and decisions across a reopen', async () => {
+        const number = await begun();
+        await storage.appendDecision(taskId, number, {
+          recommendation: 'r1',
+          decision: 'accepted',
+        });
+        const reopened = await reopen(storage);
+        expect(
+          (
+            await reopened.beginCheck(taskId, {
+              version: 1,
+              agent: 'a',
+              sessionId: SESSION,
+              repo: null,
+            })
+          ).number,
+        ).toBe(2);
+        expect(
+          (
+            await reopened.appendDecision(taskId, number, {
+              recommendation: 'r1',
+              decision: 'rejected',
+            })
+          ).number,
+        ).toBe(2);
+      });
+
+      it('stores a report as it was sent', async () => {
+        const number = await begun();
+        const content = reportContent({
+          uncertainty: 'Could not read the build output.',
+          findings: [
+            {
+              id: 'f1',
+              title: 'Stale',
+              explanation: 'The text names a file that moved.',
+              evidence: [{ kind: 'file', ref: 'src/a.ts', note: 'moved to src/b.ts' }],
+            },
+          ],
+        });
+        await storage.writeCheckReport(taskId, number, content);
+        expect((await storage.readCheck(taskId, number))?.report).toMatchObject({
+          uncertainty: 'Could not read the build output.',
+          findings: content.findings,
+          recommendations: content.recommendations,
+        });
+      });
+
+      it('does not show history files as documents of the task (INVARIANT)', async () => {
+        await begun();
+        await storage.writeDocument(taskId, 'plan.md', '# Plan\n');
+        expect((await storage.listDocuments(taskId)).map((d) => d.name)).toEqual(['plan.md']);
+      });
+
+      it('deletes the history with the task, and a new task has none (INVARIANT)', async () => {
+        await begun();
+        await storage.deleteTask(taskId);
+        await expectCode(storage.listVersions(taskId), 'TASK_NOT_FOUND');
+        const next = (await storage.createTask(newTask())).id;
+        expect(next).not.toBe(taskId);
+        expect(await storage.listVersions(next)).toEqual([]);
+        expect(await storage.listChecks(next)).toEqual([]);
+      });
+    });
   });
 }

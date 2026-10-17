@@ -13,6 +13,8 @@ export interface TaskValues {
 export interface TaskFormProps {
   statuses: string[];
   task?: Task | undefined;
+  /** What the form starts with instead of the task's own: a draft, or the one being kept. */
+  initial?: Partial<TaskValues> | undefined;
   defaultStatus?: string | undefined;
   submitLabel: string;
   pending: boolean;
@@ -25,6 +27,7 @@ export interface TaskFormProps {
 export function TaskForm({
   statuses,
   task,
+  initial,
   defaultStatus,
   submitLabel,
   pending,
@@ -32,11 +35,15 @@ export function TaskForm({
   onSubmit,
   onCancel,
 }: TaskFormProps) {
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [status, setStatus] = useState(task?.status ?? defaultStatus ?? statuses[0] ?? '');
-  const [labels, setLabels] = useState((task?.labels ?? []).join(', '));
-  const [branch, setBranch] = useState(task?.branch ?? '');
-  const [body, setBody] = useState(task?.body ?? '');
+  const [title, setTitle] = useState(initial?.title ?? task?.title ?? '');
+  const [status, setStatus] = useState(
+    initial?.status ?? task?.status ?? defaultStatus ?? statuses[0] ?? '',
+  );
+  const [labels, setLabels] = useState((initial?.labels ?? task?.labels ?? []).join(', '));
+  const [branch, setBranch] = useState(
+    initial !== undefined && 'branch' in initial ? (initial.branch ?? '') : (task?.branch ?? ''),
+  );
+  const [body, setBody] = useState(initial?.body ?? task?.body ?? '');
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();

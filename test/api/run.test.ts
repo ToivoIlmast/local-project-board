@@ -260,9 +260,10 @@ describe('the board server never starts a process (ADR-0029, INVARIANT)', () => 
 
     // The git reader runs `git` read-only (ADR-0007); the CLI starts `claude` and a browser for
     // the person who typed the command. Nothing that answers a request does.
+    // `spawnSession` is the one place `claude` is spawned, for a run and for a check alike.
     expect(spawners).toEqual([
-      'src/server/cli/claude.ts',
       'src/server/cli/openBrowser.ts',
+      'src/server/cli/spawnSession.ts',
       'src/server/git/exec.ts',
     ]);
   });

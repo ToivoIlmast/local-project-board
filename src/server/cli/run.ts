@@ -77,7 +77,10 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
         }
         // Nothing but a session can end this command, and it ends as the session did.
         return {
-          exitCode: await launchClaude(board, args.id as string, { env: environment.env }),
+          exitCode: await launchClaude(board, args.id as string, {
+            env: environment.env,
+            check: args.check === true,
+          }),
         };
       case 'export':
         await exportBoard(board, { out: args.out, write: environment.write });

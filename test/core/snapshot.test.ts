@@ -40,7 +40,7 @@ describe('createSnapshot', () => {
     const snapshot = await createSnapshot(storage, project);
 
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(snapshot.formatVersion).toBe(2);
+    expect(snapshot.formatVersion).toBe(3);
     expect(snapshot.project).toEqual(project);
     expect(snapshot.tasks).toEqual(await storage.listTasks());
     expect(snapshot.documents).toEqual([
@@ -61,7 +61,32 @@ describe('createSnapshot', () => {
       tasks: [],
       documents: [],
       reports: [],
+      history: [],
     });
+  });
+
+  it('carries the versions and the checks of every task, as stored (ADR-0030 §8)', async () => {
+    const storage = inMemoryStorage(createMemoryStore());
+    await fill(storage);
+    await storage.appendVersion('T1', {
+      source: 'baseline',
+      changed: [],
+      snapshot: { title: 'Write the services', body: '', labels: [] },
+    });
+    const begin = await storage.beginCheck('T1', {
+      version: 1,
+      agent: 'claude-code',
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      repo: null,
+    });
+
+    const snapshot = await createSnapshot(storage, project);
+
+    expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.history.map((entry) => entry.taskId)).toEqual(['T1', 'T2']);
+    expect(snapshot.history[0]?.versions).toEqual(await storage.listVersions('T1'));
+    expect(snapshot.history[0]?.checks).toEqual([{ state: 'working', begin, decisions: [] }]);
+    expect(snapshot.history[1]).toEqual({ taskId: 'T2', versions: [], checks: [] });
   });
 
   it('contains the workflow overrides of the board, its columns and its tasks (INVARIANT)', async () => {

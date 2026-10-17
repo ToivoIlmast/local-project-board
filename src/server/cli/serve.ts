@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import {
   createDocumentService,
+  createHistoryService,
   createProjectService,
   createReportService,
   createTaskService,
@@ -66,6 +67,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
     const locks = createTaskLocks();
     const context = {
       tasks: createTaskService({ storage, events, statuses: config.statuses, locks }),
+      history: createHistoryService({ storage, events, git, locks }),
       workflow: createWorkflowService({ storage, events, statuses: config.statuses }),
       documents: createDocumentService({ storage, events }),
       reports: createReportService({ storage, events }),

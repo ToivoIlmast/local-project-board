@@ -51,11 +51,22 @@ describe('generated AI instructions', () => {
       'ai-run.begin',
       'ai-run.end',
       'ai-run.report',
+      'checks.begin',
+      'checks.decide',
+      'checks.end',
+      'checks.get',
+      'checks.handoff',
+      'checks.list',
+      'checks.report',
       'events.stream',
       'instructions.get',
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).
       'runs.stream',
       'tasks.run',
+      // The history of a task is read and written by the page and the runner (ADR-0030).
+      'versions.get',
+      'versions.list',
+      'versions.restore',
       'workflow.update',
     ]);
     for (const route of excluded) expect(instructions).not.toContain(endpoint(route));

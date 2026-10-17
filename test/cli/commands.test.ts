@@ -204,7 +204,7 @@ describe('local-project-board export', () => {
     expect(run.exitCode).toBe(0);
     const snapshot = boardSnapshotSchema.parse(JSON.parse(run.out.join('\n')));
     expect(snapshot).toMatchObject({
-      formatVersion: 2,
+      formatVersion: 3,
       workflow: { board: {}, statuses: {} },
       tasks: [],
       documents: [],

@@ -18,6 +18,13 @@ import {
   type EffectiveWorkflow,
   type RunStarted,
   type RunTaskRequest,
+  type Check,
+  type CheckSummary,
+  type Decision,
+  type DecisionRequest,
+  type RestoreVersionResponse,
+  type TaskVersion,
+  type VersionList,
 } from '../../contract/v1/index';
 import { ApiError, errorFromResponse, malformedResponse, networkError, readJson } from './errors';
 import type { FetchLike, RequestInitLike } from './http';
@@ -61,6 +68,22 @@ export interface BoardClient {
    * is the runner's business.
    */
   runTask(id: string, request: RunTaskRequest): Promise<RunStarted>;
+
+  /** The versions of a task's content, and whether the task is at the latest (ADR-0030). */
+  versions(taskId: string): Promise<VersionList>;
+  /** One version with its snapshot; a version never changes, so it can be kept. */
+  version(taskId: string, number: number): Promise<TaskVersion>;
+  /** Writes the snapshot of a version as the content of the task, as a new version. */
+  restoreVersion(
+    taskId: string,
+    number: number,
+    ifContentHash: string,
+  ): Promise<RestoreVersionResponse>;
+  /** The actuality checks of a task, newest last. */
+  checks(taskId: string): Promise<CheckSummary[]>;
+  check(taskId: string, number: number): Promise<Check>;
+  /** The person's decision on one recommendation of a reported check. */
+  decide(taskId: string, number: number, decision: DecisionRequest): Promise<Decision>;
 
   listDocuments(taskId: string): Promise<DocumentMeta[]>;
   readDocument(taskId: string, name: string): Promise<string>;
@@ -164,6 +187,14 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     taskWorkflow: (id) => call('tasks.workflow', { params: { id } }),
     handoff: (id) => call('tasks.handoff', { params: { id } }),
     runTask: (id, body) => call('tasks.run', { params: { id }, body }),
+
+    versions: (id) => call('versions.list', { params: { id } }),
+    version: (id, n) => call('versions.get', { params: { id, n } }),
+    restoreVersion: (id, n, ifContentHash) =>
+      call('versions.restore', { params: { id, n }, body: { ifContentHash } }),
+    checks: (id) => call('checks.list', { params: { id } }),
+    check: (id, n) => call('checks.get', { params: { id, n } }),
+    decide: (id, n, body) => call('checks.decide', { params: { id, n }, body }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),
     readDocument: (id, name) => call('documents.read', { params: { id, name } }),

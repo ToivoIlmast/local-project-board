@@ -31,13 +31,23 @@ export async function createSnapshot(
     if (content !== null) reports.push({ ...report, content });
   }
 
+  const history: BoardSnapshot['history'] = [];
+  for (const task of tasks) {
+    const [versions, checks] = await Promise.all([
+      storage.listVersions(task.id),
+      storage.listChecks(task.id),
+    ]);
+    history.push({ taskId: task.id, versions, checks });
+  }
+
   return {
-    formatVersion: 2,
+    formatVersion: 3,
     exportedAt: new Date().toISOString(),
     project: { name: project.name, statuses: [...project.statuses], idPrefix: project.idPrefix },
     workflow: await storage.readWorkflow(),
     tasks,
     documents,
     reports,
+    history,
   };
 }

@@ -6,6 +6,7 @@ import type { Express } from 'express';
 import request, { type Test } from 'supertest';
 import {
   createDocumentService,
+  createHistoryService,
   createProjectService,
   createReportService,
   createTaskService,
@@ -94,6 +95,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
   const locks = createTaskLocks();
   const context: BoardContext = {
     tasks: createTaskService({ storage, events: sink, statuses, locks }),
+    history: createHistoryService({ storage, events: sink, git, locks }),
     workflow: createWorkflowService({ storage, events: sink, statuses }),
     documents: createDocumentService({ storage, events: sink }),
     reports: createReportService({ storage, events: sink }),

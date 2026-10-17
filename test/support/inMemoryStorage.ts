@@ -1,7 +1,18 @@
 import { BoardError } from '../../src/core/errors.js';
-import type { DocumentMeta, Report, Task, WorkflowOverrides } from '../../src/core/model/index.js';
+import type {
+  CheckBegin,
+  CheckEnd,
+  CheckReport,
+  Decision,
+  DocumentMeta,
+  Report,
+  Task,
+  TaskVersion,
+  WorkflowOverrides,
+} from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
+import { assembleCheck } from '../../src/core/rules/history.js';
 import { REPORT_ID_PREFIX, allocateId } from '../../src/core/rules/ids.js';
 
 /**
@@ -12,13 +23,24 @@ export interface MemoryStore {
   tasks: Map<string, Task>;
   documents: Map<string, Map<string, { content: string; updatedAt: string }>>;
   reports: Map<string, { report: Report; content: string }>;
+  /** The history of each task, as the records the markdown provider keeps in files. */
+  history: Map<string, MemoryHistory>;
   workflow: WorkflowOverrides;
   taskSequence: number;
   reportSequence: number;
 }
 
+export interface MemoryHistory {
+  versions: TaskVersion[];
+  checks: Map<
+    number,
+    { begin: CheckBegin; report?: CheckReport; end?: CheckEnd; decisions: Decision[] }
+  >;
+}
+
 export function createMemoryStore(): MemoryStore {
   return {
+    history: new Map(),
     tasks: new Map(),
     documents: new Map(),
     reports: new Map(),
@@ -36,6 +58,35 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     const task = store.tasks.get(id);
     if (!task) throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
     return task;
+  }
+
+  function historyOf(taskId: string): MemoryHistory {
+    requireTask(taskId);
+    const history = store.history.get(taskId) ?? { versions: [], checks: new Map() };
+    store.history.set(taskId, history);
+    return history;
+  }
+
+  function requireCheckRecord(
+    taskId: string,
+    number: number,
+  ): MemoryHistory['checks'] extends Map<number, infer R> ? R : never {
+    const check = historyOf(taskId).checks.get(number);
+    if (check === undefined) {
+      throw new BoardError('CHECK_NOT_FOUND', `Task "${taskId}" has no check ${number}.`, {
+        id: taskId,
+        check: number,
+      });
+    }
+    return check;
+  }
+
+  function alreadyFinal(taskId: string, number: number): BoardError {
+    return new BoardError(
+      'CHECK_ALREADY_FINAL',
+      `Check ${number} of task "${taskId}" cannot take this.`,
+      { id: taskId, check: number },
+    );
   }
 
   function requireName(name: string): string {
@@ -117,6 +168,90 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
       requireTask(id);
       store.tasks.delete(id);
       store.documents.delete(id);
+      store.history.delete(id);
+    },
+
+    appendVersion: async (taskId, input) => {
+      const history = historyOf(taskId);
+      const number = Math.max(0, ...history.versions.map((version) => version.number)) + 1;
+      const version: TaskVersion = {
+        taskId,
+        number,
+        createdAt: input.createdAt ?? now(),
+        source: input.source,
+        changed: [...input.changed],
+        snapshot: structuredClone(input.snapshot),
+        ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
+        ...(input.fromCheck === undefined ? {} : { fromCheck: structuredClone(input.fromCheck) }),
+      };
+      history.versions.push(version);
+      return structuredClone(version);
+    },
+    listVersions: async (taskId) => structuredClone(historyOf(taskId).versions),
+    readVersion: async (taskId, number) =>
+      structuredClone(historyOf(taskId).versions.find((v) => v.number === number) ?? null),
+
+    beginCheck: async (taskId, input) => {
+      const history = historyOf(taskId);
+      const number = Math.max(0, ...history.checks.keys()) + 1;
+      const begin: CheckBegin = {
+        taskId,
+        number,
+        version: input.version,
+        createdAt: input.createdAt ?? now(),
+        agent: input.agent,
+        sessionId: input.sessionId,
+        ...(input.model === undefined ? {} : { model: input.model }),
+        repo: input.repo,
+      };
+      history.checks.set(number, { begin, decisions: [] });
+      return structuredClone(begin);
+    },
+    writeCheckReport: async (taskId, number, input) => {
+      const check = requireCheckRecord(taskId, number);
+      if (check.report !== undefined || check.end !== undefined) throw alreadyFinal(taskId, number);
+      const { createdAt, ...content } = input;
+      check.report = structuredClone({
+        ...content,
+        taskId,
+        check: number,
+        createdAt: createdAt ?? now(),
+      });
+      return structuredClone(check.report);
+    },
+    endCheck: async (taskId, number, input) => {
+      const check = requireCheckRecord(taskId, number);
+      if (check.end !== undefined) throw alreadyFinal(taskId, number);
+      check.end = {
+        taskId,
+        check: number,
+        sessionId: input.sessionId,
+        ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
+        endedAt: input.endedAt ?? now(),
+      };
+      return structuredClone(check.end);
+    },
+    listChecks: async (taskId) =>
+      [...historyOf(taskId).checks.values()]
+        .map((check) => assembleCheck(structuredClone(check)))
+        .sort((a, b) => a.begin.number - b.begin.number),
+    readCheck: async (taskId, number) => {
+      const check = historyOf(taskId).checks.get(number);
+      return check === undefined ? null : assembleCheck(structuredClone(check));
+    },
+    appendDecision: async (taskId, number, input) => {
+      const check = requireCheckRecord(taskId, number);
+      const decision: Decision = {
+        taskId,
+        check: number,
+        number: Math.max(0, ...check.decisions.map((d) => d.number)) + 1,
+        recommendation: input.recommendation,
+        decision: input.decision,
+        ...(input.note === undefined ? {} : { note: input.note }),
+        createdAt: input.createdAt ?? now(),
+      };
+      check.decisions.push(decision);
+      return structuredClone(decision);
     },
 
     listDocuments: async (taskId) =>

@@ -23,6 +23,24 @@ export const BOARD_ERROR_CODES = [
   'NO_RUN_TO_RESTART',
   /** PATCH aiRun: null on a run with a runId, in any state: its runId must not restart (T45). */
   'AI_RUN_NOT_CLEARABLE',
+  /** A request that can only be judged against the state of the board (ADR-0030 §7). */
+  'INVALID_REQUEST',
+  /** A version of a task that has no such number (ADR-0030). */
+  'VERSION_NOT_FOUND',
+  /** An actuality check of a task that has no such number (ADR-0030). */
+  'CHECK_NOT_FOUND',
+  /** A decision or a `fromCheck` names a recommendation the report does not have. */
+  'RECOMMENDATION_NOT_FOUND',
+  /** `ifContentHash` is not the hash of the content the task has now (ADR-0030 §4). */
+  'TASK_CONTENT_CHANGED',
+  /** A report or an end for a check that already has one (ADR-0030 §6). */
+  'CHECK_ALREADY_FINAL',
+  /** A decision or `fromCheck` needs a check that has a report (ADR-0030 §2). */
+  'CHECK_NOT_REPORTED',
+  /** A report cannot be applied: the content moved on, or the recommendation is not accepted. */
+  'STALE_CHECK',
+  /** A check report that does not hold against the version it was made on (ADR-0030 §6). */
+  'INVALID_CHECK_REPORT',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

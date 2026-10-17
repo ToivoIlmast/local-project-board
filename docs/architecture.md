@@ -24,8 +24,8 @@ reference is [api.md](api.md), generated from the route table.
   is a plain import. See ADR-0006.
 
 `core` holds the model (`model/`), the pure rules (`rules/`: ids, statuses, ranks, document
-names, AI rules, workflow settings) and the services (`services/`) that implement the use cases
-on top of the ports. `contract/v1` holds the zod route table, the request and response schemas,
+names, AI rules, workflow settings, the history of a task) and the services (`services/`) that
+implement the use cases on top of the ports. `contract/v1` holds the zod route table, the request and response schemas,
 and what is generated from them: [api.md](api.md) and the AI instructions (ADR-0005, ADR-0012).
 
 ## The server
@@ -51,6 +51,41 @@ same way `claude <ID>` does (ADR-0029, amended by T27). Nor does any module of t
 a process: whether a run whose runner died is still alive is read from `/proc` by
 `cli/recover.ts` (`claude --recover <ID>`), with the runner's journal of `cli/runJournal.ts`, and
 the board is only told the verdict (ADR-0029, amended by T45).
+
+## The history of a task
+
+Every task has a history beside it (ADR-0030, T46): **versions** of its content (`title`, `body`
+and `labels`, nothing else) and **actuality checks**, an agent's comparison of the task with the
+repository. Both are append-only: a record is created once and never rewritten or removed, except
+together with the task.
+
+- **Where.** `.board/tasks/<id>/history/versions/<n>.json` and
+  `.board/tasks/<id>/history/checks/<n>.{begin,report,end}.json` with `<n>.decisions/<k>.json`.
+  `Storage` has methods that add and read (`appendVersion`, `beginCheck`, `writeCheckReport`,
+  `endCheck`, `appendDecision`, …) and none that change or delete, so no route can. The markdown
+  adapter creates each file with `wx` (`server/storage/markdown/history.ts`); a file it cannot
+  read is a read issue, left out of the lists and counted when numbering.
+- **When a version is made.** Inside one locked section per task (`core/services/taskLocks.ts`,
+  shared by the services and taken once per request): read, every precondition
+  (`ifContentHash`, then `fromCheck`, then the existing rules), sync (`baseline` for a task with
+  no history, `external` for a change made outside the server), write `task.md`, append the
+  version (`core/services/tasks.ts`, `taskHistory.ts`). Equal content makes no version, and
+  neither does a move or a change of status, branch or workflow. `GET` writes nothing.
+- **The check.** Started like a run (`POST /tasks/:id/run` with `kind: 'check'`, handled by the
+  waiting runner, `claude <ID> --check`) but recorded apart from `aiRun`: begin, report and end
+  routes of `core/services/history.ts`, a handoff that holds the snapshot of the pinned version
+  (`contract/v1/checkHandoff.ts`), and a runner journal of its own,
+  `.board/runner/<ID>-check-<n>.json` (`cli/checkJournal.ts`, `checkEnd.ts`, `checkSession.ts`),
+  which the journals, the delivery of ends and `claude --recover` of work runs never read. The
+  process is spawned by `cli/spawnSession.ts`, shared with `claude <ID>`.
+- **Pure functions** in `core/rules/history.ts`, re-exported by `contract/v1/history.ts` so that
+  the page runs the very ones the server does: `contentHash`, `diffContent`, `diffLines` and
+  `applyRecommendations`.
+- **On the page** (`web/features/tasks`): the version select and the historical view in
+  `TaskDetails`, the versions and their comparison, the checks and a report with a decision per
+  recommendation, and an edit that shows a diff before it saves. Applying a recommendation is the
+  ordinary editor with a draft; the save sends only the changed fields, `ifContentHash` and
+  `fromCheck`, and a refusal (409) keeps the draft.
 
 ## The contract between the server and the page
 
