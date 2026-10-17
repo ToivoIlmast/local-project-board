@@ -23,9 +23,10 @@ export interface FakeClaudeBehaviour {
   /**
    * Act as the agent the prompt asks for: read the handoff at the address in the prompt, then
    * report the run back through the API (`aiRun`, `report.md`), as a real agent is told to.
-   * `read` only reads, and changes nothing on the board.
+   * `read` only reads, and changes nothing on the board. `check` is the agent of an actuality
+   * check: it reads the handoff of the check and sends the one report that handoff asks for.
    */
-  agent?: boolean | 'read';
+  agent?: boolean | 'read' | 'check';
   /** Stay in the session until this file exists, to see what happens meanwhile. */
   holdUntil?: string;
 }
@@ -78,6 +79,21 @@ export async function fakeClaude(): Promise<FakeClaude> {
       '    const url = /read GET (\\S+) and follow it/.exec(prompt)[1];',
       '    const handoff = await (await fetch(url)).text();',
       "    appendFileSync(env.FAKE_CLAUDE_READS, JSON.stringify({ url, handoff }) + '\\n');",
+      '  }',
+      "  if (env.FAKE_CLAUDE_AGENT === 'check') {",
+      "    const prompt = process.argv[process.argv.length - 1] ?? '';",
+      '    const url = /read GET (\\S+) and follow it/.exec(prompt)[1];',
+      '    const [, api, id, number] = /^(.*)\\/tasks\\/([^/]+)\\/checks\\/(\\d+)\\/handoff$/.exec(url);',
+      "    const { token } = await (await fetch(api + '/session')).json();",
+      "    const answer = await fetch(api + '/tasks/' + id + '/checks/' + number + '/report', {",
+      "      method: 'POST',",
+      "      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+      '      body: JSON.stringify({',
+      "        agent: 'claude-code', verdict: 'current', summary: 'Still current.',",
+      '        findings: [], recommendations: [],',
+      '      }),',
+      '    });',
+      "    if (!answer.ok) throw new Error('report: ' + answer.status + ' ' + await answer.text());",
       '  }',
       "  if (env.FAKE_CLAUDE_AGENT === 'act') {",
       "    const prompt = process.argv[process.argv.length - 1] ?? '';",
@@ -138,7 +154,9 @@ export async function fakeClaude(): Promise<FakeClaude> {
       FAKE_CLAUDE_READS: readLog,
       FAKE_CLAUDE_EXIT: String(exit),
       ...(signal === undefined ? {} : { FAKE_CLAUDE_SIGNAL: signal }),
-      ...(agent === false ? {} : { FAKE_CLAUDE_AGENT: agent === 'read' ? 'read' : 'act' }),
+      ...(agent === false
+        ? {}
+        : { FAKE_CLAUDE_AGENT: agent === 'read' ? 'read' : agent === 'check' ? 'check' : 'act' }),
       ...(holdUntil === undefined ? {} : { FAKE_CLAUDE_HOLD: holdUntil }),
     }),
   };

@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
-import { constants, hostname } from 'node:os';
+import { hostname } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { claudeCodePrompt, continuationPrompt } from '../../contract/v1/index.js';
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
 import { identify, procProbe } from './processProbe.js';
+import { startCheckSession } from './checkSession.js';
+import { deliverPendingCheckEnds } from './checkEnd.js';
 import { deliverEnd, deliverPendingEnds } from './runEnd.js';
 import { boardMessage, findRunningBoard, get, post } from './running.js';
 import type { RuntimeState } from './runtime.js';
+import { spawnSession } from './spawnSession.js';
 import { writeJournal, type RunJournal } from './runJournal.js';
 
 /** The one program this command starts. It is never taken from the command line (T19). */
@@ -33,7 +35,7 @@ const PROGRAM = 'claude';
 export async function launchClaude(
   board: ResolvedBoard,
   id: string,
-  environment: { env: NodeJS.ProcessEnv },
+  environment: { env: NodeJS.ProcessEnv; check?: boolean | undefined },
 ): Promise<number> {
   if (!isTaskId(id)) {
     const prefix = board.config.tasks.idPrefix;
@@ -49,8 +51,13 @@ export async function launchClaude(
   if (!answer.ok) throw new Error(await boardMessage(answer));
   // An end that an earlier runner recorded and could not deliver goes first (T45).
   await deliverPendingEnds(board.root);
+  await deliverPendingCheckEnds(board.root);
 
   const program = await findClaude(environment.env);
+  // An actuality check is a session of its own kind, recorded apart from the run (ADR-0030 §6).
+  if (environment.check === true) {
+    return startCheckSession(program, id, running, board.root, environment.env);
+  }
   return startSession(program, id, running, board.root, environment.env);
 }
 
@@ -270,10 +277,8 @@ async function findExecutable(name: string, env: NodeJS.ProcessEnv): Promise<str
 }
 
 /**
- * Runs the program with the terminal of this process, without a shell, and resolves to how it
- * ended. Records begin/end on the board. While it runs, Ctrl+C belongs to it: the terminal
- * sends it to both of us, and this process must not die before the session has said goodbye.
- * End is always sent — whether the process exits normally, via signal, or fails to start (T33).
+ * Runs the session of a task and records it in the journal of its run. Records begin/end on the
+ * board; the end is always sent (T33), and the processes are written down for recovery (T45).
  */
 function run(
   program: string,
@@ -282,51 +287,12 @@ function run(
   env: NodeJS.ProcessEnv,
   journal: { root: string; record: RunJournal; kept: boolean },
 ): Promise<number> {
-  return new Promise((resolve) => {
-    const child = spawn(program, args, { cwd, env, stdio: 'inherit', shell: false });
+  return spawnSession(program, args, cwd, env, {
     // Who claude is, by pid and start time, for `claude --recover` if this runner dies (T45).
-    let recorded: Promise<void> = Promise.resolve();
-    child.once('spawn', () => {
-      const pid = child.pid;
-      if (pid === undefined) return;
-      recorded = identify(procProbe(), pid).then((identity) =>
+    onSpawn: (pid) =>
+      identify(procProbe(), pid).then((identity) =>
         keep(journal, { ...journal.record, child: identity }),
-      );
-    });
-    const forwarded = (['SIGTERM', 'SIGHUP'] as const).map((signal) => {
-      const forward = (): void => void child.kill(signal);
-      process.on(signal, forward);
-      return [signal, forward] as const;
-    });
-    const ignore = (): void => undefined;
-    process.on('SIGINT', ignore);
-
-    let released = false;
-    const release = (): void => {
-      if (released) return;
-      released = true;
-      process.off('SIGINT', ignore);
-      for (const [signal, forward] of forwarded) process.off(signal, forward);
-    };
-
-    let ended = false;
-    const doEnd = (input: { exitCode?: number; launchError?: string }, code: number): void => {
-      if (ended) return;
-      ended = true;
-      release();
-      recorded
-        .then(() => endRun(journal, input))
-        .then(() => resolve(code))
-        .catch(() => resolve(code));
-    };
-
-    child.once('error', (error) => {
-      process.stderr.write(`Claude Code could not be started: ${error.message}\n`);
-      doEnd({ launchError: error.message }, 1);
-    });
-    child.once('close', (code, signal) => {
-      const exitCode = code ?? (signal === null ? 1 : 128 + (constants.signals[signal] ?? 0));
-      doEnd({ exitCode }, exitCode);
-    });
+      ),
+    onEnd: (input) => endRun(journal, input),
   });
 }

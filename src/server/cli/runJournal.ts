@@ -65,14 +65,23 @@ function journalPath(root: string, taskId: string, runId: number): string {
  * could leave half-written, or only in a cache, would not be worth keeping.
  */
 export async function writeJournal(root: string, record: RunJournal): Promise<void> {
+  const text = `${JSON.stringify(runJournalSchema.parse(record), null, 2)}\n`;
+  await writeDurably(root, `${record.taskId}-${record.runId}.json`, text);
+}
+
+/**
+ * The way every journal of the runner is written: a temporary file, `fsync`, a rename, owner
+ * only. The journal of a check (ADR-0030 §6) is written the same way, in a namespace of its own.
+ */
+export async function writeDurably(root: string, name: string, text: string): Promise<void> {
   const dir = journalDir(root);
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const file = journalPath(root, record.taskId, record.runId);
+  const file = join(dir, name);
   const temp = join(dir, `.${randomBytes(6).toString('hex')}.tmp`);
   try {
     const handle = await open(temp, 'w', 0o600);
     try {
-      await handle.writeFile(`${JSON.stringify(runJournalSchema.parse(record), null, 2)}\n`);
+      await handle.writeFile(text);
       await handle.sync();
     } finally {
       await handle.close();

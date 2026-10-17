@@ -17,6 +17,8 @@ export interface ParsedArgs {
   wait?: boolean;
   /** Only for claude, with an id: look at a run whose runner died and recover it (T45). */
   recover?: boolean;
+  /** Only for claude, with an id: check whether the task is still current (ADR-0030). */
+  check?: boolean;
   /** Only with --recover: the person says the session is stopped when this machine cannot tell. */
   confirmStopped?: boolean;
 }
@@ -29,6 +31,8 @@ export const USAGE = [
   '  instructions           print the API instructions for an AI agent',
   '  handoff <id>           print everything an AI agent needs to work on a task',
   '  claude <id>            start Claude Code on a task, in this terminal',
+  '  claude <id> --check    start Claude Code on an actuality check of a task: it reports',
+  '                         whether the task still matches the repository, and changes nothing',
   '  claude --wait          start Claude Code in this terminal on each task sent from the',
   '                         board with Send to AI → Claude Code, one after another',
   '  claude --recover <id>  check whether the AI run of a task is still alive on this machine,',
@@ -69,6 +73,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         out: { type: 'string' },
         wait: { type: 'boolean' },
         recover: { type: 'boolean' },
+        check: { type: 'boolean' },
         'confirm-stopped': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -86,12 +91,21 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const command: Command = name === undefined ? 'serve' : asCommand(name);
   const wait = values.wait === true;
   const recover = values.recover === true;
+  const check = values.check === true;
   const confirmStopped = values['confirm-stopped'] === true;
   if (wait && command !== 'claude') {
     throw new UsageError('The --wait flag belongs to the claude command.');
   }
   if (recover && command !== 'claude') {
     throw new UsageError('The --recover flag belongs to the claude command.');
+  }
+  if (check && command !== 'claude') {
+    throw new UsageError('The --check flag belongs to the claude command.');
+  }
+  if (check && (wait || recover)) {
+    throw new UsageError(
+      'claude --check takes one task and starts a check of it: leave out --wait and --recover.',
+    );
   }
   if (recover && wait) {
     throw new UsageError('claude --recover takes one task and cannot wait: leave out --wait.');
@@ -132,6 +146,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(wait ? { wait } : {}),
     ...(recover ? { recover } : {}),
     ...(confirmStopped ? { confirmStopped } : {}),
+    ...(check ? { check } : {}),
   };
 }
 
