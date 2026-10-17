@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 95313178ceac0202ee1ca3cf5e548a23f657a703 -->
+<!-- Based on README.md @ 5941654ed6c3736ab44f7b243863ecf8638d1c04 -->
 
 # local-project-board
 
@@ -204,9 +204,18 @@ Hyvä tietää:
 - **Lähetä tekoälylle → Claude Code** avaa ensin pienen dialogin, jossa on kolme valintaa: malli
   (Claude Coden oletus, alias tai muu täysi nimi; edellisen ajon malli, jos sillä oli sellainen),
   raportin kieli ja istunto. Kieli on tehtävän asetus: muutos tallennetaan tehtävään ennen
-  käynnistystä, ja jos sitä ei voida tallentaa, mitään ei käynnistetä. Istunto on toistaiseksi
-  uusi: edellisen jatkaminen (Resume) näkyy, mutta on pois käytöstä, kunnes odottaja osaa sen.
-  Sellaisenaan dialogi käynnistää täsmälleen saman kuin napsautus ennen sitä.
+  käynnistystä, ja jos sitä ei voida tallentaa, mitään ei käynnistetä. Istunto on uusi tai
+  — jos edellinen ajo jätti istunnon — Resume, joka jatkaa sitä. Sellaisenaan dialogi käynnistää
+  täsmälleen saman kuin napsautus ennen sitä.
+- Tehtävän **AI run** -lohko kertoo istunnon elinkaaren: yritys (`#runId`), tila, malli ja tila
+  (mode), jotka ajaja kirjoitti, sekä agentti, tarkistukset ja commit, jotka agentti ilmoitti ja
+  jotka lohko merkitsee sellaisiksi. Epäonnistunut ajo kertoo syyn sanoin (ei käynnistynyt, päättyi
+  ilman loppuraporttia koodeineen, agentin oma viesti tai kadonnut). Ajolle, jonka tila on `failed`
+  tai `needs-review`, on kaksi painiketta: **Resume** avaa yllä olevan dialogin kyseisen ajon
+  istunnolla ja **Restart** kysyy ensin — vanha haara nimetään uudelleen muotoon `…-attempt-N`,
+  mitään ei poisteta — ja aloittaa työn alusta uudessa istunnossa. Kumpaakaan ei ole, kun Claude
+  Code työskentelee, eikä istuntoja edeltäneellä ajolla ole Resumea. Lohko kopioi myös komennon
+  `claude --resume <istunto>` käsin jatkamista varten. Kortti näyttää `AI: failed #N`.
 - Clauden on tehtävä HTTP-pyyntöjä osoitteeseen `127.0.0.1` — se käyttää `curl`ia Bash-työkalunsa
   kautta — ja Claude Code kysyy siihen oletuksena luvan. Salli `Bash(curl *)` istunnolle tai omissa
   Claude Code -asetuksissasi, jos et halua kysymyksiä.
