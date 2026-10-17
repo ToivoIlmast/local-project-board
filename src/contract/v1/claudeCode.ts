@@ -34,6 +34,19 @@ export function continuationPrompt(taskId: string, boardUrl: string): string {
   );
 }
 
+/**
+ * What a session that checks a task is told (ADR-0030 §6): where the handoff of this check is.
+ * Not the handoff of the task: a check has rules of its own and reads a version, not the task.
+ */
+export function claudeCheckPrompt(taskId: string, check: number, boardUrl: string): string {
+  checked(taskId, boardUrl);
+  if (!Number.isInteger(check) || check < 1) throw new Error(`"${check}" is not a check number.`);
+  return (
+    `Check whether task ${taskId} of the local board is still current: ` +
+    `read GET ${boardUrl}${API_BASE_PATH}/tasks/${taskId}/checks/${check}/handoff and follow it.`
+  );
+}
+
 function checked(taskId: string, boardUrl: string): void {
   if (!isTaskId(taskId)) throw new Error(`"${taskId}" is not a task id.`);
   if (!BOARD_ADDRESS.test(boardUrl)) {

@@ -5,11 +5,23 @@ import {
   type Route,
   type RouteId,
 } from '../../src/contract/v1/index.js';
+import { contentHash } from '../../src/core/rules/history.js';
 import { handlers } from '../../src/server/http/v1/handlers.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
 
 let board: TestBoard;
+
+const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+const REPORT = {
+  agent: 'claude-code',
+  verdict: 'current',
+  summary: 'Fine.',
+  findings: [],
+  recommendations: [
+    { id: 'r1', findings: [], text: 'Rename.', edit: { field: 'title', value: 'Better' } },
+  ],
+};
 
 interface Call {
   /** Below /api/v1, with real ids in place of the example ones. */
@@ -57,6 +69,26 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'reports.delete': { path: '/reports/R1' },
   'session.get': { path: '/session' },
   'instructions.get': { path: '/instructions' },
+  // The history of a task (ADR-0030); beforeEach below makes check 1 (reported) and check 2.
+  'versions.list': { path: '/tasks/T1/versions' },
+  'versions.get': { path: '/tasks/T1/versions/1' },
+  'versions.restore': {
+    path: '/tasks/T1/versions/1/restore',
+    body: { ifContentHash: contentHash({ title: 'first', body: '', labels: [] }) },
+  },
+  'checks.list': { path: '/tasks/T1/checks' },
+  'checks.get': { path: '/tasks/T1/checks/1' },
+  'checks.handoff': { path: '/tasks/T1/checks/1/handoff' },
+  'checks.begin': {
+    path: '/tasks/T1/checks',
+    body: { agent: 'claude-code', sessionId: SESSION },
+  },
+  'checks.report': { path: '/tasks/T1/checks/2/report', body: REPORT },
+  'checks.end': { path: '/tasks/T1/checks/1/end', body: { sessionId: SESSION, exitCode: 0 } },
+  'checks.decide': {
+    path: '/tasks/T1/checks/1/decisions',
+    body: { recommendation: 'r1', decision: 'accepted' },
+  },
   // Runner lifecycle routes (T31/T32); begin needs a real task to set up state.
   'ai-run.begin': 'needs a runner',
   'ai-run.end': 'needs a runner',
@@ -78,6 +110,10 @@ beforeEach(async () => {
   await board.post(`${API}/tasks`, { title: 'first' }).expect(201);
   await board.post(`${API}/tasks`, { title: 'second' }).expect(201);
   await board.put(`${API}/tasks/T1/documents/plan.md`, { content: '# Plan\n' }).expect(200);
+  const begin = { agent: 'claude-code', sessionId: SESSION };
+  await board.post(`${API}/tasks/T1/checks`, begin).expect(200);
+  await board.post(`${API}/tasks/T1/checks/1/report`, REPORT).expect(200);
+  await board.post(`${API}/tasks/T1/checks`, begin).expect(200);
   // An HTML report, because that is the media the contract declares for reports.read;
   // a markdown report is served as markdown, which reports.test.ts covers.
   await board

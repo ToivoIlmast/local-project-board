@@ -1,5 +1,6 @@
 import type {
   DocumentService,
+  HistoryService,
   ProjectService,
   ReportService,
   TaskService,
@@ -24,6 +25,8 @@ export interface SessionInfo {
  */
 export interface BoardContext {
   tasks: TaskService;
+  /** Versions of a task's content and its actuality checks (ADR-0030). */
+  history: HistoryService;
   workflow: WorkflowService;
   documents: DocumentService;
   reports: ReportService;

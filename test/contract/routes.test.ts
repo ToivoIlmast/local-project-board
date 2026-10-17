@@ -222,7 +222,7 @@ describe('the handoff route (T15)', () => {
     expect(`${route.method} ${route.path}`).toBe('GET /tasks/:id/handoff');
     expect(route.response.media).toBe('text/markdown');
     expect('request' in route).toBe(false);
-    expect(routeList.filter((r) => r.path.includes('handoff'))).toEqual([route]);
+    expect(routeList.filter((r) => r.path === '/tasks/:id/handoff')).toEqual([route]);
   });
 
   it('is documented to agents: the handoff is what they are told to read first', () => {

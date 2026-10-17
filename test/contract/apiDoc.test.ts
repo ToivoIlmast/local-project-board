@@ -46,10 +46,21 @@ describe('renderApiDoc', () => {
       'ai-run.begin',
       'ai-run.end',
       'ai-run.report',
+      'checks.begin',
+      'checks.decide',
+      'checks.end',
+      'checks.get',
+      'checks.handoff',
+      'checks.list',
+      'checks.report',
       'events.stream',
       'instructions.get',
       'runs.stream',
       'tasks.run',
+      // The history of a task is read and written by the page and the runner (ADR-0030).
+      'versions.get',
+      'versions.list',
+      'versions.restore',
       'workflow.update',
     ]);
     for (const route of routeList) {

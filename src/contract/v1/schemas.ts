@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
+import { checkReportContentSchema, fromCheckSchema } from '../../core/model/history.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
 import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
@@ -10,9 +11,18 @@ import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/wo
 export {
   aiRunReportSchema,
   aiRunSchema,
+  checkReportContentSchema,
+  checkReportSchema,
+  checkSchema,
+  checkSummarySchema,
+  checkVerdictSchema,
+  decisionSchema,
   documentMetaSchema,
   documentNameSchema,
   effectiveWorkflowSchema,
+  evidenceSchema,
+  findingSchema,
+  fromCheckSchema,
   gitBranchSchema,
   gitCommitSchema,
   gitDiffSchema,
@@ -20,14 +30,28 @@ export {
   gitRefSchema,
   gitStatusSchema,
   projectSchema,
+  recommendationEditSchema,
+  recommendationSchema,
   reportIdSchema,
   reportSchema,
+  taskContentSchema,
   taskIdSchema,
   taskSchema,
+  taskVersionSchema,
   taskWorkflowSchema,
+  versionListSchema,
+  versionSummarySchema,
   workflowFlagsSchema,
   workflowOverridesSchema,
   workflowStateSchema,
+} from '../../core/model/index.js';
+export {
+  CHECK_VERDICTS,
+  CONTENT_FIELDS,
+  DECISIONS,
+  EVIDENCE_KINDS,
+  RECOMMENDATION_BASES,
+  VERSION_SOURCES,
 } from '../../core/model/index.js';
 export {
   BOARD_ONLY_WORKFLOW_KEYS,
@@ -46,6 +70,16 @@ export { boardEventSchema } from '../../core/events.js';
  */
 export type {
   AiRun,
+  Check,
+  CheckBegin,
+  CheckEnd,
+  CheckReport,
+  CheckReportContent,
+  CheckState,
+  CheckSummary,
+  CheckVerdict,
+  ContentField,
+  Decision,
   DocumentMeta,
   EffectiveWorkflow,
   GitBranch,
@@ -53,9 +87,20 @@ export type {
   GitDiff,
   GitFileChange,
   GitStatus,
+  Evidence,
+  Finding,
+  FromCheck,
   Project,
+  Recommendation,
+  RecommendationEdit,
+  RepoState,
   Report,
   Task,
+  TaskContent,
+  TaskVersion,
+  VersionList,
+  VersionSource,
+  VersionSummary,
   BoardOnlyWorkflowKey,
   BoardWorkflowKey,
   BoardWorkflowOverrides,
@@ -72,6 +117,8 @@ export type {
 export type { BoardEvent } from '../../core/events.js';
 
 const title = z.string().regex(/\S/, 'Must not be blank');
+/** `contentHash` of ADR-0030 §1: 64 bits as 16 hex digits. */
+export const contentHashSchema = z.string().regex(/^[0-9a-f]{16}$/, 'Must be a content hash');
 const labels = z.array(z.string().min(1));
 /** A document or report body; the board is not a file server. */
 const content = z.string().max(1_000_000);
@@ -102,8 +149,19 @@ export const updateTaskRequestSchema = z
      * 409 AI_RUN_NOT_CLEARABLE (T45). An object is rejected — use the report route (T32).
      */
     aiRun: z.null().optional(),
+    /**
+     * The `contentHash` of the content this change is based on. When the content is another one,
+     * the answer is `409 TASK_CONTENT_CHANGED` and nothing is written; without it the change is
+     * last-write-wins, as it always was (ADR-0030 §4).
+     */
+    ifContentHash: contentHashSchema.optional(),
+    /** Where the new content came from, recorded on the version it makes (ADR-0030 §7). */
+    fromCheck: fromCheckSchema.optional(),
   })
-  .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');
+  .refine(
+    (patch) => Object.keys(patch).some((key) => key !== 'ifContentHash' && key !== 'fromCheck'),
+    'The patch must change something',
+  );
 
 /** Neighbours are ids in the target column; the server computes the rank (ADR-0011). */
 export const moveTaskRequestSchema = z.strictObject({
@@ -154,16 +212,26 @@ export const claudeModelSchema = z.union([
  * "Start this agent on this task": a name, and at most a model of the closed form above; never
  * a program, an argument or a prompt (T27). No model means the settings of Claude Code.
  */
-export const runTaskRequestSchema = z.strictObject({
-  agent: agentSchema,
-  model: claudeModelSchema.optional(),
-  /**
-   * `new` (also when absent) starts a session; `resume` continues the session of the last run
-   * of the task (T36); `restart` starts the work of the last run over in a new session (T37).
-   * A session itself is never sent: the runner reads it from the board, or makes a new one.
-   */
-  mode: z.enum(['new', 'resume', 'restart']).optional(),
-});
+export const runTaskRequestSchema = z
+  .strictObject({
+    agent: agentSchema,
+    model: claudeModelSchema.optional(),
+    /**
+     * `work` (also when absent) is the run of the task; `check` is an actuality check, recorded
+     * apart from the run (ADR-0030 §6). A check is always a new session: no `mode`, or `new`.
+     */
+    kind: z.enum(['work', 'check']).optional(),
+    /**
+     * `new` (also when absent) starts a session; `resume` continues the session of the last run
+     * of the task (T36); `restart` starts the work of the last run over in a new session (T37).
+     * A session itself is never sent: the runner reads it from the board, or makes a new one.
+     */
+    mode: z.enum(['new', 'resume', 'restart']).optional(),
+  })
+  .refine(
+    (request) => request.kind !== 'check' || request.mode === undefined || request.mode === 'new',
+    'A check is always a new session: it takes no mode but "new".',
+  );
 
 /** The request was handed to a runner; the session is its business from here on. */
 export const runStartedSchema = z.strictObject({
@@ -172,6 +240,8 @@ export const runStartedSchema = z.strictObject({
   model: claudeModelSchema.optional(),
   /** The board answers with it only for `resume` and `restart`: a new run needs no word (T36). */
   mode: z.enum(['new', 'resume', 'restart']).optional(),
+  /** Only for a check; a run of the task says nothing, as it always did (ADR-0030 §6). */
+  kind: z.literal('check').optional(),
 });
 
 /** What a waiting runner receives on `GET /runs`, and nothing else ever. */
@@ -181,6 +251,7 @@ export const runRequestSchema = z.strictObject({
   agent: agentSchema,
   model: claudeModelSchema.optional(),
   mode: z.enum(['resume', 'restart']).optional(),
+  kind: z.literal('check').optional(),
 });
 
 /**
@@ -250,6 +321,52 @@ export const aiRunAbandonRequestSchema = z.strictObject({
   sessionId: z.string().uuid(),
   message: z.string().min(1).max(2000),
 });
+
+/** Restore: the content the person saw is required, because a restore replaces all of it. */
+export const restoreVersionRequestSchema = z.strictObject({ ifContentHash: contentHashSchema });
+
+export const restoreVersionResponseSchema = z.strictObject({
+  task: taskSchema,
+  /** False when the task already held the content of that version: nothing was written. */
+  changed: z.boolean(),
+});
+
+/** Runner → begin a check (not given to agents): who and which session (ADR-0030 §6). */
+export const checkBeginRequestSchema = z.strictObject({
+  agent: z.string().regex(/\S/, 'Must not be blank').max(100),
+  sessionId: z.uuid(),
+  model: z.string().min(1).max(200).optional(),
+});
+
+export const checkBeginResponseSchema = z.strictObject({
+  number: z.int().min(1),
+  /** The version the check is pinned to. */
+  version: z.int().min(1),
+});
+
+/** Agent → the report of a check, as the agent makes it; stored and shown as sent. */
+export const checkReportRequestSchema = checkReportContentSchema;
+
+/** Runner → the end of a check's process. */
+export const checkEndRequestSchema = z.strictObject({
+  sessionId: z.uuid(),
+  exitCode: z.int().optional(),
+  endedAt: z.iso.datetime({ offset: true }).optional(),
+});
+
+/** The person's decision on one recommendation of a report. */
+export const decisionRequestSchema = z.strictObject({
+  recommendation: z.string().min(1).max(40),
+  decision: z.enum(['accepted', 'rejected']),
+  note: z.string().regex(/\S/, 'Must not be blank').max(2000).optional(),
+});
+
+export type RestoreVersionRequest = z.infer<typeof restoreVersionRequestSchema>;
+export type RestoreVersionResponse = z.infer<typeof restoreVersionResponseSchema>;
+export type CheckBeginRequest = z.infer<typeof checkBeginRequestSchema>;
+export type CheckBeginResponse = z.infer<typeof checkBeginResponseSchema>;
+export type CheckEndRequest = z.infer<typeof checkEndRequestSchema>;
+export type DecisionRequest = z.infer<typeof decisionRequestSchema>;
 
 export type AiRunBeginRequest = z.infer<typeof aiRunBeginRequestSchema>;
 export type AiRunEndRequest = z.infer<typeof aiRunEndRequestSchema>;

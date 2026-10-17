@@ -160,7 +160,7 @@ Response — 200, application/json:
 
 ### PATCH /api/v1/tasks/:id
 
-Change a task; only the given fields are written (last-write-wins)
+Change a task; only the given fields are written (last-write-wins, unless `ifContentHash` is sent)
 
 Given to AI agents in the generated instructions.
 
@@ -438,6 +438,514 @@ Response — 200, application/json:
       "editCode": false
     }
   }
+}
+```
+
+## Versions
+
+### GET /api/v1/tasks/:id/versions
+
+List the versions of a task's content and say whether the task is at the latest
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/versions
+
+Response — 200, application/json:
+
+```json
+{
+  "current": {
+    "hash": "8a2f6c1d90b34e57",
+    "version": 2
+  },
+  "versions": [
+    {
+      "taskId": "T12",
+      "number": 1,
+      "createdAt": "2026-09-21T11:30:00.000Z",
+      "source": "create",
+      "changed": [],
+      "hash": "8a2f6c1d90b34e57"
+    },
+    {
+      "taskId": "T12",
+      "number": 2,
+      "createdAt": "2026-09-21T11:30:00.000Z",
+      "source": "edit",
+      "changed": [
+        "body"
+      ],
+      "hash": "8a2f6c1d90b34e57"
+    }
+  ]
+}
+```
+
+### GET /api/v1/tasks/:id/versions/:n
+
+Read one version of a task: its content as it was
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/versions/2
+
+Response — 200, application/json:
+
+```json
+{
+  "taskId": "T12",
+  "number": 2,
+  "createdAt": "2026-09-21T11:30:00.000Z",
+  "source": "edit",
+  "changed": [
+    "body"
+  ],
+  "snapshot": {
+    "title": "Extract the git adapter",
+    "body": "## Context\n\nThe status parser still lives in the HTTP layer.\n",
+    "labels": [
+      "refactor"
+    ]
+  }
+}
+```
+
+### POST /api/v1/tasks/:id/versions/:n/restore
+
+Write the content of a version as the content of the task, as a new version; the status stays
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/versions/1/restore
+
+Request body:
+
+```json
+{
+  "ifContentHash": "8a2f6c1d90b34e57"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "task": {
+    "id": "T12",
+    "title": "Extract the git adapter",
+    "status": "in-progress",
+    "rank": "a1",
+    "body": "## Context\n\nThe status parser still lives in the HTTP layer.\n",
+    "labels": [
+      "refactor"
+    ],
+    "branch": "feat/git-adapter",
+    "createdAt": "2026-09-21T09:00:00.000Z",
+    "updatedAt": "2026-09-21T11:30:00.000Z"
+  },
+  "changed": true
+}
+```
+
+## Checks
+
+### GET /api/v1/tasks/:id/checks
+
+List the actuality checks of a task, with their state and the version each read
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/checks
+
+Response — 200, application/json:
+
+```json
+[
+  {
+    "taskId": "T12",
+    "number": 1,
+    "state": "reported",
+    "version": 2,
+    "createdAt": "2026-09-21T11:40:00.000Z",
+    "agent": "claude-code",
+    "verdict": "partly-outdated"
+  }
+]
+```
+
+### GET /api/v1/tasks/:id/checks/:n
+
+Read one actuality check: its begin, its report as the agent sent it, its decisions
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/checks/1
+
+Response — 200, application/json:
+
+```json
+{
+  "state": "reported",
+  "begin": {
+    "taskId": "T12",
+    "number": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:40:00.000Z",
+    "agent": "claude-code",
+    "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "report": {
+    "agent": "claude-code",
+    "verdict": "partly-outdated",
+    "summary": "The description still matches the code, but one path moved.",
+    "uncertainty": "The test suite was not run.",
+    "findings": [
+      {
+        "id": "f1",
+        "title": "The adapter was moved",
+        "explanation": "The task names src/git.ts, which now lives in src/server/git/.",
+        "evidence": [
+          {
+            "kind": "file",
+            "ref": "src/server/git/reader.ts",
+            "note": "new location"
+          }
+        ]
+      }
+    ],
+    "recommendations": [
+      {
+        "id": "r1",
+        "findings": [
+          "f1"
+        ],
+        "text": "Update the path in the description.",
+        "edit": {
+          "field": "body",
+          "find": "The status parser",
+          "replace": "The status parser (src/server/git/)"
+        }
+      }
+    ],
+    "taskId": "T12",
+    "check": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:45:00.000Z",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "decisions": [
+    {
+      "taskId": "T12",
+      "check": 1,
+      "number": 1,
+      "recommendation": "r1",
+      "decision": "accepted",
+      "createdAt": "2026-09-21T11:50:00.000Z"
+    }
+  ]
+}
+```
+
+### POST /api/v1/tasks/:id/checks
+
+Runner: begin an actuality check, pinned to the version that is on disk
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/checks
+
+Request body:
+
+```json
+{
+  "agent": "claude-code",
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "model": "opus"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "number": 1,
+  "version": 2
+}
+```
+
+### GET /api/v1/tasks/:id/checks/:n/handoff
+
+Read what the agent of a check is told: the version under review, the rules, the report format
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/checks/1/handoff
+
+Response — 200, text/markdown:
+
+```
+# Check T12-C1: is task T12 still current?
+
+You are checking whether the description of task T12 still matches the repository, as of version v2 of the task.
+```
+
+### POST /api/v1/tasks/:id/checks/:n/report
+
+Agent: send the report of a check, once; it is checked against the version that was read
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/checks/1/report
+
+Request body:
+
+```json
+{
+  "agent": "claude-code",
+  "verdict": "partly-outdated",
+  "summary": "The description still matches the code, but one path moved.",
+  "uncertainty": "The test suite was not run.",
+  "findings": [
+    {
+      "id": "f1",
+      "title": "The adapter was moved",
+      "explanation": "The task names src/git.ts, which now lives in src/server/git/.",
+      "evidence": [
+        {
+          "kind": "file",
+          "ref": "src/server/git/reader.ts",
+          "note": "new location"
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "r1",
+      "findings": [
+        "f1"
+      ],
+      "text": "Update the path in the description.",
+      "edit": {
+        "field": "body",
+        "find": "The status parser",
+        "replace": "The status parser (src/server/git/)"
+      }
+    }
+  ]
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "state": "reported",
+  "begin": {
+    "taskId": "T12",
+    "number": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:40:00.000Z",
+    "agent": "claude-code",
+    "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "report": {
+    "agent": "claude-code",
+    "verdict": "partly-outdated",
+    "summary": "The description still matches the code, but one path moved.",
+    "uncertainty": "The test suite was not run.",
+    "findings": [
+      {
+        "id": "f1",
+        "title": "The adapter was moved",
+        "explanation": "The task names src/git.ts, which now lives in src/server/git/.",
+        "evidence": [
+          {
+            "kind": "file",
+            "ref": "src/server/git/reader.ts",
+            "note": "new location"
+          }
+        ]
+      }
+    ],
+    "recommendations": [
+      {
+        "id": "r1",
+        "findings": [
+          "f1"
+        ],
+        "text": "Update the path in the description.",
+        "edit": {
+          "field": "body",
+          "find": "The status parser",
+          "replace": "The status parser (src/server/git/)"
+        }
+      }
+    ],
+    "taskId": "T12",
+    "check": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:45:00.000Z",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "decisions": [
+    {
+      "taskId": "T12",
+      "check": 1,
+      "number": 1,
+      "recommendation": "r1",
+      "decision": "accepted",
+      "createdAt": "2026-09-21T11:50:00.000Z"
+    }
+  ]
+}
+```
+
+### POST /api/v1/tasks/:id/checks/:n/end
+
+Runner: end a check, once; the session must be the one that began it
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/checks/1/end
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "exitCode": 0,
+  "endedAt": "2026-09-21T11:46:00.000Z"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "state": "reported",
+  "begin": {
+    "taskId": "T12",
+    "number": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:40:00.000Z",
+    "agent": "claude-code",
+    "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "report": {
+    "agent": "claude-code",
+    "verdict": "partly-outdated",
+    "summary": "The description still matches the code, but one path moved.",
+    "uncertainty": "The test suite was not run.",
+    "findings": [
+      {
+        "id": "f1",
+        "title": "The adapter was moved",
+        "explanation": "The task names src/git.ts, which now lives in src/server/git/.",
+        "evidence": [
+          {
+            "kind": "file",
+            "ref": "src/server/git/reader.ts",
+            "note": "new location"
+          }
+        ]
+      }
+    ],
+    "recommendations": [
+      {
+        "id": "r1",
+        "findings": [
+          "f1"
+        ],
+        "text": "Update the path in the description.",
+        "edit": {
+          "field": "body",
+          "find": "The status parser",
+          "replace": "The status parser (src/server/git/)"
+        }
+      }
+    ],
+    "taskId": "T12",
+    "check": 1,
+    "version": 2,
+    "createdAt": "2026-09-21T11:45:00.000Z",
+    "repo": {
+      "branch": "feat/git-adapter",
+      "head": "9f1c1a2b3c4d5e6f",
+      "clean": true
+    }
+  },
+  "decisions": [
+    {
+      "taskId": "T12",
+      "check": 1,
+      "number": 1,
+      "recommendation": "r1",
+      "decision": "accepted",
+      "createdAt": "2026-09-21T11:50:00.000Z"
+    }
+  ],
+  "end": {
+    "taskId": "T12",
+    "check": 1,
+    "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+    "exitCode": 0,
+    "endedAt": "2026-09-21T11:46:00.000Z"
+  }
+}
+```
+
+### POST /api/v1/tasks/:id/checks/:n/decisions
+
+Accept or reject one recommendation of a reported check; it changes no task
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/checks/1/decisions
+
+Request body:
+
+```json
+{
+  "recommendation": "r1",
+  "decision": "accepted"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "taskId": "T12",
+  "check": 1,
+  "number": 1,
+  "recommendation": "r1",
+  "decision": "accepted",
+  "createdAt": "2026-09-21T11:50:00.000Z"
 }
 ```
 
@@ -907,6 +1415,14 @@ nothing else. The code is one of:
 - NO_RUN_TO_RESTART
 - AI_RUN_NOT_CLEARABLE
 - INVALID_REQUEST
+- VERSION_NOT_FOUND
+- CHECK_NOT_FOUND
+- RECOMMENDATION_NOT_FOUND
+- TASK_CONTENT_CHANGED
+- CHECK_ALREADY_FINAL
+- CHECK_NOT_REPORTED
+- STALE_CHECK
+- INVALID_CHECK_REPORT
 - INVALID_JSON
 - UNAUTHORIZED
 - FORBIDDEN_HOST

@@ -11,7 +11,7 @@ import type { Project } from '../../../core/index.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
 import { noRunner } from '../runs.js';
-import { composeHandoff } from './handoff.js';
+import { composeCheckHandoff, composeHandoff } from './handoff.js';
 
 /** A body that is text rather than JSON; the media type depends on the file, not the route. */
 export interface TextBody {
@@ -92,6 +92,18 @@ export const handlers: Handlers = {
   // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
   'tasks.run': async (context, { params, body }) => {
     await context.tasks.get(params.id);
+    if (body.kind === 'check') {
+      // A check is recorded apart from the run of the task and takes nothing from it: it is
+      // not refused while a run works, nor while another check does (ADR-0030 §6).
+      const check = {
+        taskId: params.id,
+        agent: body.agent,
+        kind: 'check' as const,
+        ...(body.model === undefined ? {} : { model: body.model }),
+      };
+      if (!context.runs.hand(check)) throw noRunner(params.id);
+      return check;
+    }
     // Refused here, before any runner is asked: no run of any mode starts while one works
     // (T45), and Resume needs a session that is over (T36).
     await context.aiRun.requireIdle(params.id);
@@ -118,6 +130,26 @@ export const handlers: Handlers = {
     }),
     media: 'text/markdown',
   }),
+
+  'versions.list': (context, { params }) => context.history.versions(params.id),
+  'versions.get': (context, { params }) => context.history.version(params.id, params.n),
+  'versions.restore': (context, { params, body }) =>
+    context.history.restore(params.id, params.n, body),
+
+  'checks.list': (context, { params }) => context.history.checks(params.id),
+  'checks.get': (context, { params }) => context.history.check(params.id, params.n),
+  'checks.begin': (context, { params, body }) => context.history.beginCheck(params.id, body),
+  // What the agent of a check reads: the version it is pinned to and the rules, generated on
+  // every request and kept nowhere. Like a handoff, it carries no token.
+  'checks.handoff': async (context, { params }) => ({
+    text: await composeCheckHandoff(context, params.id, params.n, {
+      baseUrl: context.session.baseUrl,
+    }),
+    media: 'text/markdown',
+  }),
+  'checks.report': (context, { params, body }) => context.history.report(params.id, params.n, body),
+  'checks.end': (context, { params, body }) => context.history.endCheck(params.id, params.n, body),
+  'checks.decide': (context, { params, body }) => context.history.decide(params.id, params.n, body),
 
   'workflow.get': (context) => context.workflow.read(),
   'workflow.update': (context, { body }) => context.workflow.replace(body),

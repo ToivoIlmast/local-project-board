@@ -663,7 +663,7 @@ export function runStorageConformance(harness: StorageHarness): void {
         });
         await storage.writeCheckReport(taskId, number, content);
         expect((await storage.readCheck(taskId, number))?.report).toMatchObject({
-          uncertainty: content.uncertainty,
+          uncertainty: 'Could not read the build output.',
           findings: content.findings,
           recommendations: content.recommendations,
         });

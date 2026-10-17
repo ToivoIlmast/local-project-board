@@ -91,6 +91,12 @@ describe('the token on the wire', () => {
     await board.post(`${API}/tasks`, { title: 'a' }).expect(201);
     await board.put(`${API}/tasks/T1/documents/plan.md`, { content: '# Plan\n' }).expect(200);
     await board.post(`${API}/reports`, { title: 'r', format: 'md', content: '# R\n' }).expect(201);
+    await board
+      .post(`${API}/tasks/T1/checks`, {
+        agent: 'claude-code',
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      })
+      .expect(200);
 
     const paths: Record<string, string> = {
       'project.get': '/project',
@@ -98,6 +104,11 @@ describe('the token on the wire', () => {
       'tasks.get': '/tasks/T1',
       'tasks.workflow': '/tasks/T1/workflow',
       'tasks.handoff': '/tasks/T1/handoff',
+      'versions.list': '/tasks/T1/versions',
+      'versions.get': '/tasks/T1/versions/1',
+      'checks.list': '/tasks/T1/checks',
+      'checks.get': '/tasks/T1/checks/1',
+      'checks.handoff': '/tasks/T1/checks/1/handoff',
       'workflow.get': '/workflow',
       'documents.list': '/tasks/T1/documents',
       'documents.read': '/tasks/T1/documents/plan.md',
