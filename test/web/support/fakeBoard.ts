@@ -1,5 +1,8 @@
 import type {
   BoardEvent,
+  Check,
+  CheckSummary,
+  Decision,
   DocumentMeta,
   EffectiveWorkflow,
   GitCommit,
@@ -9,10 +12,19 @@ import type {
   Report,
   RunTaskRequest,
   Task,
+  TaskVersion,
+  VersionList,
   WorkflowOverrides,
   WorkflowState,
 } from '../../../src/contract/v1/index';
-import { generateHandoff } from '../../../src/contract/v1/index';
+import {
+  changedFields,
+  contentHash,
+  contentOf,
+  generateHandoff,
+  latestDecisions,
+  sameContent,
+} from '../../../src/contract/v1/index';
 import { rankForPosition } from '../../../src/core/rules/rank';
 import { defaultWorkflow, resolveWorkflow } from '../../../src/core/rules/workflow';
 import { ApiError, type BoardClient } from '../../../src/web/api/index';
@@ -29,6 +41,10 @@ export interface FakeBoardOptions {
   commits?: GitCommit[];
   /** Documents already on the board, as an agent would have left them. */
   documents?: { taskId: string; name: string; content: string }[];
+  /** Versions a task already has; its history is kept, as the server keeps it. */
+  versions?: Record<string, Omit<TaskVersion, 'taskId' | 'number' | 'createdAt'>[]>;
+  /** Checks a task already has, with their reports and decisions. */
+  checks?: Record<string, Check[]>;
 }
 
 export interface FakeBoard {
@@ -46,6 +62,11 @@ export interface FakeBoard {
   workflow: WorkflowOverrides;
   /** What was handed to a waiting runner, oldest first: the board of these tests always has one. */
   runs: ({ taskId: string } & RunTaskRequest)[];
+  /** Every change of a task the page asked for, as it was sent: only the fields it carried. */
+  patches: { id: string; patch: Record<string, unknown> }[];
+  /** The versions and the checks of each task, as the board holds them. */
+  versions: Map<string, TaskVersion[]>;
+  checks: Map<string, Check[]>;
   /** Make the next call to one method fail, as a real board would. */
   fail(method: keyof BoardClient, error: ApiError): void;
   /** Hold the next call to one method open, to see what the page shows meanwhile. */
@@ -69,6 +90,11 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   const listeners: ((event: BoardEvent) => void)[] = [];
   const calls: string[] = [];
   const runs: ({ taskId: string } & RunTaskRequest)[] = [];
+  const versions = new Map<string, TaskVersion[]>();
+  const checks = new Map<string, Check[]>(
+    Object.entries(options.checks ?? {}).map(([id, list]) => [id, structuredClone(list)]),
+  );
+  const patches: { id: string; patch: Record<string, unknown> }[] = [];
   const failures = new Map<string, ApiError>();
   const gates = new Map<string, Promise<void>>();
   let sequence = tasks.length;
@@ -78,6 +104,18 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       meta: { taskId: seed.taskId, name: seed.name, size: seed.content.length, updatedAt: NOW },
       content: seed.content,
     });
+  }
+
+  for (const [taskId, list] of Object.entries(options.versions ?? {})) {
+    versions.set(
+      taskId,
+      list.map((version, index) => ({
+        ...structuredClone(version),
+        taskId,
+        number: index + 1,
+        createdAt: NOW,
+      })),
+    );
   }
 
   const emit = (event: BoardEvent): void => {
@@ -106,6 +144,70 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   };
 
   const key = (taskId: string, name: string): string => `${taskId}/${name}`;
+
+  const versionsOf = (taskId: string): TaskVersion[] => {
+    require(taskId);
+    const list = versions.get(taskId) ?? [];
+    versions.set(taskId, list);
+    return list;
+  };
+
+  const appendVersion = (
+    taskId: string,
+    version: Omit<TaskVersion, 'taskId' | 'number' | 'createdAt'>,
+  ): TaskVersion => {
+    const list = versionsOf(taskId);
+    const made: TaskVersion = {
+      ...structuredClone(version),
+      taskId,
+      number: list.length + 1,
+      createdAt: NOW,
+    };
+    list.push(made);
+    emit({ type: 'version.created', taskId, number: made.number });
+    return made;
+  };
+
+  /** What the server does before a write of content: history ends at what is on disk. */
+  const sync = (task: Task): void => {
+    const list = versionsOf(task.id);
+    const latest = list.at(-1);
+    if (latest === undefined) {
+      appendVersion(task.id, { source: 'baseline', changed: [], snapshot: contentOf(task) });
+    } else if (!sameContent(latest.snapshot, task)) {
+      appendVersion(task.id, {
+        source: 'external',
+        changed: changedFields(latest.snapshot, task),
+        snapshot: contentOf(task),
+      });
+    }
+  };
+
+  const versionList = (taskId: string): VersionList => {
+    const task = require(taskId);
+    const list = versionsOf(taskId);
+    const latest = list.at(-1);
+    return {
+      current: {
+        hash: contentHash(contentOf(task)),
+        version: latest !== undefined && sameContent(latest.snapshot, task) ? latest.number : null,
+      },
+      versions: list.map(({ snapshot, ...rest }) => ({ ...rest, hash: contentHash(snapshot) })),
+    };
+  };
+
+  const checksOf = (taskId: string): Check[] => {
+    require(taskId);
+    return checks.get(taskId) ?? [];
+  };
+
+  const requireCheck = (taskId: string, number: number): Check => {
+    const found = checksOf(taskId).find((check) => check.begin.number === number);
+    if (!found) {
+      throw new ApiError(404, 'CHECK_NOT_FOUND', `Task "${taskId}" has no check ${number}.`);
+    }
+    return found;
+  };
 
   const workflowState = (): WorkflowState => ({
     defaults: defaultWorkflow(project.statuses),
@@ -147,14 +249,41 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           updatedAt: NOW,
         };
         tasks.push(task);
+        versions.set(task.id, []);
+        appendVersion(task.id, { source: 'create', changed: [], snapshot: contentOf(task) });
         emit({ type: 'task.created', task });
         return { ...task };
       }),
     updateTask: (id, patch) =>
       record('updateTask', () => {
+        patches.push({ id, patch: structuredClone(patch) as Record<string, unknown> });
         const task = require(id);
-        const { branch, workflow, aiRun, ...rest } = patch;
+        const { branch, workflow, aiRun, ifContentHash, fromCheck, ...rest } = patch;
+        // The precondition of ADR-0030 §4, on the board's side of the wire.
+        if (ifContentHash !== undefined && ifContentHash !== contentHash(contentOf(task))) {
+          throw new ApiError(
+            409,
+            'TASK_CONTENT_CHANGED',
+            `The content of task "${id}" is no longer the one the change was based on.`,
+            { id, currentHash: contentHash(contentOf(task)), latestVersion: null },
+          );
+        }
+        const next = {
+          title: rest.title ?? task.title,
+          body: rest.body ?? task.body,
+          labels: rest.labels ?? task.labels,
+        };
+        const changed = changedFields(task, next);
+        if (changed.length > 0) sync(task);
         Object.assign(task, rest, { updatedAt: NOW });
+        if (changed.length > 0) {
+          appendVersion(id, {
+            source: 'edit',
+            changed,
+            snapshot: contentOf(task),
+            ...(fromCheck === undefined ? {} : { fromCheck }),
+          });
+        }
         if (aiRun === null) delete task.aiRun;
         if (branch === null) delete task.branch;
         else if (branch !== undefined) task.branch = branch;
@@ -200,7 +329,9 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       record('runTask', () => {
         require(id);
         runs.push({ taskId: id, ...structuredClone(request) });
-        return { taskId: id, ...structuredClone(request) };
+        // As the board answers: `kind` only for a check, never "work".
+        const { kind, ...rest } = structuredClone(request);
+        return { taskId: id, ...rest, ...(kind === 'check' ? { kind } : {}) };
       }),
     handoff: (id) =>
       record('handoff', () => {
@@ -215,6 +346,88 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           effective: effectiveOf(task),
           instructions: options.instructions ?? '# API\n',
         });
+      }),
+
+    versions: (taskId) => record('versions', () => structuredClone(versionList(taskId))),
+    version: (taskId, number) =>
+      record('version', () => {
+        const found = versionsOf(taskId).find((version) => version.number === number);
+        if (!found) {
+          throw new ApiError(
+            404,
+            'VERSION_NOT_FOUND',
+            `Task "${taskId}" has no version ${number}.`,
+          );
+        }
+        return structuredClone(found);
+      }),
+    restoreVersion: (taskId, number, ifContentHash) =>
+      record('restoreVersion', () => {
+        const task = require(taskId);
+        if (ifContentHash !== contentHash(contentOf(task))) {
+          throw new ApiError(
+            409,
+            'TASK_CONTENT_CHANGED',
+            `The content of task "${taskId}" is no longer the one the change was based on.`,
+          );
+        }
+        const target = versionsOf(taskId).find((version) => version.number === number);
+        if (!target) {
+          throw new ApiError(
+            404,
+            'VERSION_NOT_FOUND',
+            `Task "${taskId}" has no version ${number}.`,
+          );
+        }
+        if (sameContent(target.snapshot, task)) return { task: { ...task }, changed: false };
+        sync(task);
+        const changed = changedFields(task, target.snapshot);
+        Object.assign(task, structuredClone(target.snapshot), { updatedAt: NOW });
+        appendVersion(taskId, {
+          source: 'restore',
+          changed,
+          snapshot: contentOf(task),
+          restoredFrom: number,
+        });
+        emit({ type: 'task.updated', task: { ...task } });
+        return { task: { ...task }, changed: true };
+      }),
+    checks: (taskId) =>
+      record('checks', () =>
+        checksOf(taskId).map((check): CheckSummary => ({
+          taskId,
+          number: check.begin.number,
+          state: check.state,
+          version: check.begin.version,
+          createdAt: check.begin.createdAt,
+          agent: check.report?.agent ?? check.begin.agent,
+          ...(check.report === undefined ? {} : { verdict: check.report.verdict }),
+          ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),
+        })),
+      ),
+    check: (taskId, number) => record('check', () => structuredClone(requireCheck(taskId, number))),
+    decide: (taskId, number, input) =>
+      record('decide', () => {
+        const check = requireCheck(taskId, number);
+        if (check.state !== 'reported' || check.report === undefined) {
+          throw new ApiError(409, 'CHECK_NOT_REPORTED', 'The check has no report to decide on.');
+        }
+        if (!check.report.recommendations.some((r) => r.id === input.recommendation)) {
+          throw new ApiError(404, 'RECOMMENDATION_NOT_FOUND', 'No such recommendation.');
+        }
+        const decision: Decision = {
+          taskId,
+          check: number,
+          number: check.decisions.length + 1,
+          recommendation: input.recommendation,
+          decision: input.decision,
+          ...(input.note === undefined ? {} : { note: input.note }),
+          createdAt: NOW,
+        };
+        check.decisions.push(decision);
+        latestDecisions(check.decisions);
+        emit({ type: 'check.updated', taskId, number });
+        return { ...decision };
       }),
 
     listDocuments: (taskId) =>
@@ -287,6 +500,9 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     git: options.git ?? aGitStatus(),
     workflow: overrides,
     runs,
+    versions,
+    checks,
+    patches,
     fail: (method, error) => failures.set(method, error),
     hold(method) {
       let release = (): void => undefined;

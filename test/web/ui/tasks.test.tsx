@@ -93,6 +93,7 @@ describe('a task that is already there', () => {
     const title = within(dialog()).getByLabelText('Title');
     await user.clear(title);
     await user.type(title, 'New title');
+    await user.click(within(dialog()).getByRole('button', { name: 'Review changes' }));
     await user.click(within(dialog()).getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText('New title')).toBeInTheDocument();

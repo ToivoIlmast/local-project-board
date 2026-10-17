@@ -15,4 +15,5 @@ export {
   type BoardState,
   type BoardStore,
   type Column,
+  type TaskHistory,
 } from './store';

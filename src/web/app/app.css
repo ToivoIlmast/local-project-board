@@ -504,3 +504,170 @@
 .card__note--error {
   color: var(--danger);
 }
+
+/* The history of a task (ADR-0030): versions, checks, the diff, the report. */
+.history {
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.history__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.history__number {
+  flex: 0 0 auto;
+  min-width: 3.5em;
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.history__what {
+  flex: 1;
+  min-width: 0;
+}
+
+.history__when {
+  color: var(--ink-muted);
+}
+
+.history__compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.diff__field {
+  min-width: 0;
+}
+
+.diff__name {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.diff__note,
+.diff__fold {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.diff__fold {
+  padding: 2px 8px;
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+}
+
+.diff__body {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.diff__line {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff__line--add {
+  background: var(--diff-add-bg);
+}
+
+.diff__line--remove {
+  background: var(--diff-remove-bg);
+}
+
+.diff__text {
+  min-width: 0;
+}
+
+.review__title,
+.check__heading {
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+
+.review__other {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.with-aside {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.with-aside__side {
+  min-width: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.check__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+}
+
+.check__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check__evidence {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.check__edit,
+.check__decision {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.check__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.check__recommendation {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

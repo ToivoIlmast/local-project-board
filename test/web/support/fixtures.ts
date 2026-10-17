@@ -1,6 +1,7 @@
 import type { Project } from '../../../src/core/model/project';
 import type { Task } from '../../../src/core/model/task';
 import type { Report } from '../../../src/core/model/report';
+import type { Check } from '../../../src/core/model/history';
 import type { DocumentMeta } from '../../../src/core/model/document';
 import type { GitStatus } from '../../../src/core/model/git';
 import type { EffectiveWorkflow, WorkflowState } from '../../../src/core/model/workflow';
@@ -96,6 +97,54 @@ export function anEffectiveWorkflow(overrides: Partial<EffectiveWorkflow> = {}):
       reportLanguage: 'default',
     },
     inactive: [],
+    ...overrides,
+  };
+}
+
+const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+
+/** A check that has its report: one finding, a recommendation with an edit and one piece of advice. */
+export function aCheck(overrides: Partial<Check> = {}, taskId = 'T1', number = 1): Check {
+  return {
+    state: 'reported',
+    begin: {
+      taskId,
+      number,
+      version: 1,
+      createdAt: '2026-10-17T10:00:00.000Z',
+      agent: 'claude-code',
+      sessionId: SESSION,
+      repo: { branch: 'main', head: '9f1c1a2b3c4d5e6f', clean: true },
+    },
+    report: {
+      taskId,
+      check: number,
+      version: 1,
+      createdAt: '2026-10-17T10:05:00.000Z',
+      agent: 'claude-code',
+      verdict: 'partly-outdated',
+      summary: 'One path moved.',
+      uncertainty: 'The tests were not run.',
+      findings: [
+        {
+          id: 'f1',
+          title: 'The adapter was moved',
+          explanation: 'It now lives in src/server/git.',
+          evidence: [{ kind: 'file', ref: 'src/server/git/reader.ts', note: 'new place' }],
+        },
+      ],
+      recommendations: [
+        {
+          id: 'r1',
+          findings: ['f1'],
+          text: 'Update the path.',
+          edit: { field: 'body', find: 'src/git.ts', replace: 'src/server/git/reader.ts' },
+        },
+        { id: 'r2', findings: [], text: 'Ask the owner about the second criterion.' },
+      ],
+      repo: { branch: 'main', head: '9f1c1a2b3c4d5e6f', clean: true },
+    },
+    decisions: [],
     ...overrides,
   };
 }

@@ -1,10 +1,17 @@
 import type {
   BoardEvent,
+  Check,
+  CheckSummary,
+  Decision,
+  DecisionRequest,
   DocumentMeta,
   GitStatus,
   Project,
+  RestoreVersionResponse,
   Report,
   Task,
+  TaskVersion,
+  VersionList,
   WorkflowState,
 } from '../../contract/v1/index';
 import type { BoardClient } from './client';
@@ -16,6 +23,12 @@ import type { ConnectionStatus } from './events';
  * field here is something a route answered or an event changed, so there is one truth and
  * the server owns it. UI state (which panel is open, what is typed in a form) is not here.
  */
+/** What the page knows of the history of one task: its versions and its checks (ADR-0030). */
+export interface TaskHistory {
+  list: VersionList;
+  checks: CheckSummary[];
+}
+
 export interface BoardState {
   phase: 'loading' | 'ready' | 'failed';
   /** Why the board could not be read at all; a failed change does not land here. */
@@ -29,6 +42,12 @@ export interface BoardState {
   git?: GitStatus | undefined;
   /** By task id, for the tasks whose documents have been opened. */
   documents: Record<string, DocumentMeta[]>;
+  /** By task id, for the tasks whose history has been opened. */
+  history: Record<string, TaskHistory>;
+  /** Versions read so far, by `<task>/<number>`: a version never changes, so it is kept. */
+  snapshots: Record<string, TaskVersion>;
+  /** Checks opened, by `<task>/<number>`; read again when the board says one was updated. */
+  checks: Record<string, Check>;
   connection: ConnectionStatus;
   /** Tasks with a change in flight. */
   busy: string[];
@@ -45,6 +64,9 @@ export function emptyState(): BoardState {
     tasks: [],
     reports: [],
     documents: {},
+    history: {},
+    snapshots: {},
+    checks: {},
     connection: 'connecting',
     busy: [],
   };
@@ -62,10 +84,15 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       return { ...state, tasks: replaceById(state.tasks, event.task) };
     case 'task.deleted': {
       const { [event.taskId]: _gone, ...documents } = state.documents;
+      const { [event.taskId]: _history, ...history } = state.history;
+      const own = (key: string): boolean => key.startsWith(`${event.taskId}/`);
       return {
         ...state,
         tasks: state.tasks.filter((task) => task.id !== event.taskId),
         documents,
+        history,
+        snapshots: Object.fromEntries(Object.entries(state.snapshots).filter(([k]) => !own(k))),
+        checks: Object.fromEntries(Object.entries(state.checks).filter(([k]) => !own(k))),
       };
     }
     case 'document.written': {
@@ -102,6 +129,10 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       return { ...state, reports: state.reports.filter((report) => report.id !== event.reportId) };
     case 'workflow.updated':
       return { ...state, workflow: event.workflow };
+    case 'version.created':
+    case 'check.updated':
+      // The history is read again by the store, which knows which tasks have it open.
+      return state;
     case 'board.changed':
       // Files changed outside the server; the board must be read again, not patched.
       return state;
@@ -163,6 +194,18 @@ export interface BoardStore {
   writeDocument(taskId: string, name: string, content: string): Promise<void>;
   deleteDocument(taskId: string, name: string): Promise<void>;
   deleteReport(id: string): Promise<void>;
+  /** Reads the versions and the checks of a task, and keeps them current from then on. */
+  loadHistory(taskId: string): Promise<void>;
+  /** One version with its snapshot; resolves from what was read before when it can. */
+  loadVersion(taskId: string, number: number): Promise<TaskVersion>;
+  /** One check with its report and decisions; kept current once opened. */
+  loadCheck(taskId: string, number: number): Promise<Check>;
+  restoreVersion(
+    taskId: string,
+    number: number,
+    ifContentHash: string,
+  ): Promise<RestoreVersionResponse>;
+  decide(taskId: string, number: number, decision: DecisionRequest): Promise<Decision>;
   /** Replaces the overrides of the board and its columns; the store takes the server's answer. */
   updateWorkflow(overrides: Parameters<BoardClient['updateWorkflow']>[0]): Promise<WorkflowState>;
   handleEvent(event: BoardEvent): Promise<void>;
@@ -188,6 +231,9 @@ export function createBoardStore(client: BoardClient): BoardStore {
    * a list that was never read is in no other record, and would otherwise never be tried again.
    */
   const wanted = new Set<string>();
+  /** The same for the history of a task, and for the checks that were opened. */
+  const wantedHistory = new Set<string>();
+  const wantedChecks = new Set<string>();
 
   /**
    * How many things the server has told this store since it was made. A read of the whole
@@ -198,7 +244,12 @@ export function createBoardStore(client: BoardClient): BoardStore {
 
   const apply = (event: BoardEvent): void => {
     told += 1;
-    if (event.type === 'task.deleted') wanted.delete(event.taskId);
+    if (event.type === 'task.deleted') {
+      wanted.delete(event.taskId);
+      wantedHistory.delete(event.taskId);
+      for (const key of [...wantedChecks])
+        if (key.startsWith(`${event.taskId}/`)) wantedChecks.delete(key);
+    }
     set((current) => applyEvent(current, event));
   };
 
@@ -278,6 +329,16 @@ export function createBoardStore(client: BoardClient): BoardStore {
       // Whatever was open keeps its documents fresh after a full re-read, and so does what was
       // opened while the board was not answering: its first read failed, this is the retry.
       await Promise.all([...wanted].map((id) => store.loadDocuments(id).catch(() => undefined)));
+      // So does the history of what is open: the files may have changed outside the server.
+      await Promise.all(
+        [...wantedHistory].map((id) => store.loadHistory(id).catch(() => undefined)),
+      );
+      await Promise.all(
+        [...wantedChecks].map((key) => {
+          const [id, number] = key.split('/');
+          return store.loadCheck(id as string, Number(number)).catch(() => undefined);
+        }),
+      );
     },
 
     async createTask(input) {
@@ -322,6 +383,46 @@ export function createBoardStore(client: BoardClient): BoardStore {
       apply({ type: 'document.deleted', taskId, name });
     },
 
+    async loadHistory(taskId) {
+      wantedHistory.add(taskId);
+      const [list, checks] = await Promise.all([client.versions(taskId), client.checks(taskId)]);
+      set((current) => ({
+        ...current,
+        history: { ...current.history, [taskId]: { list, checks } },
+      }));
+    },
+
+    async loadVersion(taskId, number) {
+      const key = `${taskId}/${number}`;
+      const known = state.snapshots[key];
+      if (known !== undefined) return known;
+      const version = await client.version(taskId, number);
+      set((current) => ({ ...current, snapshots: { ...current.snapshots, [key]: version } }));
+      return version;
+    },
+
+    async loadCheck(taskId, number) {
+      const key = `${taskId}/${number}`;
+      wantedChecks.add(key);
+      const check = await client.check(taskId, number);
+      set((current) => ({ ...current, checks: { ...current.checks, [key]: check } }));
+      return check;
+    },
+
+    // The task itself comes back as `task.updated` from the stream; the answer is applied too,
+    // so the page does not wait for the stream to show what it just did.
+    async restoreVersion(taskId, number, ifContentHash) {
+      const result = await busy(taskId, () => client.restoreVersion(taskId, number, ifContentHash));
+      apply({ type: 'task.updated', task: result.task });
+      return result;
+    },
+
+    async decide(taskId, number, decision) {
+      const made = await client.decide(taskId, number, decision);
+      await store.loadCheck(taskId, number);
+      return made;
+    },
+
     async deleteReport(id) {
       await client.deleteReport(id);
       apply({ type: 'report.deleted', reportId: id });
@@ -339,6 +440,15 @@ export function createBoardStore(client: BoardClient): BoardStore {
         return;
       }
       apply(event);
+      // The history is not part of any event: the page that has it open reads it again.
+      if (event.type === 'version.created' || event.type === 'check.updated') {
+        const key = `${event.taskId}/${event.number}`;
+        if (wantedHistory.has(event.taskId))
+          await store.loadHistory(event.taskId).catch(() => undefined);
+        if (event.type === 'check.updated' && wantedChecks.has(key)) {
+          await store.loadCheck(event.taskId, event.number).catch(() => undefined);
+        }
+      }
     },
 
     setConnection(connection) {

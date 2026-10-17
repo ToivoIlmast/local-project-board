@@ -54,6 +54,8 @@ describe('a developer’s session on a real board', () => {
       const title = within(dialog()).getByLabelText('Title');
       await user.clear(title);
       await user.type(title, 'Extract the git reader');
+      // The draft is shown as a diff against the task before it is saved (T46).
+      await user.click(within(dialog()).getByRole('button', { name: 'Review changes' }));
       await user.click(within(dialog()).getByRole('button', { name: 'Save' }));
       await waitFor(async () =>
         expect((await client.getTask('T1')).title).toBe('Extract the git reader'),
