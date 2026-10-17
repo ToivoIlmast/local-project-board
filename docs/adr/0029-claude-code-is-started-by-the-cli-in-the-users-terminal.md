@@ -197,3 +197,22 @@ refuse a run that works. The only way out was to edit `task.md` by hand, past ev
   session, and `end` without a session and `report` check none. Such a run is replaced by the
   next one instead, and a lost one is ended by abandon. A run an agent reported itself before
   T31 (no runId) has no numbering to keep and may still be cleared that way.
+
+## Amendment (T46, 2026-10-17, accepted with ADR-0030; implemented by T46): an actuality check is a run of its own kind
+
+The server still starts nothing. `POST /tasks/:id/run` gains `kind?: 'work' | 'check'`, absent
+meaning `work`, and `run.requested` carries `kind: 'check'` only for a check. The CLI gains
+`claude <ID> --check`. A check is always a new session and is not refused while a work run is
+`working`. The runner begins and ends it through the check routes (`POST /tasks/:id/checks`,
+`…/checks/:n/end`), not the aiRun routes.
+
+Its journal is kept apart from the journals of work runs: `.board/runner/<ID>-check-<n>.json`,
+with a schema of its own (`kind: 'check'`). The work-run journal (`<ID>-<runId>.json`,
+`formatVersion: 1`) and its strict schema are unchanged. So `listJournals`, `deliverEnd`, the
+`replaced` rule and `claude --recover`, in this version and in earlier ones, skip a check journal
+and never deliver it to an aiRun route. The end of a check is retried as T45 does, and its
+journal is dropped on `2xx`, `404` or `409`. `--recover` is not extended.
+
+The agent reads `GET /tasks/:id/checks/:n/handoff`, which pins one version of the task and
+forbids writes, and reports through `…/checks/:n/report`. A check never reads or writes `aiRun`.
+Details in ADR-0030 §6.
