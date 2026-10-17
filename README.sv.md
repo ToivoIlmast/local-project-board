@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 1641e28b4d4ba6d6348d492d81e7518433d404a8 -->
+<!-- Based on README.md @ 95313178ceac0202ee1ca3cf5e548a23f657a703 -->
 
 # local-project-board
 
@@ -29,6 +29,7 @@ webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk uta
 | `npx local-project-board`                       | Startar tavlan                                                            |
 | `npx local-project-board instructions`          | Skriver ut API-instruktionerna att ge till en AI-agent                    |
 | `npx local-project-board claude <ID>`           | Startar Claude Code på en uppgift, i den här terminalen                   |
+| `npx local-project-board claude <ID> --check`   | Startar Claude Code på en kontroll av om uppgiften är aktuell             |
 | `npx local-project-board claude --wait`         | Startar Claude Code här på varje uppgift som skickas från tavlan          |
 | `npx local-project-board claude --recover <ID>` | Kontrollerar en körning vars väntare dog; markerar den förlorad vid bevis |
 | `npx local-project-board export`                | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)                   |
@@ -46,6 +47,24 @@ på.
   fönster kan aldrig vara oense om den.
 - **En uppgift i detalj.** Titel, status, etiketter, gren, datum och en beskrivning i Markdown,
   och bredvid den uppgiftens dokument.
+- **Versioner.** Varje verklig ändring av en uppgifts titel, etiketter eller beskrivning ger en
+  version, och ingen version skrivs någonsin över eller tas bort (bara att uppgiften tas bort tar
+  dem med sig). Ett val överst i uppgiften visar den aktuella eller en historisk version, en lista
+  visar vad var och en ändrade och varifrån den kom (en redigering, en återställning, en ändring
+  gjord utanför tavlan), två valfria kan jämföras som en diff, och en historisk kan återställas —
+  som en ny version; statusen ändras inte. **Redigera** visar utkastet som en diff mot det
+  aktuella innehållet innan det sparas, skickar bara det du ändrade, och om uppgiften hunnit
+  ändras behåller det ditt utkast och visar det mot det nya innehållet i stället för att skriva
+  över något. Uppgifter som fanns förut får sin första version första gången de ändras.
+- **Kontrollera aktualitet.** En knapp i varje uppgift, i vilken status som helst, ber Claude Code
+  (genom samma väntare som Skicka till AI) att jämföra uppgiften med repositoriet. Den skriver en
+  rapport som sparas som den skickades, skild från versionerna och knuten till den version den
+  läste: ett utlåtande, iakttagelserna med belägg, det den inte kunde avgöra, och rekommendationer.
+  Du godkänner eller avvisar varje rekommendation; **Tillämpa godkända** öppnar redigeraren med dem
+  tillämpade, och ingenting ändras förrän du sparar. En rapport för en version som uppgiften har
+  lämnat markeras som föråldrad och tillämpas inte åt dig. Kontrollen ändrar ingen fil och inget
+  git-tillstånd; tavlan tvingar inte det, den visar repositoriet före och efter. Se
+  [Claude Code](#claude-code).
 - **Dokument.** Läs dem som Markdown, skriv och ändra dem på sidan, ta bort dem. Ett
   `.html`-dokument öppnas i en egen ram som servern isolerar.
 - **Rapporter.** Det en agent har sparat, HTML eller Markdown, öppnat lika säkert.
@@ -202,6 +221,16 @@ Bra att veta:
   någon annanstans), och inget ändras om du inte lägger till `--confirm-stopped`, vilket
   körningen då registrerar. Körningen behåller sitt `runId` och sin session, så Resume fortsätter
   den som nästa körning. En körnings ålder tas aldrig som tecken på att den är förlorad.
+- **Kontrollera aktualitet** i en uppgift startar samma väntare på en kontroll, och
+  `npx local-project-board claude <ID> --check` startar en direkt. En kontroll är en session av
+  eget slag: den rör inte uppgiftens AI-körning, så den nekas inte medan en körning pågår, och den
+  behöver ingen återställning — om dess väntare dör blir kontrollen bara utan rapport och hindrar
+  inget. Den får i sin handoff veta att den inte ska ändra någon fil, inte köra något git-kommando
+  som skriver och inte skriva något till tavlan utom sin rapport; det är en instruktion och
+  rättigheterna i din egen Claude Code, inte något tavlan kan tvinga fram, så rapporten visar
+  grenen, committen och om arbetskatalogen var ren när kontrollen började och när den rapporterade.
+  Dess slut sparas i `.board/runner/<ID>-check-<n>.json` tills tavlan tar emot det, skilt från
+  körningarnas journaler.
 
 ## Principer
 

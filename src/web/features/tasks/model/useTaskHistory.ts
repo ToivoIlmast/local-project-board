@@ -20,6 +20,13 @@ export function useTaskHistory(taskId: string): {
   const { state, store } = useBoard();
   const [error, setError] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
+  const history = state.history[taskId];
+
+  // What the board has said since is newer than a failure: a read that landed — the page's own,
+  // or the one the store makes when the board is back — takes the message away.
+  useEffect(() => {
+    if (history !== undefined) setError(undefined);
+  }, [history]);
 
   useEffect(() => {
     let alive = true;
@@ -33,7 +40,7 @@ export function useTaskHistory(taskId: string): {
   }, [store, taskId, attempt]);
 
   return {
-    history: state.history[taskId],
+    history,
     error,
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
@@ -73,6 +80,11 @@ export function useCheck(
   const { state, store } = useBoard();
   const [error, setError] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
+  const check = state.checks[`${taskId}/${number}`];
+
+  useEffect(() => {
+    if (check !== undefined) setError(undefined);
+  }, [check]);
 
   useEffect(() => {
     let alive = true;
@@ -86,7 +98,7 @@ export function useCheck(
   }, [store, taskId, number, attempt]);
 
   return {
-    check: state.checks[`${taskId}/${number}`],
+    check,
     error,
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };

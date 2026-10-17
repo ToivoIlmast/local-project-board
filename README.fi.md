@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 1641e28b4d4ba6d6348d492d81e7518433d404a8 -->
+<!-- Based on README.md @ 95313178ceac0202ee1ca3cf5e548a23f657a703 -->
 
 # local-project-board
 
@@ -30,6 +30,7 @@ koneen ulkopuolelle.
 | `npx local-project-board`                       | Käynnistää taulun                                                                     |
 | `npx local-project-board instructions`          | Tulostaa API-ohjeet tekoälyagentille annettavaksi                                     |
 | `npx local-project-board claude <ID>`           | Käynnistää Claude Coden tehtävään tässä terminaalissa                                 |
+| `npx local-project-board claude <ID> --check`   | Käynnistää Claude Coden tarkistamaan, onko tehtävä ajan tasalla                       |
 | `npx local-project-board claude --wait`         | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään                |
 | `npx local-project-board claude --recover <ID>` | Tarkistaa ajon, jonka odottaja kuoli; merkitsee sen kadonneeksi todisteen perusteella |
 | `npx local-project-board export`                | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)                    |
@@ -46,6 +47,25 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
   ikkunaa eivät voi olla siitä eri mieltä.
 - **Tehtävän tiedot.** Otsikko, tila, tunnisteet, haara, päivämäärät ja markdown-kuvaus, ja
   vieressä tehtävään kuuluvat dokumentit.
+- **Versiot.** Jokainen todellinen muutos tehtävän otsikkoon, tunnisteisiin tai kuvaukseen tekee
+  version, eikä mitään versiota koskaan ylikirjoiteta tai poisteta (vain tehtävän poisto vie ne
+  mukanaan). Tehtävän yläreunan valinta näyttää nykyisen tai historiallisen version, lista kertoo
+  mitä kukin muutti ja mistä se tuli (muokkaus, palautus, taulun ulkopuolella tehty muutos),
+  minkä tahansa kahden välisen eron voi katsoa diffinä, ja historiallisen version voi palauttaa —
+  uutena versiona; tila ei muutu. **Muokkaa** näyttää luonnoksen diffinä nykyistä sisältöä vasten
+  ennen tallennusta, lähettää vain sen, minkä muutit, ja jos tehtävä ehti muuttua, säilyttää
+  luonnoksesi ja näyttää sen uutta sisältöä vasten sen sijaan, että ylikirjoittaisi mitään. Jo
+  aiemmin olemassa olleet tehtävät saavat ensimmäisen versionsa, kun niitä muutetaan ensimmäisen
+  kerran.
+- **Tarkista ajantasaisuus.** Painike jokaisessa tehtävässä, missä tahansa tilassa, pyytää Claude
+  Codea (saman odottajan kautta kuin Lähetä tekoälylle) vertaamaan tehtävää repositorioon. Se
+  kirjoittaa raportin, joka tallennetaan sellaisenaan, versioista erillään ja sidottuna versioon,
+  jonka se luki: arvio, havainnot todisteineen, se mitä se ei voinut tietää, ja suositukset.
+  Hyväksyt tai hylkäät jokaisen suosituksen; **Käytä hyväksytyt** avaa editorin suositukset
+  sovellettuina, eikä mikään muutu ennen kuin tallennat. Raportti versiolle, josta tehtävä on
+  siirtynyt pois, merkitään vanhentuneeksi, eikä sitä sovelleta puolestasi. Tarkistus ei muuta
+  yhtään tiedostoa eikä Git-tilaa; taulu ei valvo sitä, vaan näyttää repositorion ennen ja
+  jälkeen. Katso [Claude Code](#claude-code).
 - **Dokumentit.** Lue markdownina, kirjoita ja muuta sivulla, poista. `.html`-dokumentti avautuu
   omaan kehykseensä, jonka palvelin eristää.
 - **Raportit.** Mitä agentti on tallentanut, HTML tai markdown, avattuna yhtä turvallisesti.
@@ -203,6 +223,16 @@ Hyvä tietää:
   PID-nimiavaruus, muualla aloitettu ajo), eikä mikään muutu, ellet lisää valitsinta
   `--confirm-stopped`, jonka ajo silloin kirjaa. Ajo säilyttää `runId`:nsä ja istuntonsa, joten
   Resume jatkaa sitä seuraavana ajona. Ajon ikää ei koskaan pidetä merkkinä sen katoamisesta.
+- **Tarkista ajantasaisuus** tehtävässä käynnistää saman odottajan tarkistukseen, ja
+  `npx local-project-board claude <ID> --check` käynnistää sen suoraan. Tarkistus on oma
+  istuntolajinsa: se ei koske tehtävän AI-ajoon, joten sitä ei evätä ajon aikana, eikä se tarvitse
+  palautusta — jos sen odottaja kuolee, tarkistus jää vain ilman raporttia eikä estä mitään. Sen
+  handoffissa kielletään muuttamasta tiedostoja, ajamasta kirjoittavia git-komentoja ja
+  kirjoittamasta tauluun muuta kuin raportti; tämä on ohje ja oman Claude Codesi oikeudet, ei
+  jotain, mitä taulu voisi valvoa, joten raportti näyttää haaran, commitin ja sen, oliko
+  työhakemisto puhdas, kun tarkistus alkoi ja kun se raportoi. Sen loppu säilyy tiedostossa
+  `.board/runner/<ID>-check-<n>.json`, kunnes taulu ottaa sen vastaan, erillään ajojen
+  päiväkirjoista.
 
 ## Periaatteet
 

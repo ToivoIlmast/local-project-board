@@ -116,7 +116,7 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
 function Comparison({ task, from, to }: { task: Task; from: Side; to: Side }) {
   const a = useVersion(task.id, from === CURRENT ? undefined : from);
   const b = useVersion(task.id, to === CURRENT ? undefined : to);
-  const label = (side: Side): string => (side === CURRENT ? 'the current content' : `v${side}`);
+  const label = (side: Side): string => (side === CURRENT ? 'now' : `v${side}`);
 
   const before = from === CURRENT ? taskContent(task) : a.version?.snapshot;
   const after = to === CURRENT ? taskContent(task) : b.version?.snapshot;

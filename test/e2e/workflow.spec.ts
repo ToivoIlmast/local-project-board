@@ -27,6 +27,8 @@ test('a developer opens the board and works on a task', async ({ page, board }) 
   // Edit.
   await page.getByRole('complementary').getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Title').fill('Extract the git reader');
+  // The draft is reviewed as a diff against the task before it is saved (T46).
+  await page.getByRole('button', { name: 'Review changes' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('button', { name: 'Extract the git reader' }).first()).toBeVisible();
 
