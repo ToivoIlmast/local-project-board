@@ -135,7 +135,8 @@ npx local-project-board instructions
 prints everything an agent needs to use the board through its API: the base URL, the token (when
 the board is running), the statuses of this board and every route with its examples. Hand that
 text to Claude, ChatGPT or your own tool, and it can read the board, create and move tasks, write
-documents and store reports.
+documents and store reports. The project also supports AI-assisted task execution through
+[Claude Code](#claude-code).
 
 The full route reference — every route, including the ones this text leaves out, every error code
 and media type — is [docs/api.md](docs/api.md), generated from the same route table.
