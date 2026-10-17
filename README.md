@@ -204,8 +204,17 @@ What to know:
   Claude Code default, an alias or another full name; the model of the last run when it had one),
   the report language and the session. The language is a setting of the task: a change is saved
   to the task before the start, and when it cannot be saved nothing starts. The session is a new
-  one for now: continuing the last one (Resume) is shown, but disabled until the runner can do it.
-  Left as it opens, the dialog starts exactly what the click started before it.
+  one, or — when the last run left a session — Resume, which continues it. Left as it opens, the
+  dialog starts exactly what the click started before it.
+- The **AI run** block of a task tells the lifecycle of the session: the attempt (`#runId`), the
+  state, the model and the mode, which the runner wrote, and the agent, checks and commit, which
+  the agent reported and the block marks so. A run that failed says why in words (not started,
+  ended without a final report with its code, the agent's own message, or lost). For a run that
+  `failed` or `needs-review` it has two buttons: **Resume**, which opens the dialog above on the
+  session of that run, and **Restart**, which asks first — the old branch is renamed to
+  `…-attempt-N`, nothing is deleted — and then starts the work over in a new session. Neither is
+  there while Claude Code works, and a run from before sessions has no Resume. The block also
+  copies `claude --resume <session>` for continuing by hand. The card shows `AI: failed #N`.
 - Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and
   Claude Code asks for permission for that by default. Allow `Bash(curl *)` for the session, or in
   your Claude Code settings if you want no questions.
