@@ -27,6 +27,7 @@ in your browser. No sign-up, no account, no database, no network beyond your own
 | `npx local-project-board`                       | Start the board                                           |
 | `npx local-project-board instructions`          | Print the API instructions to hand to an AI agent         |
 | `npx local-project-board claude <ID>`           | Start Claude Code on a task, in this terminal             |
+| `npx local-project-board claude <ID> --check`   | Start Claude Code on a check of whether a task is current |
 | `npx local-project-board claude --wait`         | Start Claude Code here on each task sent from the board   |
 | `npx local-project-board claude --recover <ID>` | Check a run whose runner died; mark it lost on proof      |
 | `npx local-project-board export`                | Print a snapshot of the board (`--out <file>` to save it) |
@@ -44,6 +45,23 @@ whatever you are looking at.
   two windows never disagree about it.
 - **A task in detail.** Title, status, labels, branch, dates and a markdown description, with
   the documents that belong to the task next to it.
+- **Versions.** Every real change to a task's title, labels or description makes a version, and
+  none is ever overwritten or deleted (only the task's deletion removes them). A select at the
+  top of the task shows the current version or a historical one, a list shows what each changed
+  and where it came from (an edit, a restore, a change made outside the board), any two can be
+  compared as a diff, and a historical one can be restored — as a new version; the status does
+  not change. **Edit** shows the draft as a diff against the current content before it saves,
+  sends only what you changed, and, if the task changed in the meantime, keeps your draft and
+  shows it against the new content instead of overwriting anything. Tasks that existed before
+  get their first version the first time they are changed.
+- **Check actuality.** A button in every task, in any status, asks Claude Code (through the same
+  runner as Send to AI) to compare the task with the repository. It writes a report that is
+  stored as it was sent, apart from the versions and tied to the version it read: a verdict, the
+  findings with their evidence, what it could not tell, and recommendations. You accept or
+  reject each recommendation; **Apply accepted** opens the editor with them applied, and nothing
+  changes until you save. A report for a version the task has left is marked stale and is not
+  applied for you. The check changes no file and no git state; the board does not enforce that,
+  it shows the repository before and after. See [Claude Code](#claude-code).
 - **Documents.** Read them as markdown, write and change them in the page, delete them. An
   `.html` document opens in a frame of its own, sandboxed by the server.
 - **Reports.** Whatever an agent has stored, HTML or markdown, opened the same safe way.
@@ -203,6 +221,15 @@ What to know:
   it (no `/proc`, another OS or PID namespace, a run started elsewhere), and nothing changes unless
   you add `--confirm-stopped`, which the run then records. The run keeps its `runId` and session,
   so Resume continues it as the next run. The age of a run is never taken as a sign it is lost.
+- **Check actuality** in a task starts the same runner on a check, and
+  `npx local-project-board claude <ID> --check` starts one directly. A check is a session of its
+  own kind: it does not touch the task's AI run, so it is not refused while a run works, and it
+  needs no recovery — if its runner dies the check simply stays without a report and blocks
+  nothing. It is told, in its handoff, to change no file, to run no git command that writes and to
+  write nothing to the board but its report; that is an instruction and the permissions of your
+  Claude Code, not something the board can enforce, so the report shows the branch, the commit and
+  whether the tree was clean when the check began and when it reported. Its end is kept in
+  `.board/runner/<ID>-check-<n>.json` until the board takes it, apart from the journals of runs.
 
 ## Principles
 
