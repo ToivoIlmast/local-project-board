@@ -3,6 +3,8 @@
 Status: accepted (2026-09-21)
 
 Amended by ADR-0028: `formatVersion` is 2 since the snapshot carries the workflow overrides.
+Amended by ADR-0030 (accepted 2026-10-17; implemented by T46): `formatVersion` becomes 3, and the
+snapshot carries each task's history (versions, checks, decisions).
 
 ## Context
 
