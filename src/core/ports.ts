@@ -1,6 +1,11 @@
 import type { BoardEvent } from './events.js';
 import type {
   AiRun,
+  Check,
+  CheckBegin,
+  CheckEnd,
+  CheckReport,
+  Decision,
   DocumentMeta,
   GitBranch,
   GitCommit,
@@ -8,6 +13,7 @@ import type {
   GitStatus,
   Report,
   Task,
+  TaskVersion,
   TaskWorkflowOverrides,
   WorkflowOverrides,
 } from './model/index.js';
@@ -41,6 +47,27 @@ export interface TaskPatch {
   extra?: Record<string, unknown> | undefined;
 }
 
+/** A version as the caller describes it; the provider assigns the number (ADR-0030 §2). */
+export type NewVersion = Omit<TaskVersion, 'taskId' | 'number' | 'createdAt'> & {
+  createdAt?: string | undefined;
+};
+
+export type NewCheckBegin = Omit<CheckBegin, 'taskId' | 'number' | 'createdAt'> & {
+  createdAt?: string | undefined;
+};
+
+export type NewCheckReport = Omit<CheckReport, 'taskId' | 'check' | 'createdAt'> & {
+  createdAt?: string | undefined;
+};
+
+export type NewCheckEnd = Omit<CheckEnd, 'taskId' | 'check' | 'endedAt'> & {
+  endedAt?: string | undefined;
+};
+
+export type NewDecision = Omit<Decision, 'taskId' | 'check' | 'number' | 'createdAt'> & {
+  createdAt?: string | undefined;
+};
+
 export interface NewReport {
   title: string;
   format: 'html' | 'md';
@@ -73,7 +100,7 @@ export interface Storage {
   /** Allocates the id atomically; an id is never reused (ADR-0020). */
   createTask(input: NewTask): Promise<Task>;
   updateTask(id: string, patch: TaskPatch): Promise<Task>;
-  /** Deletes the task and its documents. */
+  /** Deletes the task, its documents and its history. */
   deleteTask(id: string): Promise<void>;
 
   /**
@@ -90,6 +117,25 @@ export interface Storage {
   readDocument(taskId: string, name: string): Promise<string | null>;
   writeDocument(taskId: string, name: string, content: string): Promise<DocumentMeta>;
   deleteDocument(taskId: string, name: string): Promise<void>;
+
+  /**
+   * The history of a task (ADR-0030): methods that add or read, and none that change or remove.
+   * Every record is created once and never rewritten; numbers are per task and continue after
+   * the highest one, a file that cannot be read included. The callers hold the lock of the task.
+   * A file that cannot be read is left out of the lists and reported by `readIssues`.
+   */
+  appendVersion(taskId: string, input: NewVersion): Promise<TaskVersion>;
+  listVersions(taskId: string): Promise<TaskVersion[]>;
+  readVersion(taskId: string, number: number): Promise<TaskVersion | null>;
+  beginCheck(taskId: string, input: NewCheckBegin): Promise<CheckBegin>;
+  /** Refuses with `CHECK_NOT_FOUND`, or `CHECK_ALREADY_FINAL` when it has a report or an end. */
+  writeCheckReport(taskId: string, number: number, input: NewCheckReport): Promise<CheckReport>;
+  /** Refuses with `CHECK_NOT_FOUND`, or `CHECK_ALREADY_FINAL` when it has an end already. */
+  endCheck(taskId: string, number: number, input: NewCheckEnd): Promise<CheckEnd>;
+  listChecks(taskId: string): Promise<Check[]>;
+  readCheck(taskId: string, number: number): Promise<Check | null>;
+  /** Refuses with `CHECK_NOT_FOUND`; whether it may be decided on is the caller's rule. */
+  appendDecision(taskId: string, number: number, input: NewDecision): Promise<Decision>;
 
   listReports(): Promise<Report[]>;
   readReport(id: string): Promise<string | null>;

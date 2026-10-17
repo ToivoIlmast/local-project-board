@@ -20,6 +20,18 @@ export const boardEventSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({ type: z.literal('report.created'), report: reportSchema }),
   z.strictObject({ type: z.literal('report.deleted'), reportId: reportIdSchema }),
+  /** A task got a new version of its content; the page refetches its history (ADR-0030 §8). */
+  z.strictObject({
+    type: z.literal('version.created'),
+    taskId: taskIdSchema,
+    number: z.int().min(1),
+  }),
+  /** A check of a task began, got its report or its end, or a recommendation was decided. */
+  z.strictObject({
+    type: z.literal('check.updated'),
+    taskId: taskIdSchema,
+    number: z.int().min(1),
+  }),
   /** The overrides of the board or of its columns changed; a task's own come as `task.updated`. */
   z.strictObject({ type: z.literal('workflow.updated'), workflow: workflowStateSchema }),
   /**

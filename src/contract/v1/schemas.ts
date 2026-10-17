@@ -195,7 +195,6 @@ export const sessionSchema = z.strictObject({ token: z.string().min(1) });
  * format has one list of error codes and no copy of it can drift (§13).
  */
 export const TRANSPORT_ERROR_CODES = [
-  'INVALID_REQUEST',
   'INVALID_JSON',
   'UNAUTHORIZED',
   'FORBIDDEN_HOST',

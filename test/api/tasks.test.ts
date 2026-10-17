@@ -109,7 +109,7 @@ describe('PATCH /tasks/:id', () => {
     const task = taskSchema.parse(response.body);
     expect(task).toMatchObject({ id, title: 'Renamed', body: draft.body });
     expect(await board.storage.getTask(id)).toMatchObject({ title: 'Renamed' });
-    expect(board.events.types()).toEqual(['task.created', 'task.updated']);
+    expect(board.events.types()).toEqual(['task.created', 'version.created', 'task.updated']);
   });
 
   it('refuses an empty patch, an unknown field and an unknown status', async () => {

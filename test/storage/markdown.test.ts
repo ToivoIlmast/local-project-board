@@ -647,3 +647,128 @@ describe('task.md and aiRun runner fields (T31)', () => {
     expect(await readFile(filePath, 'utf8')).toBe(fileContent);
   });
 });
+
+describe('markdown storage: the history of a task (ADR-0030)', () => {
+  let root: string;
+  let storage: Storage;
+  let taskId: string;
+  const history = (...parts: string[]): string =>
+    join(root, '.board', 'tasks', taskId, 'history', ...parts);
+  const snapshot = { title: 'T', body: '', labels: [] };
+  const edit = {
+    source: 'edit' as const,
+    changed: [] as ('body' | 'title' | 'labels')[],
+    snapshot,
+  };
+
+  beforeEach(async () => {
+    root = await tmpDir();
+    storage = markdownStorage({ root });
+    await storage.init();
+    taskId = (
+      await storage.createTask({ title: 'T', status: 'todo', rank: 'a0', body: '', labels: [] })
+    ).id;
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await cleanTmpDirs();
+  });
+
+  it('keeps a version in history/versions/<n>.json, next to nothing else of the task', async () => {
+    await storage.appendVersion(taskId, edit);
+    expect(await readdir(history('versions'))).toEqual(['1.json']);
+    const stored = JSON.parse(await readFile(history('versions', '1.json'), 'utf8')) as unknown;
+    expect(stored).toMatchObject({ taskId, number: 1, source: 'edit', snapshot });
+  });
+
+  it('reports a version it cannot read, leaves it out, and never writes over it (INVARIANT)', async () => {
+    await storage.appendVersion(taskId, edit);
+    await storage.appendVersion(taskId, edit);
+    await writeFile(history('versions', '2.json'), '{ not json', 'utf8');
+
+    expect((await storage.listVersions(taskId)).map((v) => v.number)).toEqual([1]);
+    expect(await storage.readIssues()).toEqual([
+      expect.objectContaining({ file: `tasks/${taskId}/history/versions/2.json` }),
+    ]);
+
+    // The broken file still counts: the next number is 3, and 2 is not touched.
+    expect((await storage.appendVersion(taskId, edit)).number).toBe(3);
+    expect(await readFile(history('versions', '2.json'), 'utf8')).toBe('{ not json');
+  });
+
+  it('reports a record of the wrong shape, and a file that holds another number', async () => {
+    await storage.appendVersion(taskId, edit);
+    await writeFile(history('versions', '1.json'), JSON.stringify({ number: 1 }), 'utf8');
+    expect(await storage.listVersions(taskId)).toEqual([]);
+    expect((await storage.readIssues()).map((issue) => issue.file)).toEqual([
+      `tasks/${taskId}/history/versions/1.json`,
+    ]);
+  });
+
+  it('does not count an unreadable check, but does not reuse its number either', async () => {
+    const sessionId = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+    await storage.appendVersion(taskId, edit);
+    await storage.beginCheck(taskId, { version: 1, agent: 'a', sessionId, repo: null });
+    await writeFile(history('checks', '1.begin.json'), 'nope', 'utf8');
+
+    expect(await storage.listChecks(taskId)).toEqual([]);
+    expect(await storage.readCheck(taskId, 1)).toBeNull();
+    expect((await storage.readIssues()).map((issue) => issue.file)).toEqual([
+      `tasks/${taskId}/history/checks/1.begin.json`,
+    ]);
+    expect(
+      (await storage.beginCheck(taskId, { version: 1, agent: 'a', sessionId, repo: null })).number,
+    ).toBe(2);
+    expect(await readFile(history('checks', '1.begin.json'), 'utf8')).toBe('nope');
+  });
+
+  it('reports an unreadable decision, and a report that is not valid', async () => {
+    const sessionId = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+    await storage.appendVersion(taskId, edit);
+    const { number } = await storage.beginCheck(taskId, {
+      version: 1,
+      agent: 'a',
+      sessionId,
+      repo: null,
+    });
+    await storage.appendDecision(taskId, number, { recommendation: 'r', decision: 'accepted' });
+    await writeFile(history('checks', `${number}.decisions`, '1.json'), '[]', 'utf8');
+    await writeFile(history('checks', `${number}.report.json`), '{}', 'utf8');
+
+    const files = (await storage.readIssues()).map((issue) => issue.file).sort();
+    expect(files).toEqual([
+      `tasks/${taskId}/history/checks/${number}.decisions/1.json`,
+      `tasks/${taskId}/history/checks/${number}.report.json`,
+    ]);
+    // A report file that exists, valid or not, is a report that was taken: no second one.
+    await expect(
+      storage.writeCheckReport(taskId, number, {
+        agent: 'a',
+        verdict: 'current',
+        summary: 's',
+        findings: [],
+        recommendations: [],
+        version: 1,
+        repo: null,
+      }),
+    ).rejects.toMatchObject({ code: 'CHECK_ALREADY_FINAL' });
+    expect(await readFile(history('checks', `${number}.report.json`), 'utf8')).toBe('{}');
+  });
+
+  it('removes the whole directory of the history with the task', async () => {
+    await storage.appendVersion(taskId, edit);
+    await storage.deleteTask(taskId);
+    await expect(readdir(join(root, '.board', 'tasks', taskId))).rejects.toThrow();
+  });
+
+  it('is not seen by an older board: the task file and the documents are where they were', async () => {
+    await storage.appendVersion(taskId, edit);
+    await storage.writeDocument(taskId, 'plan.md', '# Plan\n');
+    expect((await readdir(join(root, '.board', 'tasks', taskId))).sort()).toEqual([
+      'history',
+      'plan.md',
+      'task.md',
+    ]);
+  });
+});

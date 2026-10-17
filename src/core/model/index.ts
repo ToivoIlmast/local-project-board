@@ -1,6 +1,7 @@
 export * from './aiRun.js';
 export * from './document.js';
 export * from './git.js';
+export * from './history.js';
 export * from './language.js';
 export * from './project.js';
 export * from './report.js';

@@ -59,9 +59,11 @@ describe('GET /events', () => {
     await board.del(`${API}/reports/R1`).expect(200);
     await board.del(`${API}/tasks/${id}`).expect(200);
 
-    const events = await client.waitForEvents(8);
+    const events = await client.waitForEvents(9);
     expect(events.map((event) => event.type)).toEqual([
       'task.created',
+      // The new title is content: a version, announced before the task (ADR-0030 §8).
+      'version.created',
       'task.updated',
       'task.updated',
       'document.written',

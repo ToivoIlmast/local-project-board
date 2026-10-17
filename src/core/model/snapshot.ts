@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { documentNameSchema } from './document.js';
+import { checkSchema, taskVersionSchema } from './history.js';
 import { projectSchema } from './project.js';
 import { reportSchema } from './report.js';
 import { isoDateTimeSchema, taskIdSchema, taskSchema } from './task.js';
@@ -10,7 +11,7 @@ import { workflowOverridesSchema } from './workflow.js';
  * Not a persistence model: the source of truth is .board/ on disk.
  */
 export const boardSnapshotSchema = z.strictObject({
-  formatVersion: z.literal(2),
+  formatVersion: z.literal(3),
   exportedAt: isoDateTimeSchema,
   project: projectSchema.pick({ name: true, statuses: true, idPrefix: true }),
   /** Overrides of the board and its columns; the tasks carry their own (ADR-0028). */
@@ -20,6 +21,14 @@ export const boardSnapshotSchema = z.strictObject({
     z.strictObject({ taskId: taskIdSchema, name: documentNameSchema, content: z.string() }),
   ),
   reports: z.array(reportSchema.extend({ content: z.string() })),
+  /** The versions and the checks of every task, as they are stored (ADR-0030 §8). */
+  history: z.array(
+    z.strictObject({
+      taskId: taskIdSchema,
+      versions: z.array(taskVersionSchema),
+      checks: z.array(checkSchema),
+    }),
+  ),
 });
 
 export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>;

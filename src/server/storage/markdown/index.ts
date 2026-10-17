@@ -7,6 +7,7 @@ import { documentFormat, isDocumentName } from '../../../core/rules/documentName
 import { REPORT_ID_PREFIX, allocateId, isReportId, isTaskId } from '../../../core/rules/ids.js';
 import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
+import { historyFiles } from './history.js';
 import { parseTask, serializeTask } from './taskFile.js';
 import { parseWorkflow, serializeWorkflow } from './workflowFile.js';
 
@@ -57,6 +58,8 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
   }
 
   let watcher: AbortController | undefined;
+
+  const history = historyFiles({ taskDir: (id) => join(tasksDir, id), now });
 
   const taskDir = (id: string): string => join(tasksDir, requireTaskId(id));
 
@@ -186,6 +189,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
         if (result !== null && 'error' in result) {
           issues.push({ file: `tasks/${id}/${TASK_FILE}`, message: result.error });
         }
+        issues.push(...(await history.issues(id)));
       }
       const workflow = await readWorkflowFile();
       if (workflow !== null && 'error' in workflow) {
@@ -300,6 +304,63 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
             name,
           });
         }
+      });
+    },
+
+    // The history of a task: add and read, nothing else (ADR-0030). A write waits for the queue
+    // of the storage like every write, and needs the task to exist.
+    appendVersion(taskId, input) {
+      return exclusive(async () => {
+        await requireTask(taskId);
+        return history.appendVersion(taskId, input);
+      });
+    },
+
+    async listVersions(taskId) {
+      await requireTask(taskId);
+      return history.listVersions(taskId);
+    },
+
+    async readVersion(taskId, number) {
+      await requireTask(taskId);
+      return history.readVersion(taskId, number);
+    },
+
+    beginCheck(taskId, input) {
+      return exclusive(async () => {
+        await requireTask(taskId);
+        return history.beginCheck(taskId, input);
+      });
+    },
+
+    writeCheckReport(taskId, number, input) {
+      return exclusive(async () => {
+        await requireTask(taskId);
+        return history.writeCheckReport(taskId, number, input);
+      });
+    },
+
+    endCheck(taskId, number, input) {
+      return exclusive(async () => {
+        await requireTask(taskId);
+        return history.endCheck(taskId, number, input);
+      });
+    },
+
+    async listChecks(taskId) {
+      await requireTask(taskId);
+      return history.listChecks(taskId);
+    },
+
+    async readCheck(taskId, number) {
+      await requireTask(taskId);
+      return history.readCheck(taskId, number);
+    },
+
+    appendDecision(taskId, number, input) {
+      return exclusive(async () => {
+        await requireTask(taskId);
+        return history.appendDecision(taskId, number, input);
       });
     },
 

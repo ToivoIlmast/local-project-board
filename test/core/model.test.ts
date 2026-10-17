@@ -188,7 +188,7 @@ describe('workflowOverridesSchema', () => {
 
 describe('boardSnapshotSchema', () => {
   const snapshot = {
-    formatVersion: 2,
+    formatVersion: 3,
     exportedAt: task.createdAt,
     project: { name: 'dep-health', statuses: ['todo', 'done'], idPrefix: 'T' },
     workflow: { board: { push: false }, statuses: { todo: { editCode: false } } },
@@ -197,15 +197,36 @@ describe('boardSnapshotSchema', () => {
     reports: [
       { id: 'R1', title: 'Audit', format: 'html', createdAt: task.createdAt, content: '<p>x</p>' },
     ],
+    history: [
+      {
+        taskId: 'T1',
+        versions: [
+          {
+            taskId: 'T1',
+            number: 1,
+            createdAt: task.createdAt,
+            source: 'create',
+            changed: [],
+            snapshot: { title: task.title, body: task.body, labels: task.labels },
+          },
+        ],
+        checks: [],
+      },
+    ],
   };
 
   it('accepts a complete snapshot', () => {
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 
-  it('accepts only format version 2: the workflow settings changed the shape of version 1', () => {
+  it('accepts only format version 3: the history changed the shape of version 2', () => {
     expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 1 }).success).toBe(false);
-    expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 3 }).success).toBe(false);
+    expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 2 }).success).toBe(false);
+  });
+
+  it('carries the history of every task', () => {
+    const { history: _dropped, ...withoutHistory } = snapshot;
+    expect(boardSnapshotSchema.safeParse(withoutHistory).success).toBe(false);
   });
 
   it('carries the workflow overrides, and only overrides', () => {
