@@ -41,18 +41,29 @@ const LANGUAGE_OPTIONS: SelectOption[] = SUPPORTED_LANGUAGES.map((code) => ({
  * not be saved is not asked for: the session must never read a handoff in the old language.
  * Nothing is shown before the board said it (ADR-0025).
  */
-export function ClaudeCodeLaunch({ task, onClose, onDone }: TargetDialogProps) {
+export function ClaudeCodeLaunch({
+  task,
+  onClose,
+  onDone,
+  initialSession = 'new',
+}: TargetDialogProps & {
+  /** The session the dialog opens with; Resume of a failed run (T39) opens it on `resume`. */
+  initialSession?: 'new' | 'resume';
+}) {
   const { client, store } = useBoard();
   const formId = useId();
   const [model, setModel] = useState<ModelDraft>(() => initialModel(task.aiRun));
   const [language, setLanguage] = useState<SupportedLanguage | undefined>(undefined);
-  const [session, setSession] = useState<'new' | 'resume'>('new');
+  const [session, setSession] = useState<'new' | 'resume'>(initialSession);
   const read = useEffectiveWorkflow(task, true);
 
   const inEffect: SupportedLanguage | undefined =
     read.effective === undefined ? undefined : (read.effective.values.reportLanguage ?? 'en');
   const sent = chosenModel(model);
   const working = isWorking(task.aiRun);
+  const blocked = resumeBlocked(task.aiRun);
+  // A Resume that is no longer possible — the run went on while the dialog was open — is not sent.
+  const mode = session === 'resume' && blocked === undefined ? 'resume' : 'new';
 
   const start = useAsyncAction(async () => {
     if (sent === null || working) return;
@@ -61,7 +72,7 @@ export function ClaudeCodeLaunch({ task, onClose, onDone }: TargetDialogProps) {
         workflow: settingsRequest(setTaskLanguage(task.workflow ?? {}, language)),
       });
     }
-    await client.runTask(task.id, runRequest(sent));
+    await client.runTask(task.id, runRequest(sent, mode));
     onDone(L.started(task.id));
   });
 
@@ -145,17 +156,20 @@ export function ClaudeCodeLaunch({ task, onClose, onDone }: TargetDialogProps) {
           )}
         </Field>
 
-        <Field label={L.session.label} hint={L.session.blocked[resumeBlocked(task.aiRun)]}>
+        <Field
+          label={L.session.label}
+          hint={blocked === undefined ? L.session.available : L.session.blocked[blocked]}
+        >
           {(id, hintId) => (
             <Select
               id={id}
               aria-describedby={hintId}
               options={[
                 { value: 'new', label: L.session.new },
-                // Never possible yet: the request has no session to name before T36.
-                { value: 'resume', label: L.session.resume, disabled: true },
+                // The session itself is never sent: the runner reads it from the board.
+                { value: 'resume', label: L.session.resume, disabled: blocked !== undefined },
               ]}
-              value={session}
+              value={mode}
               onChange={(event) => setSession(event.target.value as 'new' | 'resume')}
             />
           )}

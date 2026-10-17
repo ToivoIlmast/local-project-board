@@ -58,10 +58,10 @@ describe('the AI run in the details of a task (T27 + T20)', () => {
     expect(value('Finished')).not.toBe('');
   });
 
-  it('says that it is the word of the agent, not something the board checked', async () => {
+  it('says of each field the agent wrote that it is the word of the agent (T39)', async () => {
     await openTask({ aiRun: finished });
 
-    expect(within(run() as HTMLElement).getByText(/reported by the agent/i)).toBeVisible();
+    expect(within(run() as HTMLElement).getAllByText(/reported by the agent/i)).toHaveLength(3);
   });
 
   it('shows only what was reported: a run that is still going has no checks and no end', async () => {
