@@ -65,6 +65,8 @@ function journalPath(root: string, taskId: string, runId: number): string {
  * could leave half-written, or only in a cache, would not be worth keeping.
  */
 export async function writeJournal(root: string, record: RunJournal): Promise<void> {
+  // As it always was: the directory exists before the record is judged.
+  await mkdir(journalDir(root), { recursive: true, mode: 0o700 });
   const text = `${JSON.stringify(runJournalSchema.parse(record), null, 2)}\n`;
   await writeDurably(root, `${record.taskId}-${record.runId}.json`, text);
 }
