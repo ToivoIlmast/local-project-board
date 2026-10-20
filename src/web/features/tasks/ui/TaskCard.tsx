@@ -88,6 +88,10 @@ export const TaskCard = memo(function TaskCard({
             title={`AI run: ${task.aiRun.state}`}
           >
             AI: {task.aiRun.state}
+            {task.aiRun.runId !== undefined &&
+            (task.aiRun.state === 'failed' || task.aiRun.state === 'needs-review')
+              ? ` #${task.aiRun.runId}`
+              : ''}
           </Badge>
         )}
         {hasOwnSettings(task.workflow) ? (

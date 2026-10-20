@@ -44,23 +44,34 @@ export function chosenModel(draft: ModelDraft): string | undefined | null {
   return claudeModelSchema.safeParse(draft.name).success ? draft.name : null;
 }
 
-/** The body of `POST /tasks/:id/run`: the agent, and the model only when one was chosen. */
-export function runRequest(model: string | undefined): RunTaskRequest {
-  return model === undefined ? { agent: 'claude-code' } : { agent: 'claude-code', model };
+/**
+ * The body of `POST /tasks/:id/run`: the agent, the model only when one was chosen, and the mode
+ * only when the session is continued or started over — a new session is asked for as it always
+ * was, with no word about it (T36, T37, T39).
+ */
+export function runRequest(model: string | undefined, mode: SessionMode = 'new'): RunTaskRequest {
+  return {
+    agent: 'claude-code',
+    ...(model === undefined ? {} : { model }),
+    ...(mode === 'new' ? {} : { mode }),
+  };
 }
+
+/** How the session of a start relates to the last one. */
+export type SessionMode = 'new' | 'resume' | 'restart';
 
 /** Whether nothing may be started now: Claude Code is still working on the task. */
 export const isWorking = (run: AiRun | undefined): boolean => run?.state === 'working';
 
-export type ResumeBlocked = 'noSession' | 'working' | 'notSupported';
+export type ResumeBlocked = 'noSession' | 'working';
 
 /**
- * Why the last session cannot be continued; never nothing yet, because the runner cannot resume
- * a session before T36. The reasons that depend on the task come first, so that what is said
- * stays true once it can.
+ * Why the last session cannot be continued, or nothing when it can. The reasons that depend on
+ * the task come first, so that what is said stays true: a run before the sessions of T31 has no
+ * session to name, and none can be continued while Claude Code is working in it.
  */
-export function resumeBlocked(run: AiRun | undefined): ResumeBlocked {
+export function resumeBlocked(run: AiRun | undefined): ResumeBlocked | undefined {
   if (run?.sessionId === undefined) return 'noSession';
   if (isWorking(run)) return 'working';
-  return 'notSupported';
+  return undefined;
 }

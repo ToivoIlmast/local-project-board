@@ -671,3 +671,18 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+
+/* The source of a field of the AI run, and the buttons that recover it: at most two. */
+.ai__source {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.ai__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}

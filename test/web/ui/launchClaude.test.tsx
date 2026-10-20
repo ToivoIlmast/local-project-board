@@ -207,11 +207,24 @@ describe('the session of the run (T38)', () => {
     expect(sessionHint()).toHaveAccessibleDescription(/no session/i);
   });
 
-  it('keeps Resume disabled while the runner cannot continue a session yet', async () => {
-    await openLaunch({ aiRun: aRun() });
+  it('offers Resume when there is a session of an earlier run, and sends mode resume', async () => {
+    const rendered = await openLaunch({ aiRun: aRun() });
 
-    expect(resume()).toBeDisabled();
-    expect(sessionHint()).toHaveAccessibleDescription(/cannot continue a session yet/i);
+    expect(resume()).toBeEnabled();
+    await rendered.user.selectOptions(within(dialog()).getByLabelText('Session'), 'resume');
+    await rendered.user.click(start());
+
+    await within(details()).findByText(STARTING);
+    expect(rendered.board.runs).toEqual([{ taskId: 'T1', agent: 'claude-code', mode: 'resume' }]);
+  });
+
+  it('sends no mode for a new session, as it was before Resume (INVARIANT)', async () => {
+    const rendered = await openLaunch({ aiRun: aRun() });
+
+    await rendered.user.click(start());
+
+    await within(details()).findByText(STARTING);
+    expect(Object.keys(rendered.board.runs[0] ?? {})).not.toContain('mode');
   });
 
   it('cannot start while Claude Code is working on the task, and says why', async () => {

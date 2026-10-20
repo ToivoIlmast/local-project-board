@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 95313178ceac0202ee1ca3cf5e548a23f657a703 -->
+<!-- Based on README.md @ 5941654ed6c3736ab44f7b243863ecf8638d1c04 -->
 
 # local-project-board
 
@@ -202,9 +202,18 @@ Bra att veta:
 - **Skicka till AI → Claude Code** öppnar först en liten dialog med tre kontroller: modellen
   (Claude Codes standard, ett alias eller ett annat fullständigt namn; den förra körningens modell
   om den hade en), rapportens språk och sessionen. Språket är en inställning för uppgiften: en
-  ändring sparas på uppgiften före starten, och kan den inte sparas startar ingenting. Sessionen är
-  tills vidare en ny: att fortsätta den förra (Resume) visas, men är avstängt tills väntaren kan
-  göra det. Lämnad som den öppnas startar dialogen exakt det som klicket startade före den.
+  ändring sparas på uppgiften före starten, och kan den inte sparas startar ingenting. Sessionen är en
+  ny, eller — när den förra körningen lämnade en session — Resume, som fortsätter den. Lämnad som
+  den öppnas startar dialogen exakt det som klicket startade före den.
+- Blocket **AI run** på en uppgift berättar sessionens livscykel: försöket (`#runId`), tillståndet,
+  modellen och läget (mode), som löparen skrev, samt agenten, kontrollerna och commiten, som agenten
+  rapporterade och som blocket märker som sådana. En körning som misslyckats säger varför i ord
+  (startade inte, slutade utan slutrapport med sin kod, agentens eget meddelande eller förlorad).
+  För en körning som är `failed` eller `needs-review` finns två knappar: **Resume** öppnar dialogen
+  ovan med den körningens session, och **Restart** frågar först — den gamla grenen byter namn till
+  `…-attempt-N`, inget raderas — och startar sedan om arbetet i en ny session. Ingen av dem finns
+  medan Claude Code arbetar, och en körning från före sessionerna har ingen Resume. Blocket kopierar
+  också `claude --resume <session>` för att fortsätta för hand. Kortet visar `AI: failed #N`.
 - Claude måste göra HTTP-anrop till `127.0.0.1` — den använder `curl` via sitt Bash-verktyg — och
   Claude Code frågar som standard om lov för det. Tillåt `Bash(curl *)` för sessionen, eller i
   dina Claude Code-inställningar om du inte vill ha frågor.

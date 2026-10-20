@@ -21,10 +21,10 @@ export const LAUNCH_LABELS = {
     label: 'Session',
     new: 'New session',
     resume: 'Continue the last session (Resume)',
+    available: 'Resume continues the session of the last run; a new session starts afresh.',
     blocked: {
       noSession: 'Resume needs a session of an earlier run, and this task has no session yet.',
       working: 'Resume is not possible during a run.',
-      notSupported: 'The runner cannot continue a session yet; a new session is started.',
     } satisfies Record<ResumeBlocked, string>,
   },
   working: 'Claude Code is working on this task. Wait until the run ends before you start another.',
