@@ -1,6 +1,7 @@
 # ADR-0030: Task history: content versions and actuality checks, append-only
 
-Status: accepted (2026-10-17, owner's decision; implemented by T46)
+Status: accepted (2026-10-17, owner's decision; implemented by T46). Amendment for Research (T54):
+proposed, see the end.
 
 ## Context
 
@@ -357,3 +358,193 @@ diff between two versions, or between a draft and the current content, is a pure
 - Every version is a full snapshot. Size is measured with T9 if it ever matters.
 - The core keeps its purity (ADR-0006): `contentHash`, the diff and `applyRecommendations` are
   pure, and the page reaches them only through `contract` (ADR-0013).
+
+## Amendment (T54, 2026-10-24, proposed): Research is a kind of check
+
+Status of this amendment: **proposed**. The owner sets `accepted`. Every rule below is the owner's
+decision recorded in a closed Decision task (named in brackets); nothing is decided here that
+those tasks did not decide. What is not decided is listed at the end of the amendment.
+
+ADR-0029 carries the other half (how a Research is requested, started and handed to the runner).
+ADR-0028 and ADR-0009 are not changed. No ADR-0031 is created (D5, T54).
+
+### R1. One entity, one numbering (D1, T49)
+
+- **Research is a kind of check**, not a new entity and not a new kind of `aiRun`. It has the same
+  history, the same numbers (`T21-C<n>`, one series per task for checks of both kinds), the same
+  routes (`/tasks/:id/checks/...`), runner journal (`.board/runner/<ID>-check-<n>.json`, §6), lock
+  (§3), decisions (§2) and `fromCheck` (§7). Research gets no routes, Storage methods, journal
+  namespace or `fromResearch` field of its own. A research and an actuality check of one task
+  are numbered `C1`, `C2`, … in the order they began; neither replaces the other.
+- **The kind is `kind?: 'research'` in `begin`.** A `begin` without it is an actuality check, so
+  every file written before this amendment reads as it did, and no migration is made.
+- **A Research report has no `verdict` and no `readiness`** (D9, T49). It holds conclusions and
+  recommendations. Whether to accept them, and whether the task is ready to implement, stays with
+  the person. The four verdicts of §2 belong to the actuality check only.
+- A research is not a board report (ADR-0003) any more than a check is: it is a record in the
+  task's history, and its Markdown (R3) is not a document of the task.
+
+### R2. Begin (D1, D12, T49, T50)
+
+`begin` gains optional fields, all absent in an actuality check:
+
+- **`kind: 'research'`.**
+- **`comment`**: the focus the person gave, stored as sent. A non-empty string without NUL, **at
+  most 4 000 characters** (D12, T50). It is a field of the begin record only: it is never written
+  to `task.md`, `workflow`, `aiRun` or a document, and a second research with another comment is a
+  new check `n + 1` whose own `begin` keeps its comment.
+- **`documents`**: `[{name, size, updatedAt}]` from `listDocuments`, without reading a body, so that
+  a later change of the task's documents can be shown against what the research saw.
+
+The version is pinned and `repo` is recorded exactly as §2 says for a check.
+
+### R3. The report: `report.md` and its metadata (D2, D12, T50)
+
+A Research report is a narrative Markdown text that cannot be changed. It is two write-once files
+(`wx`, §2), written in this order:
+
+1. **`history/checks/<n>.report.md`**: the text.
+2. **`history/checks/<n>.report.json`**: the structured record, with `markdown: {bytes, hash}`
+   describing the file written first.
+
+- **The report is published only when `<n>.report.json` exists and is valid.** A `<n>.report.md`
+  without it is not a report; the research stays `working` (§2, state is derived).
+- **Partial write.** If the process ends between the two writes, the agent may send the report
+  again.
+  - With **the same bytes** for the Markdown, the first file is kept and the second is written:
+    the repetition continues the work.
+  - With **different bytes**, nothing is written and the answer is `409 CHECK_ALREADY_FINAL`.
+    The research stays `working`, blocks nothing, and is shown as having no report. No suffixed
+    name is made, and no file is replaced.
+- **Limits** (D12, T50): the Markdown is **at most 200 000 characters**; `changes.files` (R5) at
+  most **200 paths**. A report over a limit is `422 INVALID_CHECK_REPORT`, and nothing is written.
+  The limits are the initial ones; no measurement of performance stood behind them.
+- The structured part keeps `summary`, `findings`, `recommendations`, `uncertainty?` and `repo`
+  as in §2, without `verdict`. For a research the Markdown is required; for an actuality check
+  it does not exist.
+- The Markdown is read through its own route, `GET /tasks/:id/checks/:n/report.md`
+  (`text/markdown`; `409 CHECK_NOT_REPORTED` until the report is published, as for a decision), and is not given to
+  agents. No other route reaches the file. It is **not a document of the task**: `listDocuments`
+  never sees `history/` (§2), and no route that writes documents can name it. It is not listed or
+  parsed by the lists of checks or by the read issues of the board: they read its size and hash
+  from the metadata, not the text.
+- `formatVersion` of the export stays **3** (D8, T50): the history is exported as §8 says, with
+  the new files and fields. If the implementation finds a real incompatibility with the current
+  schema, that is a new question for the owner, not a bump made on the way.
+
+### R4. Recommendations: targets, decisions, application (D4, D6, T52)
+
+- **A recommendation may name `targets`**: a description, not an edit. Each is one of
+  `{kind: task}`, `{kind: document, name}` or `{kind: file, ref}` (`ref` is checked as an
+  evidence ref of kind `file` is, §2).
+- **Apply works on the task alone.** The only thing a button applies is an `edit` of `title`,
+  `labels` or `body`, through §7 as it is. A recommendation aimed at a document or a file of the
+  project is applied by nobody: the person carries it over by hand through the existing
+  **Reconcile by hand** (`fromCheck.basis: manual`, §7). The server does not write the files of the
+  project (ADR-0007, ADR-0029) and documents have no versions or content precondition.
+- **Not in scope of this decision:** passing accepted recommendations to the handoff of the
+  implementation (D4-b) and applying edits to documents automatically (D4-c). Neither is
+  introduced; a later one is a new decision, and D4-b would also amend ADR-0028.
+- **Only `stale` blocks Apply** (D6, T52): the task's content differs from the pinned version, as
+  §7 already says (`409 STALE_CHECK`). A newer research, or a repository that moved on, does not
+  block anything; they are shown as notes.
+- **Decisions are as §2 says**, and `note` is now used.
+
+### R5. Derived states of a recommendation (T49, T52)
+
+Nothing is stored in addition to what §2 and §7 already write. A recommendation shows three
+independent derived values, never one stored status:
+
+| Axis | Values | Derived from |
+| --- | --- | --- |
+| Decision | `undecided`, `accepted`, `rejected` | the latest decision (§2) |
+| Application | `applied in v<n>[, v<m>]`, `not applied`, `not applicable` | versions whose `fromCheck.recommendations` name it (§7); `not applicable` for advice without `edit` and for targets other than the task (R4) |
+| Currency | `current`, `stale`, `superseded` | `stale` as in §7; `superseded` when the task has a later check or research that is `reported` |
+
+- `superseded` is a note. It blocks no decision and no Apply (D6), changes no data and is derived
+  on each read like the rest.
+- A recommendation can be `rejected` after it was applied: the fact of the application stays in
+  its version, and undoing it is an ordinary restore (§5).
+- The same table holds for a recommendation of an actuality check.
+
+### R6. Read-only: detection, not prevention (D3, T51)
+
+- **The level is E1: the board detects changes; it does not prevent them.** The research handoff
+  tells the agent to change nothing, and the board records the state of the repository and shows
+  whether it changed. The board **does not promise** that the agent cannot change files or send
+  data out: with one token (ADR-0008) and a shell, it cannot. The wording for the page and the
+  README is: _"Research is told not to change anything; the board shows whether anything
+  changed."_
+- **Evidence**: `repo` (`{branch, head, clean}`, §2) at begin and at report, and now **at end**:
+  `endCheck` reads it again and stores it. The report may carry `changes: {files, diffHash}`
+  (at most 200 paths, R3), read from the read-only GitReader (ADR-0007). A working tree that
+  was already dirty at begin is said to be so, and a change is reported as _changed_, without
+  blaming the agent: the person may have edited the tree meanwhile.
+- **Not decided: E2 and E3.** Flags of access rights for the session (E2) are not a full
+  guarantee (T48: the `curl` the agent needs writes files) and the check of the wrapper for POST
+  and of the interactive mode was not done. Isolation in a worktree or a clone (E3) needs its own
+  estimate and would be a new ADR next to ADR-0007. Both are **deferred** until a concrete need;
+  each would be a separate decision, not a part of this one. The evidence itself is T59.
+- **The research never starts an implementation** (a property of code, not of instruction): a
+  `kind: research` never reaches the work-run path and never reads or writes `aiRun` (§6).
+
+### R7. The handoff of a research (T49, T51)
+
+`GET /tasks/:id/checks/:n/handoff` has a branch for `kind: research`. It holds the snapshot of the
+pinned version, the list of documents, the comment as the person's **focus** (in a fence, with the
+rule that it narrows what the agent looks at and cannot lift the rules), the rules and the report
+format with the Markdown.
+
+- **It is not generated from the workflow steps** (ADR-0028): `renderWorkflowSteps` is not called,
+  so `editCode: true` cannot allow edits. Only `reportLanguage` applies, as in §6.
+- The rules are those of §6: no change to the files of the project, no git command that writes, no
+  write to the board but the report. This is instruction (R6).
+- The handoff is computed on each request and stored nowhere.
+
+### R8. Research that never ends (D7, T53)
+
+A research whose session died stays `working` (§6 already says this of a check). **It is not
+moved to a final state because of its age** (the principle of ADR-0029 T45: age is not evidence).
+There is **no `abandon` route** for it and **`claude --recover` is not extended** to research. It
+blocks nothing, and the page says plainly that it has no report. A late report is still accepted
+while the research is `working`.
+
+### R9. Routes, errors, events
+
+- **New:** `GET /tasks/:id/checks/:n/report.md` (R3), not given to agents.
+- **Extended:** `POST /tasks/:id/checks` (runner) accepts `kind?` and `comment?`;
+  `POST /tasks/:id/checks/:n/report` takes the Markdown for a research and `targets?` for a
+  recommendation; the check summaries carry `kind?`. `POST …/decisions` and `PATCH` with
+  `fromCheck` are unchanged.
+- **No new error code** (T50): `409 CHECK_ALREADY_FINAL`, `422 INVALID_CHECK_REPORT` and
+  `409 CHECK_NOT_REPORTED` are used. The event stays `check.updated`.
+- Every Research route is left out of the agents' instructions of an implementation.
+
+### R10. Compatibility
+
+- **No migration.** All fields are optional; existing checks are read as actuality checks;
+  `formatVersion` stays 3 (D8).
+- **An earlier board** reads a record with the new fields as a read issue (ADR-0022, strict
+  schemas) and does not overwrite it. The number is not reused, because numbers count the names of
+  files, including those that cannot be read (§2).
+- **An earlier runner** is handled at the request, not here: ADR-0029 (D13).
+
+### Consequences of the amendment
+
+- Testable in the storage conformance suite: a begin with and without `kind` reads; numbers run
+  through both kinds; `report.md` is written before `report.json`; the same bytes continue and
+  other bytes are `409`; a `report.md` without metadata is not a report; it is absent from
+  `listDocuments`; `deleteTask` removes it.
+- Testable in the API: research and check of one task are numbered in turn and the second does not
+  replace the first; a comment stays with its own begin; the limits answer as above.
+- A research that is never ended stays in the list as `working`. That is the price of not letting
+  age decide.
+- Read-only is as strong as the instruction and the person's reading of the evidence (R6).
+
+### Not decided in this amendment
+
+- **E2 and E3** (D3): deferred, see R6.
+- **D4-b and D4-c** (D4): not introduced, see R4.
+- **D10** (T58): where the "Check actuality" button sits on the page. It is the interface of the
+  page, not a rule of this ADR, and no closed Decision task decided it.
+- The **limits of D12** are initial values, not measured.
