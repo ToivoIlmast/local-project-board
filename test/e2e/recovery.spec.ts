@@ -118,6 +118,9 @@ test('a runner killed mid-session: --recover sees claude alive, then lost once i
 
   const runner = startRunner(board.root, claude.bin, ['claude', 'T1']);
   await expect.poll(async () => (await journal(board.root, 'T1', 1))?.['child']).toBeDefined();
+  // The journal holds the child from the moment it is spawned; the fake writes its line only
+  // once node has started, so the log is waited for, not read at once.
+  await expect.poll(async () => (await calls(claude.log)).length).toBe(1);
   const [call] = await calls(claude.log);
   const sessionId = (await aiRun(board)).sessionId;
   expect(call?.argv.slice(0, 2)).toEqual(['--session-id', sessionId]);

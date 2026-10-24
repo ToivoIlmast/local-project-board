@@ -216,3 +216,62 @@ journal is dropped on `2xx`, `404` or `409`. `--recover` is not extended.
 The agent reads `GET /tasks/:id/checks/:n/handoff`, which pins one version of the task and
 forbids writes, and reports through `…/checks/:n/report`. A check never reads or writes `aiRun`.
 Details in ADR-0030 §6.
+
+## Amendment (T54, 2026-10-24, proposed): Research is a run of its own kind
+
+Status of this amendment: **proposed**; the owner sets `accepted`. The rules of what a Research is,
+how it is stored and what it promises about read-only are in ADR-0030 (amendment of T54); this one
+holds only how it is requested and started. The server still starts nothing. Each rule is the
+owner's decision in a closed Decision task (in brackets). No ADR-0031 is created (D5, T54).
+
+- **`POST /tasks/:id/run` gains `kind: 'research'`** beside `work` and `check` (D1, T49).
+  - **`comment?` is allowed only with `kind: 'research'`**; with another kind it is refused with
+    `400 INVALID_REQUEST`, as `mode` is for a check. It is a non-empty string without NUL of at
+    most **4 000 characters** (D12, T50); anything else is `400 INVALID_REQUEST` **before a runner
+    is asked**. A research takes no `mode`, or only `new`: it is always a new session.
+  - Like a check, a research is not refused while a work run is `working`, nor while another
+    check or research is. It never reads or writes `aiRun`, and it never reaches the path that
+    starts a work run.
+  - **`run.requested` carries `kind: 'research'` and `comment?`** only for a research; for `work`
+    and `check` the event is unchanged.
+- **The comment travels through the runner into `begin`, and never into `argv` or the environment
+  of `claude`.** The runner calls `POST /tasks/:id/checks` with `{agent, sessionId, model?, kind,
+  comment?}`, and the comment is stored in the begin record (ADR-0030 R2). The board keeps no
+  pending request between the click and the begin, so a restart of the board loses nothing it
+  held. The agent reads the comment from the handoff, as the person's focus that narrows what it
+  looks at and does not lift the rules.
+- **`researchPrompt(taskId, n, boardUrl)`** in `contract/v1`, beside `claudeCheckPrompt`, is the one
+  argument the runner gives `claude` for a research. Its **form is closed**: the checked task id,
+  the check number and the loopback address, and nothing else; no comment, no token, no free text.
+  The runner starts `claude [--model <m>] --session-id <uuid> <researchPrompt>` in the root of
+  the project, without a shell, in two elements for `--model` as in T35, and the prompt stays the
+  last argument. The comment is not escaped anywhere, because it reaches no command line.
+- **The CLI gains `local-project-board claude <ID> --research [--comment <text>]`.** The text goes
+  into the JSON body of `begin`. It is checked by the same rule as the route. The form of
+  `--comment-file` is **not** part of this decision.
+- **The runner's journal is the check journal** `.board/runner/<ID>-check-<n>.json` of T46, with
+  its isolation, retry and dropping rules unchanged. The journal records no comment. `claude
+  --recover` is **not extended** to research (D7, T53): a research whose runner died stays `working`
+  and is shown as having no report. No `abandon` route is added.
+- **A runner of another version is not left to lose the request (D13, T53).**
+  - The runner says which kinds it can start: **`GET /api/v1/runs?accepts=check,research`**,
+    a query parameter of closed form (a list of kinds from `check` and `research`). **Without
+    it the runner is taken to accept `work` only**, as every runner before this amendment does;
+    `work` is accepted by every runner.
+  - The board hands a request only to a waiting runner that accepts its `kind`. If there is
+    none, the answer is **`409 NO_AGENT_RUNNER`** with the plain instruction to update the runner
+    (the existing code; no new one), and nothing is changed on the board.
+  - There is **no acknowledgement** of the request by the runner: no ack route, and no wait of
+    the page for one. The request is handed to exactly one runner, as before.
+  - This closes the gap that exists today for `kind: 'check'` with a runner older than T46, whose
+    stream ends on an event it does not know.
+- **Flags of access rights are not passed.** "The board passes no flags to `claude`" stands except
+  for `--model` (T35) and `--session-id` (T31). The permission flags that were considered for a
+  read-only session (E2) are **deferred** (D3, T51); if chosen later, that is a separate decision
+  that amends this ADR for a research alone.
+- **Not given to agents:** the research routes and the `accepts` query are left out of the
+  instructions an agent of an implementation reads.
+
+What this costs: a runner of an earlier version has to be updated before the first research. What
+it does not change: the server has no module that can start a process, and a research does not
+touch the work-run lifecycle.
