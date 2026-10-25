@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import { BoardError } from '../../../core/errors.js';
@@ -23,13 +23,14 @@ import type {
   NewVersion,
   ReadIssue,
 } from '../../../core/ports.js';
-import { assembleCheck } from '../../../core/rules/history.js';
+import { assembleCheck, storedCheckReport } from '../../../core/rules/history.js';
 
 /**
  * The history of a task on disk (ADR-0030 §2), under `tasks/<id>/history/`:
  *
  *     versions/<n>.json
  *     checks/<n>.begin.json  <n>.report.json  <n>.end.json  <n>.decisions/<k>.json
+ *     checks/<n>.report.md   (a research only; written before its <n>.report.json, ADR-0030 R3)
  *
  * Every file is created once, exclusively (`wx`), and never rewritten or removed; there is no
  * function here that does either. A number is the highest one that exists plus one, counting a
@@ -45,6 +46,7 @@ export interface HistoryFiles {
   endCheck(taskId: string, number: number, input: NewCheckEnd): Promise<CheckEnd>;
   listChecks(taskId: string): Promise<Check[]>;
   readCheck(taskId: string, number: number): Promise<Check | null>;
+  readCheckMarkdown(taskId: string, number: number): Promise<string | null>;
   appendDecision(taskId: string, number: number, input: NewDecision): Promise<Decision>;
   /** What in the history of a task cannot be read, as files relative to the board directory. */
   issues(taskId: string): Promise<ReadIssue[]>;
@@ -64,6 +66,8 @@ export function historyFiles(options: {
     join(versionsDir(taskId), `${number}.json`);
   const checkFile = (taskId: string, number: number, part: 'begin' | 'report' | 'end'): string =>
     join(checksDir(taskId), `${number}.${part}.json`);
+  const markdownFile = (taskId: string, number: number): string =>
+    join(checksDir(taskId), `${number}.report.md`);
   const decisionsDir = (taskId: string, number: number): string =>
     join(checksDir(taskId), `${number}.decisions`);
 
@@ -129,6 +133,18 @@ export function historyFiles(options: {
         encoding: 'utf8',
         flag: 'wx',
       });
+      return 'created';
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'exists';
+      throw error;
+    }
+  }
+
+  /** Created once, byte for byte; an existing file is left as it is and `exists` is answered. */
+  async function createTextOnce(file: string, text: string): Promise<'created' | 'exists'> {
+    await mkdir(join(file, '..'), { recursive: true });
+    try {
+      await writeFile(file, text, { encoding: 'utf8', flag: 'wx' });
       return 'created';
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'exists';
@@ -234,6 +250,9 @@ export function historyFiles(options: {
         sessionId: input.sessionId,
         ...(input.model === undefined ? {} : { model: input.model }),
         repo: input.repo,
+        ...(input.kind === undefined ? {} : { kind: input.kind }),
+        ...(input.comment === undefined ? {} : { comment: input.comment }),
+        ...(input.documents === undefined ? {} : { documents: input.documents }),
       });
       if ((await createOnce(checkFile(taskId, number, 'begin'), begin)) === 'exists') {
         throw new Error(`Check ${number} of task ${taskId} exists already; it is not rewritten.`);
@@ -242,16 +261,24 @@ export function historyFiles(options: {
     },
 
     async writeCheckReport(taskId, number, input) {
-      await requireBegin(taskId, number);
+      const begin = await requireBegin(taskId, number);
       // A check that has a report or an end takes no report: it is no longer working.
       if (await exists(checkFile(taskId, number, 'end'))) throw alreadyFinal(taskId, number);
-      const { createdAt, ...content } = input;
-      const report = made(checkReportSchema, {
-        ...content,
-        taskId,
-        check: number,
-        createdAt: createdAt ?? options.now(),
+      const { report, markdown } = storedCheckReport(begin, {
+        ...input,
+        createdAt: input.createdAt ?? options.now(),
       });
+      if (markdown !== undefined) {
+        // The record decides whether there is a report; look before the text is touched.
+        if (await exists(checkFile(taskId, number, 'report'))) throw alreadyFinal(taskId, number);
+        // The text first (R3). One that is there already may be the half of an earlier try:
+        // the same bytes continue it, other bytes are refused and nothing is replaced.
+        const file = markdownFile(taskId, number);
+        if ((await createTextOnce(file, markdown)) === 'exists') {
+          const written = await readFile(file);
+          if (!written.equals(Buffer.from(markdown, 'utf8'))) throw alreadyFinal(taskId, number);
+        }
+      }
       if ((await createOnce(checkFile(taskId, number, 'report'), report)) === 'exists') {
         throw alreadyFinal(taskId, number);
       }
@@ -286,6 +313,18 @@ export function historyFiles(options: {
     },
 
     readCheck: (taskId, number) => readCheckOf(taskId, number),
+
+    async readCheckMarkdown(taskId, number) {
+      const report = await readRecord(checkFile(taskId, number, 'report'), checkReportSchema);
+      const described = report !== null && 'value' in report ? report.value.markdown : undefined;
+      if (described === undefined) return null;
+      try {
+        const text = await readFile(markdownFile(taskId, number), 'utf8');
+        return Buffer.byteLength(text, 'utf8') === described.bytes ? text : null;
+      } catch {
+        return null;
+      }
+    },
 
     async appendDecision(taskId, number, input) {
       await requireBegin(taskId, number);
@@ -336,7 +375,30 @@ export function historyFiles(options: {
         const match = /^(\d+)\.(begin|report|end)\.json$/.exec(name);
         if (match?.[2] === undefined) continue;
         const schema = parts[match[2] as keyof typeof parts];
-        note(relative('checks', name), await readRecord(join(checksDir(taskId), name), schema));
+        const read = await readRecord(join(checksDir(taskId), name), schema);
+        note(relative('checks', name), read);
+        // A record that describes a markdown vouches for a file by its size alone: the text is
+        // not read here. A markdown with no record is a half-written report, not an issue.
+        const described =
+          match[2] === 'report' && read !== null && 'value' in read
+            ? (read.value as CheckReport).markdown
+            : undefined;
+        if (described !== undefined) {
+          const file = `${match[1]}.report.md`;
+          const size = await stat(join(checksDir(taskId), file)).then(
+            (info) => info.size,
+            () => null,
+          );
+          if (size !== described.bytes) {
+            issues.push({
+              file: relative('checks', file),
+              message:
+                size === null
+                  ? 'The markdown named by its report is missing.'
+                  : `The markdown is ${size} bytes, its report says ${described.bytes}.`,
+            });
+          }
+        }
       }
       for (const name of await names(checksDir(taskId))) {
         const number = /^(\d+)\.decisions$/.exec(name)?.[1];

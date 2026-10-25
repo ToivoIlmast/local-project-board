@@ -41,6 +41,11 @@ runStorageConformance({
     stores.set(storage, store);
     return storage;
   },
+  strandMarkdown: async (storage, taskId, number, markdown) => {
+    const check = stores.get(storage)?.history.get(taskId)?.checks.get(number);
+    if (check === undefined) throw new Error('Unknown check');
+    check.markdown = markdown;
+  },
   cleanup: async () => {
     stores.clear();
   },

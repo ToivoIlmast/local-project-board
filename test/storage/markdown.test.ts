@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Storage } from '../../src/core/ports.js';
 import { parseTask, serializeTask } from '../../src/server/storage/markdown/taskFile.js';
@@ -28,6 +28,13 @@ runStorageConformance({
     const options = roots.get(previous);
     if (!options) throw new Error('Unknown storage instance');
     return create(options);
+  },
+  strandMarkdown: async (storage, taskId, number, markdown) => {
+    const options = roots.get(storage);
+    if (!options) throw new Error('Unknown storage instance');
+    const dir = join(options.root, '.board', 'tasks', taskId, 'history', 'checks');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, `${number}.report.md`), markdown, { encoding: 'utf8', flag: 'wx' });
   },
   cleanup: cleanTmpDirs,
 });
@@ -754,6 +761,157 @@ describe('markdown storage: the history of a task (ADR-0030)', () => {
       }),
     ).rejects.toMatchObject({ code: 'CHECK_ALREADY_FINAL' });
     expect(await readFile(history('checks', `${number}.report.json`), 'utf8')).toBe('{}');
+  });
+
+  describe('research files (ADR-0030 R3)', () => {
+    const sessionId = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+    const markdown = '# Research\n\nÜber alles.\n';
+    const research = {
+      agent: 'a',
+      summary: 's',
+      findings: [],
+      recommendations: [],
+      markdown,
+      version: 1,
+      repo: null,
+    };
+
+    async function written(): Promise<number> {
+      await storage.appendVersion(taskId, edit);
+      const { number } = await storage.beginCheck(taskId, {
+        version: 1,
+        agent: 'a',
+        sessionId,
+        repo: null,
+        kind: 'research',
+      });
+      await storage.writeCheckReport(taskId, number, research);
+      return number;
+    }
+
+    it('keeps the text byte for byte in <n>.report.md, and its size and hash in <n>.report.json', async () => {
+      const number = await written();
+      expect(await readdir(history('checks'))).toEqual([
+        `${number}.begin.json`,
+        `${number}.report.json`,
+        `${number}.report.md`,
+      ]);
+      expect(await readFile(history('checks', `${number}.report.md`), 'utf8')).toBe(markdown);
+      const record = JSON.parse(
+        await readFile(history('checks', `${number}.report.json`), 'utf8'),
+      ) as { markdown: { bytes: number }; summary: string };
+      expect(record.markdown.bytes).toBe(Buffer.byteLength(markdown, 'utf8'));
+      expect(record).not.toHaveProperty('verdict');
+    });
+
+    it('writes the markdown before the record, so a record never points at nothing', async () => {
+      const number = await written();
+      const [md, json] = await Promise.all([
+        stat(history('checks', `${number}.report.md`)),
+        stat(history('checks', `${number}.report.json`)),
+      ]);
+      expect(md.mtimeMs).toBeLessThanOrEqual(json.mtimeMs);
+    });
+
+    it('reports a record whose markdown is missing or is not the size it names, and keeps both files (INVARIANT)', async () => {
+      const number = await written();
+      const mdFile = history('checks', `${number}.report.md`);
+
+      await writeFile(mdFile, 'short', 'utf8');
+      expect((await storage.readIssues()).map((issue) => issue.file)).toEqual([
+        `tasks/${taskId}/history/checks/${number}.report.md`,
+      ]);
+      expect(await storage.readCheckMarkdown(taskId, number)).toBeNull();
+      await expect(storage.writeCheckReport(taskId, number, research)).rejects.toMatchObject({
+        code: 'CHECK_ALREADY_FINAL',
+      });
+      expect(await readFile(mdFile, 'utf8')).toBe('short');
+
+      await rm(mdFile);
+      expect((await storage.readIssues()).map((issue) => issue.file)).toEqual([
+        `tasks/${taskId}/history/checks/${number}.report.md`,
+      ]);
+    });
+
+    it('does not call a markdown without a record an issue, and does not take its number for another check', async () => {
+      await storage.appendVersion(taskId, edit);
+      const { number } = await storage.beginCheck(taskId, {
+        version: 1,
+        agent: 'a',
+        sessionId,
+        repo: null,
+        kind: 'research',
+      });
+      await writeFile(history('checks', `${number}.report.md`), markdown, 'utf8');
+      expect(await storage.readIssues()).toEqual([]);
+      expect(
+        (await storage.beginCheck(taskId, { version: 1, agent: 'a', sessionId, repo: null }))
+          .number,
+      ).toBe(number + 1);
+    });
+
+    it('reports a report record that is broken, and a begin with a field it does not know', async () => {
+      const number = await written();
+      await writeFile(history('checks', `${number}.report.json`), '{ "markdown": 1 }', 'utf8');
+      await writeFile(
+        history('checks', '2.begin.json'),
+        JSON.stringify({ kind: 'review', number: 2 }),
+        'utf8',
+      );
+      expect((await storage.readIssues()).map((issue) => issue.file).sort()).toEqual([
+        `tasks/${taskId}/history/checks/${number}.report.json`,
+        `tasks/${taskId}/history/checks/2.begin.json`,
+      ]);
+      expect(
+        (await storage.beginCheck(taskId, { version: 1, agent: 'a', sessionId, repo: null }))
+          .number,
+      ).toBe(3);
+    });
+
+    it('reads a check written before research existed, as an actuality check (INVARIANT)', async () => {
+      await storage.appendVersion(taskId, edit);
+      await mkdir(history('checks'), { recursive: true });
+      const begin = {
+        taskId,
+        number: 1,
+        version: 1,
+        createdAt: '2026-10-18T10:00:00.000Z',
+        agent: 'claude-code',
+        sessionId,
+        model: 'opus',
+        repo: { branch: 'task/T21', head: '9f1c1a2b3c4d', clean: true },
+      };
+      const report = {
+        taskId,
+        check: 1,
+        version: 1,
+        createdAt: '2026-10-18T10:05:00.000Z',
+        agent: 'claude-code',
+        verdict: 'partly-outdated',
+        summary: 'Mostly fine.',
+        findings: [
+          {
+            id: 'f1',
+            title: 'Moved',
+            explanation: 'The file moved.',
+            evidence: [{ kind: 'file', ref: 'src/a.ts' }],
+          },
+        ],
+        recommendations: [
+          { id: 'r1', findings: ['f1'], text: 'Fix it.', edit: { field: 'title', value: 'New' } },
+        ],
+        repo: { branch: 'task/T21', head: '9f1c1a2b3c4d', clean: true },
+      };
+      await writeFile(history('checks', '1.begin.json'), `${JSON.stringify(begin, null, 2)}\n`);
+      await writeFile(history('checks', '1.report.json'), `${JSON.stringify(report, null, 2)}\n`);
+
+      const check = await storage.readCheck(taskId, 1);
+      expect(check?.state).toBe('reported');
+      expect(check?.begin).toEqual(begin);
+      expect(check?.report).toEqual(report);
+      expect(await storage.readIssues()).toEqual([]);
+      expect(await storage.readCheckMarkdown(taskId, 1)).toBeNull();
+    });
   });
 
   it('removes the whole directory of the history with the task', async () => {

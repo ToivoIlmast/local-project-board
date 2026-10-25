@@ -13,6 +13,11 @@ export interface StorageHarness {
   /** A new provider instance over the same store: the persistence check. */
   reopen(storage: Storage): Promise<Storage>;
   cleanup?(): Promise<void>;
+  /**
+   * Leaves a research with its `report.md` written and no record after it: the process ended
+   * between the two writes (ADR-0030 R3). Only the provider knows what that looks like.
+   */
+  strandMarkdown(storage: Storage, taskId: string, number: number, markdown: string): Promise<void>;
 }
 
 const newTask = (over: Partial<NewTask> = {}): NewTask => ({
@@ -683,6 +688,216 @@ export function runStorageConformance(harness: StorageHarness): void {
         expect(next).not.toBe(taskId);
         expect(await storage.listVersions(next)).toEqual([]);
         expect(await storage.listChecks(next)).toEqual([]);
+      });
+
+      describe('research (ADR-0030 R1–R3)', () => {
+        const researchContent = (over: object = {}) => ({
+          agent: 'claude-code',
+          summary: 'Clear.',
+          findings: [],
+          recommendations: [
+            {
+              id: 'r1',
+              findings: [],
+              text: 'Mention the API.',
+              targets: [{ kind: 'file' as const, ref: 'src/api.ts' }],
+            },
+          ],
+          markdown: '# Research\n\nThe API is stable. Ünï\n',
+          version: 1,
+          repo: null,
+          ...over,
+        });
+
+        async function beginResearch(over: object = {}): Promise<number> {
+          return (
+            await storage.beginCheck(taskId, {
+              version: 1,
+              agent: 'claude-code',
+              sessionId: SESSION,
+              repo: null,
+              kind: 'research',
+              comment: 'Focus on the API.',
+              documents: [{ name: 'plan.md', size: 7, updatedAt: '2026-10-24T10:00:00.000Z' }],
+              ...over,
+            })
+          ).number;
+        }
+
+        it('keeps kind, comment and documents on the begin, and reads a begin without them as before', async () => {
+          await begun();
+          const number = await beginResearch();
+          expect((await storage.readCheck(taskId, number))?.begin).toMatchObject({
+            kind: 'research',
+            comment: 'Focus on the API.',
+            documents: [{ name: 'plan.md', size: 7, updatedAt: '2026-10-24T10:00:00.000Z' }],
+          });
+          const first = (await storage.readCheck(taskId, 1))?.begin;
+          expect(first).not.toHaveProperty('kind');
+          expect(first).not.toHaveProperty('comment');
+          expect(first).not.toHaveProperty('documents');
+        });
+
+        it('numbers research and actuality checks of one task in one series; #1 is the same after #2 (INVARIANT)', async () => {
+          await begun();
+          await storage.writeCheckReport(taskId, 1, reportContent());
+          const before = await storage.readCheck(taskId, 1);
+          const second = await beginResearch();
+          await storage.writeCheckReport(taskId, second, researchContent());
+          const third = await beginResearch({ comment: 'Another focus.' });
+
+          expect([second, third]).toEqual([2, 3]);
+          expect(await storage.readCheck(taskId, 1)).toEqual(before);
+          expect((await storage.listChecks(taskId)).map((c) => c.begin.number)).toEqual([1, 2, 3]);
+          expect((await storage.readCheck(taskId, 3))?.begin.comment).toBe('Another focus.');
+          expect((await storage.readCheck(taskId, 2))?.begin.comment).toBe('Focus on the API.');
+
+          const reopened = await reopen(storage);
+          expect(await reopened.readCheck(taskId, 1)).toEqual(before);
+          expect(await reopened.readCheck(taskId, 2)).toEqual(await storage.readCheck(taskId, 2));
+        });
+
+        it('keeps the markdown of research #1 byte for byte after research #2 is written (INVARIANT)', async () => {
+          const first = await beginResearch();
+          const firstContent = researchContent({ markdown: '# First\n\nOne.\n' });
+          await storage.writeCheckReport(taskId, first, firstContent);
+          const before = await storage.readCheck(taskId, first);
+
+          const second = await beginResearch({ comment: 'Another focus.' });
+          await storage.writeCheckReport(
+            taskId,
+            second,
+            researchContent({ markdown: '# Second\n\nTwo.\n' }),
+          );
+
+          expect(await storage.readCheck(taskId, first)).toEqual(before);
+          expect(await storage.readCheckMarkdown(taskId, first)).toBe(firstContent.markdown);
+          expect(await storage.readCheckMarkdown(taskId, second)).toBe('# Second\n\nTwo.\n');
+        });
+
+        it('stores the markdown apart from the record, which holds its size and hash only', async () => {
+          const number = await beginResearch();
+          const content = researchContent();
+          const report = await storage.writeCheckReport(taskId, number, content);
+          expect(report).not.toHaveProperty('verdict');
+          expect(report).not.toHaveProperty('markdown', content.markdown);
+          expect(report.markdown?.bytes).toBe(Buffer.byteLength(content.markdown, 'utf8'));
+          expect(report.markdown?.hash).toMatch(/^[0-9a-f]{16}$/);
+          expect(report.recommendations).toEqual(content.recommendations);
+          expect(await storage.readCheckMarkdown(taskId, number)).toBe(content.markdown);
+          expect((await storage.readCheck(taskId, number))?.state).toBe('reported');
+          expect((await storage.listChecks(taskId))[0]?.report).toEqual(report);
+        });
+
+        it('takes the markdown once: a second report is refused and the text stays (INVARIANT)', async () => {
+          const number = await beginResearch();
+          await storage.writeCheckReport(taskId, number, researchContent());
+          const stored = await storage.readCheck(taskId, number);
+
+          await expectCode(
+            storage.writeCheckReport(taskId, number, researchContent({ markdown: '# Other\n' })),
+            'CHECK_ALREADY_FINAL',
+          );
+          await expectCode(
+            storage.writeCheckReport(taskId, number, researchContent()),
+            'CHECK_ALREADY_FINAL',
+          );
+          expect(await storage.readCheckMarkdown(taskId, number)).toBe(researchContent().markdown);
+          expect(await storage.readCheck(taskId, number)).toEqual(stored);
+        });
+
+        it('does not publish a markdown that has no record: the research stays working', async () => {
+          const number = await beginResearch();
+          await harness.strandMarkdown(storage, taskId, number, '# Half\n');
+          expect((await storage.readCheck(taskId, number))?.state).toBe('working');
+          expect((await storage.readCheck(taskId, number))?.report).toBeUndefined();
+          expect(await storage.readCheckMarkdown(taskId, number)).toBeNull();
+          expect(await storage.readIssues()).toEqual([]);
+        });
+
+        it('finishes a half-written report when the same bytes come again (INVARIANT)', async () => {
+          const number = await beginResearch();
+          await harness.strandMarkdown(storage, taskId, number, researchContent().markdown);
+
+          const report = await storage.writeCheckReport(taskId, number, researchContent());
+          expect(report.markdown?.bytes).toBe(Buffer.byteLength(researchContent().markdown));
+          expect((await storage.readCheck(taskId, number))?.state).toBe('reported');
+          expect(await storage.readCheckMarkdown(taskId, number)).toBe(researchContent().markdown);
+        });
+
+        it('refuses other bytes after a half-written report, writes nothing, and a later repeat still finishes (INVARIANT)', async () => {
+          const number = await beginResearch();
+          await harness.strandMarkdown(storage, taskId, number, '# First\n');
+
+          await expectCode(
+            storage.writeCheckReport(taskId, number, researchContent({ markdown: '# Second\n' })),
+            'CHECK_ALREADY_FINAL',
+          );
+          const state = await storage.readCheck(taskId, number);
+          expect(state?.state).toBe('working');
+          expect(state?.report).toBeUndefined();
+          expect(await storage.readCheckMarkdown(taskId, number)).toBeNull();
+
+          await storage.writeCheckReport(
+            taskId,
+            number,
+            researchContent({ markdown: '# First\n' }),
+          );
+          expect(await storage.readCheckMarkdown(taskId, number)).toBe('# First\n');
+        });
+
+        it('refuses a report of the wrong kind and an oversized one, and writes nothing', async () => {
+          await begun();
+          const research = await beginResearch();
+          await expectCode(
+            storage.writeCheckReport(taskId, 1, researchContent()),
+            'INVALID_CHECK_REPORT',
+          );
+          await expectCode(
+            storage.writeCheckReport(taskId, research, reportContent()),
+            'INVALID_CHECK_REPORT',
+          );
+          await expectCode(
+            storage.writeCheckReport(
+              taskId,
+              research,
+              researchContent({ markdown: 'x'.repeat(200_001) }),
+            ),
+            'INVALID_CHECK_REPORT',
+          );
+          expect((await storage.readCheck(taskId, 1))?.state).toBe('working');
+          expect((await storage.readCheck(taskId, research))?.state).toBe('working');
+          // Nothing was left behind by the refusals: the same text can still be written.
+          await storage.writeCheckReport(taskId, research, researchContent());
+          expect(await storage.readCheckMarkdown(taskId, research)).toBe(
+            researchContent().markdown,
+          );
+        });
+
+        it('has no markdown to read for an actuality check or a check that does not exist', async () => {
+          const number = await begun();
+          await storage.writeCheckReport(taskId, number, reportContent());
+          expect(await storage.readCheckMarkdown(taskId, number)).toBeNull();
+          expect(await storage.readCheckMarkdown(taskId, 99)).toBeNull();
+        });
+
+        it('does not show the report as a document of the task (INVARIANT)', async () => {
+          const number = await beginResearch();
+          await storage.writeCheckReport(taskId, number, researchContent());
+          await storage.writeDocument(taskId, 'plan.md', '# Plan\n');
+          expect((await storage.listDocuments(taskId)).map((d) => d.name)).toEqual(['plan.md']);
+          expect(await storage.readDocument(taskId, 'report.md')).toBeNull();
+        });
+
+        it('deletes the research with the task, markdown included (INVARIANT)', async () => {
+          const number = await beginResearch();
+          await storage.writeCheckReport(taskId, number, researchContent());
+          await storage.deleteTask(taskId);
+          await expectCode(storage.listChecks(taskId), 'TASK_NOT_FOUND');
+          const next = (await storage.createTask(newTask())).id;
+          expect(await storage.listChecks(next)).toEqual([]);
+          expect(await storage.readCheckMarkdown(next, number)).toBeNull();
+        });
       });
     });
   });

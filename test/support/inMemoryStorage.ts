@@ -12,7 +12,7 @@ import type {
 } from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
-import { assembleCheck } from '../../src/core/rules/history.js';
+import { assembleCheck, storedCheckReport } from '../../src/core/rules/history.js';
 import { REPORT_ID_PREFIX, allocateId } from '../../src/core/rules/ids.js';
 
 /**
@@ -34,7 +34,14 @@ export interface MemoryHistory {
   versions: TaskVersion[];
   checks: Map<
     number,
-    { begin: CheckBegin; report?: CheckReport; end?: CheckEnd; decisions: Decision[] }
+    {
+      begin: CheckBegin;
+      report?: CheckReport;
+      end?: CheckEnd;
+      decisions: Decision[];
+      /** The report.md of a research: written before its record, so it can be there alone. */
+      markdown?: string;
+    }
   >;
 }
 
@@ -203,21 +210,30 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         sessionId: input.sessionId,
         ...(input.model === undefined ? {} : { model: input.model }),
         repo: input.repo,
+        ...(input.kind === undefined ? {} : { kind: input.kind }),
+        ...(input.comment === undefined ? {} : { comment: input.comment }),
+        ...(input.documents === undefined ? {} : { documents: input.documents }),
       };
       history.checks.set(number, { begin, decisions: [] });
       return structuredClone(begin);
     },
     writeCheckReport: async (taskId, number, input) => {
       const check = requireCheckRecord(taskId, number);
-      if (check.report !== undefined || check.end !== undefined) throw alreadyFinal(taskId, number);
-      const { createdAt, ...content } = input;
-      check.report = structuredClone({
-        ...content,
-        taskId,
-        check: number,
-        createdAt: createdAt ?? now(),
+      if (check.end !== undefined) throw alreadyFinal(taskId, number);
+      const { report, markdown } = storedCheckReport(check.begin, {
+        ...input,
+        createdAt: input.createdAt ?? now(),
       });
-      return structuredClone(check.report);
+      if (markdown !== undefined) {
+        if (check.report !== undefined) throw alreadyFinal(taskId, number);
+        if (check.markdown !== undefined && check.markdown !== markdown) {
+          throw alreadyFinal(taskId, number);
+        }
+        check.markdown = markdown;
+      }
+      if (check.report !== undefined) throw alreadyFinal(taskId, number);
+      check.report = structuredClone(report);
+      return structuredClone(report);
     },
     endCheck: async (taskId, number, input) => {
       const check = requireCheckRecord(taskId, number);
@@ -238,6 +254,10 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     readCheck: async (taskId, number) => {
       const check = historyOf(taskId).checks.get(number);
       return check === undefined ? null : assembleCheck(structuredClone(check));
+    },
+    readCheckMarkdown: async (taskId, number) => {
+      const check = historyOf(taskId).checks.get(number);
+      return check?.report?.markdown === undefined ? null : (check.markdown ?? null);
     },
     appendDecision: async (taskId, number, input) => {
       const check = requireCheckRecord(taskId, number);

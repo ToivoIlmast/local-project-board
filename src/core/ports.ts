@@ -5,6 +5,7 @@ import type {
   CheckBegin,
   CheckEnd,
   CheckReport,
+  CheckReportContent,
   Decision,
   DocumentMeta,
   GitBranch,
@@ -12,6 +13,8 @@ import type {
   GitDiff,
   GitStatus,
   Report,
+  RepoState,
+  ResearchReportContent,
   Task,
   TaskVersion,
   TaskWorkflowOverrides,
@@ -56,7 +59,14 @@ export type NewCheckBegin = Omit<CheckBegin, 'taskId' | 'number' | 'createdAt'> 
   createdAt?: string | undefined;
 };
 
-export type NewCheckReport = Omit<CheckReport, 'taskId' | 'check' | 'createdAt'> & {
+/**
+ * A report as the caller describes it: an actuality check's has a `verdict`, a research's has
+ * its `markdown` as text. The provider stores the text in a file of its own and keeps its size
+ * and hash in the record (ADR-0030 R3).
+ */
+export type NewCheckReport = (CheckReportContent | ResearchReportContent) & {
+  version: number;
+  repo: RepoState;
   createdAt?: string | undefined;
 };
 
@@ -128,12 +138,22 @@ export interface Storage {
   listVersions(taskId: string): Promise<TaskVersion[]>;
   readVersion(taskId: string, number: number): Promise<TaskVersion | null>;
   beginCheck(taskId: string, input: NewCheckBegin): Promise<CheckBegin>;
-  /** Refuses with `CHECK_NOT_FOUND`, or `CHECK_ALREADY_FINAL` when it has a report or an end. */
+  /**
+   * Refuses with `CHECK_NOT_FOUND`, or `CHECK_ALREADY_FINAL` when it has a report or an end, or,
+   * for a research, when a markdown of other bytes was written already. A report of the other
+   * kind, or one over a limit, is `INVALID_CHECK_REPORT` and writes nothing.
+   */
   writeCheckReport(taskId: string, number: number, input: NewCheckReport): Promise<CheckReport>;
   /** Refuses with `CHECK_NOT_FOUND`, or `CHECK_ALREADY_FINAL` when it has an end already. */
   endCheck(taskId: string, number: number, input: NewCheckEnd): Promise<CheckEnd>;
   listChecks(taskId: string): Promise<Check[]>;
   readCheck(taskId: string, number: number): Promise<Check | null>;
+  /**
+   * The markdown of a research report, exactly as written; null when the check does not exist,
+   * has no published report with a markdown, or the file is not the one the record describes.
+   * A markdown without its record is not a report (ADR-0030 R3).
+   */
+  readCheckMarkdown(taskId: string, number: number): Promise<string | null>;
   /** Refuses with `CHECK_NOT_FOUND`; whether it may be decided on is the caller's rule. */
   appendDecision(taskId: string, number: number, input: NewDecision): Promise<Decision>;
 

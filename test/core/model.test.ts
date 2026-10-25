@@ -1,5 +1,10 @@
 import {
   boardSnapshotSchema,
+  checkBeginSchema,
+  checkReportSchema,
+  recommendationSchema,
+  researchReportContentSchema,
+  RESEARCH_MARKDOWN_MAX_LENGTH,
   documentMetaSchema,
   projectSchema,
   reportSchema,
@@ -355,5 +360,144 @@ describe('commitLanguage (T43)', () => {
   it('is a key of the settings a task runs with, and null by default', () => {
     expect(workflowSettingsSchema.shape).toHaveProperty('commitLanguage');
     expect(workflowSettingsSchema.shape.commitLanguage.safeParse('xx').success).toBe(false);
+  });
+});
+
+describe('research in the history of a task (ADR-0030 R1–R4)', () => {
+  const at = '2026-10-24T10:00:00.000Z';
+  const begin = {
+    taskId: 'T1',
+    number: 1,
+    version: 1,
+    createdAt: at,
+    agent: 'claude-code',
+    sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+    repo: null,
+  };
+  const research = {
+    agent: 'claude-code',
+    summary: 'The task is clear.',
+    findings: [],
+    recommendations: [],
+    markdown: '# Research\n',
+  };
+  const storedReport = {
+    taskId: 'T1',
+    check: 1,
+    version: 1,
+    createdAt: at,
+    agent: 'claude-code',
+    summary: 'The task is clear.',
+    findings: [],
+    recommendations: [],
+    repo: null,
+  };
+
+  it('reads a begin without kind as an actuality check: files written before stay valid (INVARIANT)', () => {
+    const parsed = checkBeginSchema.parse(begin);
+    expect(parsed).toEqual(begin);
+    expect(parsed).not.toHaveProperty('kind');
+  });
+
+  it('takes kind, comment and documents on a research begin, and only there', () => {
+    const documents = [{ name: 'plan.md', size: 12, updatedAt: at }];
+    const full = { ...begin, kind: 'research', comment: 'Look at the API.', documents };
+    expect(checkBeginSchema.parse(full)).toEqual(full);
+
+    expect(checkBeginSchema.safeParse({ ...begin, comment: 'x' }).success).toBe(false);
+    expect(checkBeginSchema.safeParse({ ...begin, documents }).success).toBe(false);
+    expect(checkBeginSchema.safeParse({ ...begin, kind: 'work' }).success).toBe(false);
+  });
+
+  it('limits the comment: not empty, no NUL, at most 4 000 characters (D12)', () => {
+    const research = { ...begin, kind: 'research' };
+    expect(checkBeginSchema.safeParse({ ...research, comment: 'x'.repeat(4000) }).success).toBe(
+      true,
+    );
+    expect(checkBeginSchema.safeParse({ ...research, comment: 'x'.repeat(4001) }).success).toBe(
+      false,
+    );
+    expect(checkBeginSchema.safeParse({ ...research, comment: '' }).success).toBe(false);
+    expect(checkBeginSchema.safeParse({ ...research, comment: 'a\0b' }).success).toBe(false);
+  });
+
+  it('lists documents by name, size and time, never by content', () => {
+    const research = { ...begin, kind: 'research' };
+    const document = { name: 'plan.md', size: 1, updatedAt: at };
+    expect(
+      checkBeginSchema.safeParse({ ...research, documents: [{ ...document, content: 'x' }] })
+        .success,
+    ).toBe(false);
+    expect(
+      checkBeginSchema.safeParse({ ...research, documents: [{ ...document, name: '../a.md' }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('requires the markdown of a research report, and not more than 200 000 characters (D9, D12)', () => {
+    expect(researchReportContentSchema.parse(research)).toEqual(research);
+    const { markdown: _dropped, ...without } = research;
+    expect(researchReportContentSchema.safeParse(without).success).toBe(false);
+    expect(researchReportContentSchema.safeParse({ ...research, markdown: '' }).success).toBe(
+      false,
+    );
+    expect(
+      researchReportContentSchema.safeParse({
+        ...research,
+        markdown: 'x'.repeat(RESEARCH_MARKDOWN_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it('gives a research report no verdict and no readiness (D9)', () => {
+    expect(researchReportContentSchema.safeParse({ ...research, verdict: 'current' }).success).toBe(
+      false,
+    );
+    expect(researchReportContentSchema.safeParse({ ...research, readiness: 'ready' }).success).toBe(
+      false,
+    );
+  });
+
+  it('stores a research report with the size and hash of its markdown, an actuality report with a verdict', () => {
+    const meta = { bytes: 11, hash: '0123456789abcdef' };
+    expect(checkReportSchema.safeParse({ ...storedReport, markdown: meta }).success).toBe(true);
+    expect(checkReportSchema.safeParse({ ...storedReport, verdict: 'current' }).success).toBe(true);
+    // One of the two, not both and not neither.
+    expect(checkReportSchema.safeParse(storedReport).success).toBe(false);
+    expect(
+      checkReportSchema.safeParse({ ...storedReport, verdict: 'current', markdown: meta }).success,
+    ).toBe(false);
+    expect(checkReportSchema.safeParse({ ...storedReport, markdown: 'text' }).success).toBe(false);
+  });
+
+  describe('recommendation targets (D4)', () => {
+    const recommendation = { id: 'r1', findings: [], text: 'Do it.' };
+    const parse = (targets: unknown) =>
+      recommendationSchema.safeParse({ ...recommendation, targets });
+
+    it('describes the task, a document or a file of the project', () => {
+      const targets = [
+        { kind: 'task' },
+        { kind: 'document', name: 'plan.md' },
+        { kind: 'file', ref: 'src/core/model/history.ts' },
+      ];
+      expect(recommendationSchema.parse({ ...recommendation, targets }).targets).toEqual(targets);
+      expect(recommendationSchema.parse(recommendation)).not.toHaveProperty('targets');
+    });
+
+    it('refuses a file outside the project as an evidence of kind file is checked (INVARIANT)', () => {
+      expect(parse([{ kind: 'file', ref: '../secret.txt' }]).success).toBe(false);
+      expect(parse([{ kind: 'file', ref: 'src/../../secret.txt' }]).success).toBe(false);
+      expect(parse([{ kind: 'file', ref: '/etc/passwd' }]).success).toBe(false);
+      expect(parse([{ kind: 'file', ref: 'a\\..\\b' }]).success).toBe(false);
+      expect(parse([{ kind: 'file', ref: 'a\0b' }]).success).toBe(false);
+      expect(parse([{ kind: 'file', ref: 'src/a..b.ts' }]).success).toBe(true);
+    });
+
+    it('refuses an unsafe document name and an unknown kind', () => {
+      expect(parse([{ kind: 'document', name: '../a.md' }]).success).toBe(false);
+      expect(parse([{ kind: 'document', name: 'task.md' }]).success).toBe(false);
+      expect(parse([{ kind: 'commit', ref: 'abc1234' }]).success).toBe(false);
+    });
   });
 });

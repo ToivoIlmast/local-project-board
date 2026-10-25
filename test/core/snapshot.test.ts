@@ -89,6 +89,55 @@ describe('createSnapshot', () => {
     expect(snapshot.history[1]).toEqual({ taskId: 'T2', versions: [], checks: [] });
   });
 
+  it('carries a research with the text of its report, apart from the record (INVARIANT)', async () => {
+    const storage = inMemoryStorage(createMemoryStore());
+    await fill(storage);
+    await storage.appendVersion('T1', {
+      source: 'baseline',
+      changed: [],
+      snapshot: { title: 'Write the services', body: '', labels: [] },
+    });
+    const at = '2026-10-24T10:00:00.000Z';
+    const { number } = await storage.beginCheck('T1', {
+      version: 1,
+      agent: 'claude-code',
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      repo: null,
+      kind: 'research',
+      comment: 'Look at the API.',
+      documents: [{ name: 'plan.md', size: 7, updatedAt: at }],
+    });
+    const report = await storage.writeCheckReport('T1', number, {
+      agent: 'claude-code',
+      summary: 'Clear.',
+      findings: [],
+      recommendations: [{ id: 'r1', findings: [], text: 'Say it.', targets: [{ kind: 'task' }] }],
+      markdown: '# Research\n',
+      version: 1,
+      repo: null,
+    });
+    // An actuality check next to it adds no text.
+    await storage.beginCheck('T1', {
+      version: 1,
+      agent: 'claude-code',
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      repo: null,
+    });
+
+    const snapshot = await createSnapshot(storage, project);
+
+    expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.formatVersion).toBe(3);
+    const entry = snapshot.history[0];
+    expect(entry?.checks[0]).toMatchObject({
+      state: 'reported',
+      begin: { kind: 'research', comment: 'Look at the API.' },
+      report: { markdown: report.markdown },
+    });
+    expect(entry?.reportMarkdown).toEqual([{ check: number, content: '# Research\n' }]);
+    expect(snapshot.history[1]).not.toHaveProperty('reportMarkdown');
+  });
+
   it('contains the workflow overrides of the board, its columns and its tasks (INVARIANT)', async () => {
     const storage = inMemoryStorage(createMemoryStore());
     await fill(storage);

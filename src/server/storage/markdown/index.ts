@@ -352,6 +352,11 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       return history.listChecks(taskId);
     },
 
+    async readCheckMarkdown(taskId, number) {
+      await requireTask(taskId);
+      return history.readCheckMarkdown(taskId, number);
+    },
+
     async readCheck(taskId, number) {
       await requireTask(taskId);
       return history.readCheck(taskId, number);

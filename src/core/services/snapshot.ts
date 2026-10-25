@@ -37,7 +37,18 @@ export async function createSnapshot(
       storage.listVersions(task.id),
       storage.listChecks(task.id),
     ]);
-    history.push({ taskId: task.id, versions, checks });
+    const reportMarkdown: { check: number; content: string }[] = [];
+    for (const check of checks) {
+      if (check.report?.markdown === undefined) continue;
+      const content = await storage.readCheckMarkdown(task.id, check.begin.number);
+      if (content !== null) reportMarkdown.push({ check: check.begin.number, content });
+    }
+    history.push({
+      taskId: task.id,
+      versions,
+      checks,
+      ...(reportMarkdown.length === 0 ? {} : { reportMarkdown }),
+    });
   }
 
   return {
