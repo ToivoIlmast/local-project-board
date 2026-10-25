@@ -8,9 +8,18 @@ import type {
   ContentField,
   Decision,
   Recommendation,
+  RepoState,
+  ReportMarkdown,
+  ResearchReportContent,
   TaskContent,
 } from '../model/history.js';
-import { CONTENT_FIELDS } from '../model/history.js';
+import {
+  CONTENT_FIELDS,
+  checkReportSchema,
+  projectPathProblem,
+  researchReportContentSchema,
+} from '../model/history.js';
+import { BoardError } from '../errors.js';
 import { isTaskId } from './ids.js';
 
 /** The content of a task, whole or in part: the three fields a version holds (ADR-0030 §1). */
@@ -335,6 +344,81 @@ export function reportProblems(report: CheckReportContent, snapshot: TaskContent
   return problems;
 }
 
+/**
+ * What a research report's markdown weighs on disk, and a short name for its bytes (FNV-1a over
+ * UTF-8, 16 hex digits; not a security mechanism, like `contentHash`). The record written after
+ * the file carries both (ADR-0030 R3).
+ */
+export function reportMarkdownMeta(markdown: string): ReportMarkdown {
+  let hash = FNV_OFFSET;
+  let bytes = 0;
+  const feed = (byte: number): void => {
+    hash ^= BigInt(byte);
+    hash = (hash * FNV_PRIME) & MASK_64;
+    bytes += 1;
+  };
+  // The core has no TextEncoder; a lone surrogate becomes U+FFFD, as Node writes it to a file.
+  for (const char of markdown) {
+    let code = char.codePointAt(0) ?? 0;
+    if (code >= 0xd800 && code <= 0xdfff) code = 0xfffd;
+    if (code < 0x80) feed(code);
+    else if (code < 0x800) {
+      feed(0xc0 | (code >> 6));
+      feed(0x80 | (code & 0x3f));
+    } else if (code < 0x10000) {
+      feed(0xe0 | (code >> 12));
+      feed(0x80 | ((code >> 6) & 0x3f));
+      feed(0x80 | (code & 0x3f));
+    } else {
+      feed(0xf0 | (code >> 18));
+      feed(0x80 | ((code >> 12) & 0x3f));
+      feed(0x80 | ((code >> 6) & 0x3f));
+      feed(0x80 | (code & 0x3f));
+    }
+  }
+  return { bytes, hash: hash.toString(16).padStart(16, '0') };
+}
+
+/**
+ * The stored record of a report, and for a research the text that goes in a file of its own.
+ * One place for both providers: a report must be of the kind its check began as, and must fit
+ * the model and its limits, or `INVALID_CHECK_REPORT` and nothing is written.
+ */
+export function storedCheckReport(
+  begin: CheckBegin,
+  input: (CheckReportContent | ResearchReportContent) & {
+    version: number;
+    repo: RepoState;
+    createdAt: string;
+  },
+): { report: CheckReport; markdown?: string } {
+  const refuse = (message: string): BoardError =>
+    new BoardError('INVALID_CHECK_REPORT', message, { id: begin.taskId, check: begin.number });
+  const { markdown, ...rest } = input as typeof input & { markdown?: string };
+  const research = begin.kind === 'research';
+  if (research && markdown === undefined) throw refuse('A research report needs its markdown.');
+  if (research && 'verdict' in rest) throw refuse('A research report has no verdict.');
+  if (!research && markdown !== undefined) {
+    throw refuse('An actuality check report has no markdown.');
+  }
+  if (markdown !== undefined) {
+    const text = researchReportContentSchema.shape.markdown.safeParse(markdown);
+    if (!text.success) throw refuse(`markdown: ${text.error.issues[0]?.message ?? 'invalid'}`);
+  }
+
+  const parsed = checkReportSchema.safeParse({
+    ...rest,
+    taskId: begin.taskId,
+    check: begin.number,
+    ...(markdown === undefined ? {} : { markdown: reportMarkdownMeta(markdown) }),
+  });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw refuse(`${issue?.path.join('.') || 'report'}: ${issue?.message ?? 'invalid'}`);
+  }
+  return { report: parsed.data, ...(markdown === undefined ? {} : { markdown }) };
+}
+
 function evidenceProblem(kind: 'file' | 'commit' | 'task', ref: string): string | undefined {
   if (kind === 'commit') {
     return COMMIT_REF.test(ref) ? undefined : `"${ref}" is not a commit SHA.`;
@@ -343,7 +427,5 @@ function evidenceProblem(kind: 'file' | 'commit' | 'task', ref: string): string 
     return isTaskId(ref) ? undefined : `"${ref}" is not a task id.`;
   }
   // A file is a path in the project, relative to its root; it is not looked up.
-  return ref.startsWith('/') || ref.includes('\0') || ref.split(/[\\/]/).includes('..')
-    ? `"${ref}" is not a path inside the project.`
-    : undefined;
+  return projectPathProblem(ref);
 }

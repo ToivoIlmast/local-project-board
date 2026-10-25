@@ -27,6 +27,13 @@ export const boardSnapshotSchema = z.strictObject({
       taskId: taskIdSchema,
       versions: z.array(taskVersionSchema),
       checks: z.array(checkSchema),
+      /**
+       * The text of each research report, which the records describe by size and hash only
+       * (ADR-0030 R3). Absent when the task has none.
+       */
+      reportMarkdown: z
+        .array(z.strictObject({ check: z.int().min(1), content: z.string() }))
+        .optional(),
     }),
   ),
 });

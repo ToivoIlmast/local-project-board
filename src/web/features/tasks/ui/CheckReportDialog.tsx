@@ -156,7 +156,7 @@ export function CheckReportDialog({
         <div className="check">
           <p className="check__meta">
             <Badge>{STATE_LABELS[check.state]}</Badge>{' '}
-            {report === undefined ? null : (
+            {report?.verdict === undefined ? null : (
               <Badge tone={report.verdict === 'current' ? 'accent' : 'warning'}>
                 {VERDICT_LABELS[report.verdict]}
               </Badge>
