@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { BOARD_ERROR_CODES } from '../../core/errors.js';
-import { checkReportContentSchema, fromCheckSchema } from '../../core/model/history.js';
+import {
+  COMMENT_MAX_LENGTH,
+  checkKindSchema,
+  checkReportContentSchema,
+  checkVerdictSchema,
+  fromCheckSchema,
+} from '../../core/model/history.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
 import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
@@ -332,11 +338,25 @@ export const restoreVersionResponseSchema = z.strictObject({
 });
 
 /** Runner → begin a check (not given to agents): who and which session (ADR-0030 §6). */
-export const checkBeginRequestSchema = z.strictObject({
-  agent: z.string().regex(/\S/, 'Must not be blank').max(100),
-  sessionId: z.uuid(),
-  model: z.string().min(1).max(200).optional(),
-});
+export const checkBeginRequestSchema = z
+  .strictObject({
+    agent: z.string().regex(/\S/, 'Must not be blank').max(100),
+    sessionId: z.uuid(),
+    model: z.string().min(1).max(200).optional(),
+    /** Absent is an actuality check (ADR-0030 R1). */
+    kind: checkKindSchema.optional(),
+    /** The focus of a research, as sent: at most 4 000 characters, no NUL (R2, D12). */
+    comment: z
+      .string()
+      .min(1)
+      .max(COMMENT_MAX_LENGTH)
+      .refine((text) => !text.includes('\0'), 'Must not contain NUL')
+      .optional(),
+  })
+  .refine((request) => request.comment === undefined || request.kind !== undefined, {
+    message: 'A comment belongs to a research: send kind "research" with it.',
+    path: ['comment'],
+  });
 
 export const checkBeginResponseSchema = z.strictObject({
   number: z.int().min(1),
@@ -344,8 +364,16 @@ export const checkBeginResponseSchema = z.strictObject({
   version: z.int().min(1),
 });
 
-/** Agent → the report of a check, as the agent makes it; stored and shown as sent. */
-export const checkReportRequestSchema = checkReportContentSchema;
+/**
+ * Agent → the report of a check, as the agent makes it; stored and shown as sent. An actuality
+ * check's has a `verdict`, a research's has its `markdown` (ADR-0030 R1, R3). The request takes
+ * either, because which one is right is for the check the report is sent to: the wrong one is
+ * `422 INVALID_CHECK_REPORT`, not a malformed request.
+ */
+export const checkReportRequestSchema = checkReportContentSchema.extend({
+  verdict: checkVerdictSchema.optional(),
+  markdown: z.string().optional(),
+});
 
 /** Runner → the end of a check's process. */
 export const checkEndRequestSchema = z.strictObject({

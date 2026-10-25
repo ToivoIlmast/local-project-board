@@ -53,6 +53,7 @@ describe('renderApiDoc', () => {
       'checks.handoff',
       'checks.list',
       'checks.report',
+      'checks.reportMarkdown',
       'events.stream',
       'instructions.get',
       'runs.stream',

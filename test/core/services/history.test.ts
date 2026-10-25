@@ -1,5 +1,5 @@
 import type { BoardError } from '../../../src/core/errors.js';
-import type { CheckReportContent } from '../../../src/core/model/index.js';
+import type { CheckReportContent, ResearchReportContent } from '../../../src/core/model/index.js';
 import type { Storage } from '../../../src/core/ports.js';
 import { contentHash } from '../../../src/core/rules/history.js';
 import { createHistoryService, type HistoryService } from '../../../src/core/services/history.js';
@@ -695,6 +695,246 @@ describe('task history', () => {
       expect([await numbers(id), (await history.check(id, number)).decisions.length]).toEqual(
         before,
       );
+    });
+  });
+
+  describe('research (ADR-0030 R1–R5)', () => {
+    const findings = [
+      {
+        id: 'f1',
+        title: 'F',
+        explanation: 'E',
+        evidence: [{ kind: 'file' as const, ref: 'a.ts' }],
+      },
+    ];
+    const research = (over: Partial<ResearchReportContent> = {}): ResearchReportContent => ({
+      agent: 'claude-code',
+      summary: 'The task can be done in two steps.\nDetails follow.',
+      findings,
+      recommendations: [
+        {
+          id: 'r1',
+          findings: ['f1'],
+          text: 'Name the second step.',
+          edit: { field: 'labels', add: ['two-steps'], remove: [] },
+        },
+        { id: 'r2', findings: [], text: 'Split the API part out.', targets: [{ kind: 'task' }] },
+      ],
+      markdown: '# Research\n\nTwo steps.\n',
+      ...over,
+    });
+    const beginResearch = (id: string, comment?: string) =>
+      history.beginCheck(id, {
+        agent: 'claude-code',
+        sessionId: SESSION,
+        kind: 'research',
+        ...(comment === undefined ? {} : { comment }),
+      });
+
+    it('begins with its kind, its comment and the documents it saw, and no text of them', async () => {
+      const task = await tasks.create({ title: 'One' });
+      await storage.writeDocument(task.id, 'plan.md', '# Plan\n');
+      const { number } = await beginResearch(task.id, 'Focus on the API.');
+      const { begin } = await history.check(task.id, number);
+      expect(begin).toMatchObject({ kind: 'research', comment: 'Focus on the API.' });
+      expect(begin.documents).toEqual([
+        { name: 'plan.md', size: 7, updatedAt: expect.any(String) as string },
+      ]);
+      // An actuality check records none of the three.
+      const check = await history.beginCheck(task.id, { agent: 'claude-code', sessionId: SESSION });
+      const plain = (await history.check(task.id, check.number)).begin;
+      expect(plain).not.toHaveProperty('kind');
+      expect(plain).not.toHaveProperty('documents');
+    });
+
+    it('runs three researches of one task through, each pinned to the version that is current (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One', body: 'b\n', labels: [] });
+      for (const round of [1, 2, 3]) {
+        const now = await tasks.get(task.id);
+        const { number, version } = await beginResearch(task.id, `Round ${round}`);
+        expect(number).toBe(round);
+        expect(version).toBe((await storage.listVersions(task.id)).at(-1)?.number);
+        await history.report(task.id, number, research());
+        await history.endCheck(task.id, number, { sessionId: SESSION, exitCode: 0 });
+        await history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' });
+        await tasks.update(task.id, {
+          labels: [...now.labels, `round-${round}`],
+          ifContentHash: contentHash(now),
+          fromCheck: { check: number, recommendations: ['r1'], basis: 'report' },
+        });
+      }
+      const checks = await history.checks(task.id);
+      expect(checks.map((c) => [c.number, c.kind, c.state, c.version])).toEqual([
+        [1, 'research', 'reported', 1],
+        [2, 'research', 'reported', 2],
+        [3, 'research', 'reported', 3],
+      ]);
+      // Every comment stays with its own begin.
+      expect((await history.check(task.id, 1)).begin.comment).toBe('Round 1');
+      expect((await history.check(task.id, 3)).begin.comment).toBe('Round 3');
+    });
+
+    it('makes the old report stale after the task changes: basis report is 409 STALE_CHECK, nothing written (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const first = await beginResearch(task.id);
+      await history.report(task.id, first.number, research());
+      await history.decide(task.id, first.number, { recommendation: 'r1', decision: 'accepted' });
+      await tasks.update(task.id, { body: 'moved on\n' });
+
+      const second = await beginResearch(task.id);
+      expect(second.version).toBe(2);
+      const now = await tasks.get(task.id);
+      const before = [await numbers(task.id), await tasks.get(task.id)];
+      expect(
+        await code(
+          tasks.update(task.id, {
+            labels: ['two-steps'],
+            ifContentHash: contentHash(now),
+            fromCheck: { check: first.number, recommendations: ['r1'], basis: 'report' },
+          }),
+        ),
+      ).toBe('STALE_CHECK');
+      expect([await numbers(task.id), await tasks.get(task.id)]).toEqual(before);
+    });
+
+    it('refuses to apply a recommendation rejected after it was accepted', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const { number } = await beginResearch(task.id);
+      await history.report(task.id, number, research());
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' });
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'rejected' });
+      const now = await tasks.get(task.id);
+      expect(
+        await code(
+          tasks.update(task.id, {
+            labels: ['two-steps'],
+            ifContentHash: contentHash(now),
+            fromCheck: { check: number, recommendations: ['r1'], basis: 'report' },
+          }),
+        ),
+      ).toBe('STALE_CHECK');
+    });
+
+    it('applies nothing by itself: a decision changes no task, and no version is made (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const { number } = await beginResearch(task.id);
+      await history.report(task.id, number, research());
+      const before = [await tasks.get(task.id), await numbers(task.id)];
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' });
+      await history.decide(task.id, number, { recommendation: 'r2', decision: 'accepted' });
+      await history.endCheck(task.id, number, { sessionId: SESSION });
+      expect([await tasks.get(task.id), await numbers(task.id)]).toEqual(before);
+    });
+
+    it('changes no task, no run and no document (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One' });
+      await tasks.update(task.id, { aiRun: { agent: 'a', state: 'working', runId: 1 } });
+      await storage.writeDocument(task.id, 'report.md', '# Work report\n');
+      const before = [await tasks.get(task.id), await storage.listDocuments(task.id)];
+      const { number } = await beginResearch(task.id, 'Look around.');
+      await history.report(task.id, number, research());
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'rejected' });
+      await history.endCheck(task.id, number, { sessionId: SESSION });
+      expect([await tasks.get(task.id), await storage.listDocuments(task.id)]).toEqual(before);
+      expect(await storage.readDocument(task.id, 'report.md')).toBe('# Work report\n');
+    });
+
+    it('validates the report by the kind of the check: 422, and the check stays working', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const { number } = await beginResearch(task.id);
+      const { markdown: _markdown, ...withoutMarkdown } = research();
+      const refusals = [
+        withoutMarkdown,
+        { ...research(), verdict: 'current' },
+        research({ markdown: 'x'.repeat(200_001) }),
+      ];
+      for (const sent of refusals) {
+        const error = await history
+          .report(task.id, number, sent as ResearchReportContent)
+          .catch((e: unknown) => e as BoardError);
+        expect(error).toMatchObject({ code: 'INVALID_CHECK_REPORT' });
+      }
+      const check = await history.beginCheck(task.id, { agent: 'claude-code', sessionId: SESSION });
+      expect(
+        await code(
+          history.report(task.id, check.number, {
+            ...research(),
+            verdict: 'current',
+          } as unknown as CheckReportContent),
+        ),
+      ).toBe('INVALID_CHECK_REPORT');
+      expect((await history.check(task.id, number)).state).toBe('working');
+      expect(await storage.readCheckMarkdown(task.id, number)).toBeNull();
+    });
+
+    it('serves the markdown of a published report only (ADR-0030 R3)', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const { number } = await beginResearch(task.id);
+      expect(await code(history.reportMarkdown(task.id, number))).toBe('CHECK_NOT_REPORTED');
+      await history.report(task.id, number, research());
+      expect(await history.reportMarkdown(task.id, number)).toBe('# Research\n\nTwo steps.\n');
+      expect(await code(history.reportMarkdown(task.id, 9))).toBe('CHECK_NOT_FOUND');
+
+      const check = await history.beginCheck(task.id, { agent: 'claude-code', sessionId: SESSION });
+      await history.report(task.id, check.number, {
+        agent: 'a',
+        verdict: 'current',
+        summary: 's',
+        findings: [],
+        recommendations: [],
+      });
+      expect(await history.reportMarkdown(task.id, check.number)).toBeNull();
+    });
+
+    it('summarises its kind, a short comment and the count of decisions', async () => {
+      const task = await tasks.create({ title: 'One' });
+      const { number } = await beginResearch(task.id, `Look at the API.\n${'x'.repeat(300)}`);
+      await history.beginCheck(task.id, { agent: 'claude-code', sessionId: SESSION });
+      await history.report(task.id, number, research());
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' });
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'rejected' });
+      const [first, second] = await history.checks(task.id);
+      expect(first).toMatchObject({
+        kind: 'research',
+        comment: 'Look at the API.…',
+        decisions: { accepted: 0, rejected: 1, undecided: 1 },
+      });
+      expect(first).not.toHaveProperty('verdict');
+      expect(second).not.toHaveProperty('kind');
+      expect(second).not.toHaveProperty('comment');
+      expect(second).not.toHaveProperty('decisions');
+    });
+
+    it('lets two decisions and an apply race under the lock: exactly one outcome (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One', labels: [] });
+      const { number } = await beginResearch(task.id);
+      await history.report(task.id, number, research());
+      await history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' });
+      const hash = contentHash(await tasks.get(task.id));
+      const [rejected, accepted, saved] = await Promise.all([
+        code(history.decide(task.id, number, { recommendation: 'r1', decision: 'rejected' })),
+        code(history.decide(task.id, number, { recommendation: 'r1', decision: 'accepted' })),
+        code(
+          tasks.update(task.id, {
+            labels: ['two-steps'],
+            ifContentHash: hash,
+            fromCheck: { check: number, recommendations: ['r1'], basis: 'report' },
+          }),
+        ),
+      ]);
+      expect([rejected, accepted]).toEqual(['no error', 'no error']);
+      expect((await history.check(task.id, number)).decisions).toHaveLength(3);
+      const versions = await storage.listVersions(task.id);
+      if (saved === 'no error') {
+        // The save ran while r1 was accepted: one version records it, and only one.
+        expect(versions.filter((v) => v.fromCheck !== undefined)).toHaveLength(1);
+        expect((await tasks.get(task.id)).labels).toEqual(['two-steps']);
+      } else {
+        // It ran after the rejection: nothing of it was written.
+        expect(saved).toBe('STALE_CHECK');
+        expect(versions.some((v) => v.fromCheck !== undefined)).toBe(false);
+        expect((await tasks.get(task.id)).labels).toEqual([]);
+      }
     });
   });
 

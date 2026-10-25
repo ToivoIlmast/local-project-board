@@ -293,6 +293,14 @@ export const checkSchema = z.strictObject({
 });
 export type Check = z.infer<typeof checkSchema>;
 
+/** How the recommendations of a report stand, by their latest decision. */
+export const decisionCountsSchema = z.strictObject({
+  accepted: z.int().min(0),
+  rejected: z.int().min(0),
+  undecided: z.int().min(0),
+});
+export type DecisionCounts = z.infer<typeof decisionCountsSchema>;
+
 export const checkSummarySchema = z.strictObject({
   taskId: taskIdSchema,
   number: numberSchema,
@@ -301,7 +309,11 @@ export const checkSummarySchema = z.strictObject({
   createdAt: isoDateTimeSchema,
   agent: nonBlank.max(100),
   kind: checkKindSchema.optional(),
+  /** The first line of the comment of a research, cut short; the whole is in the begin. */
+  comment: z.string().min(1).optional(),
   verdict: checkVerdictSchema.optional(),
+  /** Present once the check has a report. */
+  decisions: decisionCountsSchema.optional(),
   endedAt: isoDateTimeSchema.optional(),
 });
 export type CheckSummary = z.infer<typeof checkSummarySchema>;

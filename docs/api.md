@@ -552,7 +552,7 @@ Response — 200, application/json:
 
 ### GET /api/v1/tasks/:id/checks
 
-List the actuality checks of a task, with their state and the version each read
+List the checks and researches of a task, with their state and the version each read
 
 Not given to AI agents in the generated instructions.
 
@@ -576,7 +576,7 @@ Response — 200, application/json:
 
 ### GET /api/v1/tasks/:id/checks/:n
 
-Read one actuality check: its begin, its report as the agent sent it, its decisions
+Read one check or research: its begin, its report as the agent sent it, its decisions
 
 Not given to AI agents in the generated instructions.
 
@@ -658,7 +658,7 @@ Response — 200, application/json:
 
 ### POST /api/v1/tasks/:id/checks
 
-Runner: begin an actuality check, pinned to the version that is on disk
+Runner: begin an actuality check or a research, pinned to the version on disk
 
 Not given to AI agents in the generated instructions.
 
@@ -818,6 +818,24 @@ Response — 200, application/json:
     }
   ]
 }
+```
+
+### GET /api/v1/tasks/:id/checks/:n/report.md
+
+Read the markdown of a published research report, exactly as it was written
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/checks/2/report.md
+
+Response — 200, text/markdown:
+
+```
+# Research
+
+## What the task asks for
+
+Move the parser into server/git.
 ```
 
 ### POST /api/v1/tasks/:id/checks/:n/end

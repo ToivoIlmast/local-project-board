@@ -4,6 +4,7 @@ import type {
   CheckEnd,
   CheckReport,
   CheckReportContent,
+  CheckKind,
   CheckState,
   ContentField,
   Decision,
@@ -12,9 +13,11 @@ import type {
   ReportMarkdown,
   ResearchReportContent,
   TaskContent,
+  TaskVersion,
 } from '../model/history.js';
 import {
   CONTENT_FIELDS,
+  RESEARCH_MARKDOWN_MAX_LENGTH,
   checkReportSchema,
   projectPathProblem,
   researchReportContentSchema,
@@ -307,7 +310,10 @@ export function isReportStale(current: TaskContent, pinned: TaskContent): boolea
 const COMMIT_REF = /^[0-9a-f]{7,64}$/;
 
 /** What is wrong with a report against the snapshot it was made on; empty when nothing is. */
-export function reportProblems(report: CheckReportContent, snapshot: TaskContent): string[] {
+export function reportProblems(
+  report: Pick<CheckReportContent, 'findings' | 'recommendations'>,
+  snapshot: TaskContent,
+): string[] {
   const problems: string[] = [];
   const findingIds = new Set<string>();
   for (const finding of report.findings) {
@@ -428,4 +434,118 @@ function evidenceProblem(kind: 'file' | 'commit' | 'task', ref: string): string 
   }
   // A file is a path in the project, relative to its root; it is not looked up.
   return projectPathProblem(ref);
+}
+
+/**
+ * What is wrong with a report as a report of the kind its check began as (ADR-0030 R1, R3): an
+ * actuality check's has a verdict and no markdown, a research's the opposite. The kind comes
+ * from the begin record, never from the report, so an agent cannot choose its own rules.
+ */
+export function reportKindProblems(
+  kind: CheckKind | undefined,
+  report: {
+    readonly verdict?: unknown;
+    readonly markdown?: unknown;
+    readonly [key: string]: unknown;
+  },
+): string[] {
+  const problems: string[] = [];
+  if (kind === 'research') {
+    if (report.verdict !== undefined) problems.push('A research report has no verdict.');
+    if (typeof report.markdown !== 'string' || !/\S/.test(report.markdown)) {
+      problems.push('A research report needs its markdown.');
+    } else if (report.markdown.length > RESEARCH_MARKDOWN_MAX_LENGTH) {
+      problems.push(`The markdown is over ${RESEARCH_MARKDOWN_MAX_LENGTH} characters.`);
+    }
+  } else {
+    if (report.verdict === undefined) problems.push('An actuality check report needs a verdict.');
+    if (report.markdown !== undefined) problems.push('An actuality check report has no markdown.');
+  }
+  return problems;
+}
+
+const COMMENT_SUMMARY_LENGTH = 120;
+
+/** The first line of a comment, cut to a limit; an ellipsis says that something was left out. */
+export function summarizeComment(comment: string): string {
+  const text = comment.trim();
+  const first = (text.split(/\r?\n/, 1)[0] ?? '').trimEnd();
+  const cut = first.length > COMMENT_SUMMARY_LENGTH;
+  return `${cut ? first.slice(0, COMMENT_SUMMARY_LENGTH) : first}${cut || first.length < text.length ? '…' : ''}`;
+}
+
+export type RecommendationDecision = 'undecided' | Decision['decision'];
+export type RecommendationApplication =
+  { state: 'applied'; versions: number[] } | { state: 'not-applied' } | { state: 'not-applicable' };
+export type RecommendationCurrency = 'current' | 'stale' | 'superseded';
+
+export interface RecommendationAxes {
+  decision: RecommendationDecision;
+  application: RecommendationApplication;
+  currency: RecommendationCurrency;
+}
+
+/**
+ * The three independent values of a recommendation (ADR-0030 R5). Nothing is stored for them and
+ * none follows from another: "accepted" is not "applied" (only a version that names the
+ * recommendation is), and "superseded" is a note that blocks nothing.
+ */
+export function recommendationAxes(input: {
+  check: number;
+  decisions: readonly Decision[];
+  recommendation: Pick<Recommendation, 'id' | 'edit' | 'targets'>;
+  versions: readonly Pick<TaskVersion, 'number' | 'fromCheck'>[];
+  /** As `isReportStale` says of the check. */
+  stale: boolean;
+  /** Every check of the task, this one included. */
+  checks: readonly { number: number; state: CheckState }[];
+}): RecommendationAxes {
+  const { check, recommendation } = input;
+  const decision = latestDecisions(input.decisions).get(recommendation.id)?.decision;
+
+  const versions = input.versions
+    .filter(
+      (version) =>
+        version.fromCheck?.check === check &&
+        version.fromCheck.recommendations.includes(recommendation.id),
+    )
+    .map((version) => version.number)
+    .sort((a, b) => a - b);
+  // A button applies an `edit` to the task only; anything else is carried over by hand (R4).
+  const aimedAtTask =
+    recommendation.edit !== undefined &&
+    (recommendation.targets === undefined ||
+      recommendation.targets.some((target) => target.kind === 'task'));
+  const application: RecommendationApplication =
+    versions.length > 0
+      ? { state: 'applied', versions }
+      : aimedAtTask
+        ? { state: 'not-applied' }
+        : { state: 'not-applicable' };
+
+  const superseded = input.checks.some((c) => c.number > check && c.state === 'reported');
+  return {
+    decision: decision ?? 'undecided',
+    application,
+    currency: input.stale ? 'stale' : superseded ? 'superseded' : 'current',
+  };
+}
+
+/**
+ * What keeps Apply from a report (ADR-0030 R4, D6): the report is stale, or a recommendation's
+ * latest decision is not "accepted". Nothing else does: a newer research or a repository that
+ * moved on is a note. The server and the page use this one rule.
+ */
+export function applyBlockers(input: {
+  stale: boolean;
+  decisions: readonly Decision[];
+  recommendations: readonly string[];
+}): { blocked: boolean; stale: boolean; notAccepted: string[] } {
+  const latest = latestDecisions(input.decisions);
+  const notAccepted = input.recommendations.filter((id) => latest.get(id)?.decision !== 'accepted');
+  return {
+    blocked: input.stale || notAccepted.length > 0,
+    stale: input.stale,
+    notAccepted,
+  };
 }

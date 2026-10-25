@@ -243,3 +243,70 @@ describe('the handoff route (T15)', () => {
     expect(parseParams(route, { id: 'T12', extra: 'x' })).toMatchObject({ ok: false });
   });
 });
+
+describe('the routes of a research (ADR-0030 R2, R3, R9)', () => {
+  const session = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+  const begin = (over: object) =>
+    parseBody(routes['checks.begin'], { agent: 'claude-code', sessionId: session, ...over });
+
+  it('lets the runner begin a research with a comment, and a comment only with a research', () => {
+    expect(begin({ kind: 'research', comment: 'Look at the API.' })).toMatchObject({ ok: true });
+    expect(begin({ kind: 'research' })).toMatchObject({ ok: true });
+    expect(begin({})).toMatchObject({ ok: true });
+    for (const over of [
+      { comment: 'Look at the API.' },
+      { kind: 'work' },
+      { kind: 'research', comment: '' },
+      { kind: 'research', comment: 'x'.repeat(4001) },
+      { kind: 'research', comment: 'a\0b' },
+    ]) {
+      expect(begin(over).ok).toBe(false);
+    }
+    expect(begin({ kind: 'research', comment: 'x'.repeat(4000) }).ok).toBe(true);
+  });
+
+  it('takes the report of either kind, and leaves the choice between them to the check (D9)', () => {
+    const report = { agent: 'claude-code', summary: 's', findings: [], recommendations: [] };
+    const send = (over: object) => parseBody(routes['checks.report'], { ...report, ...over });
+    expect(send({ verdict: 'current' })).toMatchObject({ ok: true });
+    expect(send({ markdown: '# Notes' })).toMatchObject({ ok: true });
+    // A report of the wrong kind is the business of the check it is sent to: 422, not 400.
+    expect(send({})).toMatchObject({ ok: true });
+    expect(send({ verdict: 'current', markdown: '# Notes' })).toMatchObject({ ok: true });
+    expect(send({ verdict: 'great' }).ok).toBe(false);
+    expect(send({ markdown: 3 }).ok).toBe(false);
+    expect(send({ readiness: 'ready' }).ok).toBe(false);
+  });
+
+  it('checks the targets of a recommendation like the evidence refs (D4)', () => {
+    const send = (targets: unknown) =>
+      parseBody(routes['checks.report'], {
+        agent: 'a',
+        summary: 's',
+        markdown: '# x',
+        findings: [],
+        recommendations: [{ id: 'r1', findings: [], text: 't', targets }],
+      });
+    expect(send([{ kind: 'task' }, { kind: 'document', name: 'plan.md' }])).toMatchObject({
+      ok: true,
+    });
+    expect(send([{ kind: 'file', ref: 'src/a.ts' }])).toMatchObject({ ok: true });
+    for (const bad of [
+      [{ kind: 'file', ref: '../secret' }],
+      [{ kind: 'file', ref: '/etc/passwd' }],
+      [{ kind: 'document', name: '../x.md' }],
+      [{ kind: 'commit' }],
+    ]) {
+      expect(send(bad).ok).toBe(false);
+    }
+  });
+
+  it('reads the markdown of a report as text/markdown, withheld from agents (INVARIANT)', () => {
+    const route = routes['checks.reportMarkdown'];
+    expect(route.method).toBe('GET');
+    expect(route.path).toBe('/tasks/:id/checks/:n/report.md');
+    expect(route.response.media).toBe('text/markdown');
+    expect(route.ai.include).toBe(false);
+    expect(parseParams(route, { id: 'T1', n: '2' })).toMatchObject({ ok: true });
+  });
+});

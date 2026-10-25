@@ -1,5 +1,6 @@
 import {
   generateCheckHandoff,
+  type CheckHandoffHistory,
   generateHandoff,
   generateInstructions,
   type BoardFacts,
@@ -50,7 +51,7 @@ export async function composeHandoff(
 }
 
 export interface CheckHandoffServices {
-  history: Pick<HistoryService, 'check' | 'version'>;
+  history: Pick<HistoryService, 'check' | 'checks' | 'version' | 'versions'>;
   documents: Pick<DocumentService, 'list'>;
   workflow: Pick<WorkflowService, 'forTask'>;
 }
@@ -72,6 +73,7 @@ export async function composeCheckHandoff(
     documents.list(id),
     workflow.forTask(id),
   ]);
+  const research = check.begin.kind === 'research';
   return generateCheckHandoff({
     baseUrl,
     taskId: id,
@@ -79,5 +81,24 @@ export async function composeCheckHandoff(
     version,
     documents: attached,
     reportLanguage: effective.values.reportLanguage,
+    ...(research ? { kind: 'research' as const } : {}),
+    ...(check.begin.comment === undefined ? {} : { comment: check.begin.comment }),
+    // What the task had before is for a research to read; a check is told nothing of it.
+    ...(research ? { history: await pastOf(history, id, number) } : {}),
   });
+}
+
+/** The checks before this one, whole, and the versions that say where they were applied. */
+async function pastOf(
+  history: CheckHandoffServices['history'],
+  id: string,
+  before: number,
+): Promise<CheckHandoffHistory> {
+  const [summaries, { versions }] = await Promise.all([history.checks(id), history.versions(id)]);
+  const checks = await Promise.all(
+    summaries
+      .filter(({ number }) => number < before)
+      .map(({ number }) => history.check(id, number)),
+  );
+  return { checks, versions };
 }

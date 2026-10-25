@@ -1,5 +1,6 @@
 import type { CheckReportContent, Decision, TaskContent } from '../../../src/core/model/index.js';
 import {
+  applyBlockers,
   applyRecommendations,
   assembleCheck,
   changedFields,
@@ -10,8 +11,11 @@ import {
   isReportStale,
   latestDecisions,
   occurrences,
+  recommendationAxes,
+  reportKindProblems,
   reportProblems,
   sameContent,
+  summarizeComment,
 } from '../../../src/core/rules/history.js';
 
 const content = (over: Partial<TaskContent> = {}): TaskContent => ({
@@ -332,5 +336,217 @@ describe('reportProblems', () => {
     expect(reportProblems(evidence('file', '/etc/passwd'), content())).toHaveLength(1);
     expect(reportProblems(evidence('file', '../outside'), content())).toHaveLength(1);
     expect(reportProblems(evidence('file', 'src/missing.ts'), content())).toEqual([]);
+  });
+});
+
+describe('the derived axes of a recommendation (ADR-0030 R5)', () => {
+  const decision = (number: number, recommendation: string, value: 'accepted' | 'rejected') =>
+    ({
+      taskId: 'T1',
+      check: 1,
+      number,
+      recommendation,
+      decision: value,
+      createdAt: '2026-10-17T10:00:00.000Z',
+    }) satisfies Decision;
+  const edit = { field: 'title' as const, value: 'New' };
+  const axes = (
+    over: {
+      decisions?: Decision[];
+      recommendation?: Parameters<typeof recommendationAxes>[0]['recommendation'];
+      versions?: Parameters<typeof recommendationAxes>[0]['versions'];
+      stale?: boolean;
+      checks?: Parameters<typeof recommendationAxes>[0]['checks'];
+    } = {},
+  ) =>
+    recommendationAxes({
+      check: 1,
+      decisions: over.decisions ?? [],
+      recommendation: over.recommendation ?? { id: 'r1', edit },
+      versions: over.versions ?? [],
+      stale: over.stale ?? false,
+      checks: over.checks ?? [{ number: 1, state: 'reported' }],
+    });
+  const appliedV2 = [
+    { number: 2, fromCheck: { check: 1, recommendations: ['r1'], basis: 'report' as const } },
+  ];
+
+  it.each([
+    // decision, applied in, stale, later check → decision, application, currency
+    [[], [], false, [], 'undecided', { state: 'not-applied' }, 'current'],
+    [['accepted'], [], false, [], 'accepted', { state: 'not-applied' }, 'current'],
+    [
+      ['accepted'],
+      appliedV2,
+      false,
+      [],
+      'accepted',
+      { state: 'applied', versions: [2] },
+      'current',
+    ],
+    [
+      ['accepted', 'rejected'],
+      appliedV2,
+      true,
+      [],
+      'rejected',
+      { state: 'applied', versions: [2] },
+      'stale',
+    ],
+    [['rejected'], [], false, ['reported'], 'rejected', { state: 'not-applied' }, 'superseded'],
+    [['accepted'], [], true, ['reported'], 'accepted', { state: 'not-applied' }, 'stale'],
+    [[], [], false, ['working'], 'undecided', { state: 'not-applied' }, 'current'],
+    [[], [], false, ['failed'], 'undecided', { state: 'not-applied' }, 'current'],
+  ] as const)(
+    'decisions %j, versions %j, stale %s, later check %j → %s, %j, %s',
+    (decisions, versions, stale, later, expectedDecision, application, currency) => {
+      expect(
+        axes({
+          decisions: decisions.map((value, index) => decision(index + 1, 'r1', value)),
+          versions: [...versions],
+          stale,
+          checks: [
+            { number: 1, state: 'reported' },
+            ...later.map((state, index) => ({ number: index + 2, state })),
+          ],
+        }),
+      ).toEqual({ decision: expectedDecision, application, currency });
+    },
+  );
+
+  it('never makes "applied" out of "accepted": only a version that names it is an application (INVARIANT)', () => {
+    const accepted = axes({ decisions: [decision(1, 'r1', 'accepted')] });
+    expect(accepted.application).toEqual({ state: 'not-applied' });
+    // A version from another check, or naming another recommendation, is not this one's.
+    const other = axes({
+      decisions: [decision(1, 'r1', 'accepted')],
+      versions: [
+        { number: 2, fromCheck: { check: 2, recommendations: ['r1'], basis: 'report' } },
+        { number: 3, fromCheck: { check: 1, recommendations: ['r2'], basis: 'report' } },
+        { number: 4 },
+      ],
+    });
+    expect(other.application).toEqual({ state: 'not-applied' });
+  });
+
+  it('is superseded only by a later check that is reported, never by an earlier one (INVARIANT)', () => {
+    const earlier = recommendationAxes({
+      check: 2,
+      decisions: [],
+      recommendation: { id: 'r1', edit },
+      versions: [],
+      stale: false,
+      checks: [
+        { number: 1, state: 'reported' },
+        { number: 2, state: 'reported' },
+        { number: 3, state: 'working' },
+      ],
+    });
+    expect(earlier.currency).toBe('current');
+  });
+
+  it('says "not applicable" of advice and of a recommendation aimed elsewhere than the task', () => {
+    expect(axes({ recommendation: { id: 'r1' } }).application).toEqual({
+      state: 'not-applicable',
+    });
+    expect(
+      axes({
+        recommendation: { id: 'r1', edit, targets: [{ kind: 'file', ref: 'src/a.ts' }] },
+      }).application,
+    ).toEqual({ state: 'not-applicable' });
+    expect(
+      axes({
+        recommendation: {
+          id: 'r1',
+          edit,
+          targets: [{ kind: 'document', name: 'plan.md' }, { kind: 'task' }],
+        },
+      }).application,
+    ).toEqual({ state: 'not-applied' });
+  });
+
+  it('keeps an application by hand of advice: the version is the fact', () => {
+    expect(
+      axes({
+        recommendation: { id: 'r1' },
+        versions: [
+          { number: 5, fromCheck: { check: 1, recommendations: ['r1'], basis: 'manual' } },
+        ],
+      }).application,
+    ).toEqual({ state: 'applied', versions: [5] });
+  });
+});
+
+describe('applyBlockers: what keeps Apply from a report (D6, ADR-0030 R4)', () => {
+  const decision = (number: number, recommendation: string, value: 'accepted' | 'rejected') =>
+    ({
+      taskId: 'T1',
+      check: 1,
+      number,
+      recommendation,
+      decision: value,
+      createdAt: '2026-10-17T10:00:00.000Z',
+    }) satisfies Decision;
+
+  it('lets accepted recommendations of a report that is not stale through', () => {
+    expect(
+      applyBlockers({
+        stale: false,
+        decisions: [decision(1, 'r1', 'accepted')],
+        recommendations: ['r1'],
+      }),
+    ).toEqual({ blocked: false, stale: false, notAccepted: [] });
+  });
+
+  it('is blocked by staleness, and by a recommendation whose latest decision is not accepted', () => {
+    expect(
+      applyBlockers({
+        stale: true,
+        decisions: [decision(1, 'r1', 'accepted'), decision(2, 'r1', 'rejected')],
+        recommendations: ['r1', 'r2'],
+      }),
+    ).toEqual({ blocked: true, stale: true, notAccepted: ['r1', 'r2'] });
+  });
+
+  it('takes nothing else: a newer research or a moved repository is no input to it', () => {
+    // The signature is the rule: only staleness and the decisions can block (D6).
+    expect(
+      Object.keys(applyBlockers({ stale: false, decisions: [], recommendations: [] })),
+    ).toEqual(['blocked', 'stale', 'notAccepted']);
+  });
+});
+
+describe('reportKindProblems: a report of the kind its check began as (ADR-0030 R1, R3)', () => {
+  const base = { agent: 'a', summary: 's', findings: [], recommendations: [] };
+
+  it('wants a verdict and no markdown from an actuality check', () => {
+    expect(reportKindProblems(undefined, { ...base, verdict: 'current' })).toEqual([]);
+    expect(reportKindProblems(undefined, base)).toHaveLength(1);
+    expect(
+      reportKindProblems(undefined, { ...base, verdict: 'current', markdown: '# x' }),
+    ).toHaveLength(1);
+  });
+
+  it('wants markdown and no verdict from a research, within its limit', () => {
+    expect(reportKindProblems('research', { ...base, markdown: '# Notes' })).toEqual([]);
+    expect(reportKindProblems('research', base)).toHaveLength(1);
+    expect(reportKindProblems('research', { ...base, markdown: '  ' })).toHaveLength(1);
+    expect(
+      reportKindProblems('research', { ...base, markdown: '# x', verdict: 'current' }),
+    ).toHaveLength(1);
+    expect(reportKindProblems('research', { ...base, markdown: 'x'.repeat(200_001) })).toHaveLength(
+      1,
+    );
+    expect(reportKindProblems('research', { ...base, markdown: 'x'.repeat(200_000) })).toEqual([]);
+  });
+});
+
+describe('summarizeComment', () => {
+  it('keeps a short comment, and cuts a long one to its first line and a limit', () => {
+    expect(summarizeComment('Look at the API.')).toBe('Look at the API.');
+    expect(summarizeComment('First line\nsecond line')).toBe('First line…');
+    const long = summarizeComment('x'.repeat(500));
+    expect(long).toHaveLength(121);
+    expect(long.endsWith('…')).toBe(true);
   });
 });

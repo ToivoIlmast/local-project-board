@@ -58,6 +58,7 @@ describe('generated AI instructions', () => {
       'checks.handoff',
       'checks.list',
       'checks.report',
+      'checks.reportMarkdown',
       'events.stream',
       'instructions.get',
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).

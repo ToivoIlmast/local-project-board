@@ -47,6 +47,20 @@ export function claudeCheckPrompt(taskId: string, check: number, boardUrl: strin
   );
 }
 
+/**
+ * What a session that researches a task is told (ADR-0030 R7): where the handoff of this research
+ * is, and nothing else. Never the comment: it is read from the handoff, in a fence, where it
+ * cannot pass for the prompt (and it never reaches a command line).
+ */
+export function researchPrompt(taskId: string, check: number, boardUrl: string): string {
+  checked(taskId, boardUrl);
+  if (!Number.isInteger(check) || check < 1) throw new Error(`"${check}" is not a check number.`);
+  return (
+    `Research how to approach task ${taskId} of the local board: ` +
+    `read GET ${boardUrl}${API_BASE_PATH}/tasks/${taskId}/checks/${check}/handoff and follow it.`
+  );
+}
+
 function checked(taskId: string, boardUrl: string): void {
   if (!isTaskId(taskId)) throw new Error(`"${taskId}" is not a task id.`);
   if (!BOARD_ADDRESS.test(boardUrl)) {
