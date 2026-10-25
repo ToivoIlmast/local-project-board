@@ -1,6 +1,6 @@
 import type { RequestHandler, Response } from 'express';
-import type { RunRequest } from '../../contract/v1/index.js';
-import { HttpError } from './errors.js';
+import { parseQuery, routes, type RunRequest, type RunsQuery } from '../../contract/v1/index.js';
+import { HttpError, invalidRequest } from './errors.js';
 import { hasSessionToken } from './security.js';
 import { SSE_HEARTBEAT_MS, SSE_RETRY_MS } from './sse.js';
 
@@ -13,29 +13,48 @@ import { SSE_HEARTBEAT_MS, SSE_RETRY_MS } from './sse.js';
  * One request per wait: the stream that carried it is ended, and the runner comes back only
  * when its session is over. So a runner in a session is not waiting, and a second click is
  * refused at once instead of being queued behind the person's back.
+ *
+ * A runner says which kinds it can start besides work (`?accepts=check,research`, D13): one of
+ * an earlier version says nothing and is handed work only, so that a request it cannot read is
+ * never handed to it and lost while the page is told "started".
  */
 export interface RunDispatch {
-  /** Hands the request to one waiting runner and lets it go; false when none waits. */
-  hand(request: Omit<RunRequest, 'type'>): boolean;
+  /**
+   * Hands the request to one waiting runner that can start its kind, and lets it go. `nobody`
+   * when none waits, `outdated` when some wait but none of them can start this kind.
+   */
+  hand(request: Omit<RunRequest, 'type'>): Handed;
   /** The route a runner waits on; only the holder of the token may wait there. */
   handler(token: string, options?: { heartbeatMs?: number | undefined }): RequestHandler;
 }
 
+export type Handed = 'handed' | 'nobody' | 'outdated';
+
+type RunKind = NonNullable<RunRequest['kind']> | 'work';
+
+interface Waiting {
+  response: Response;
+  accepts: ReadonlySet<RunKind>;
+}
+
 export function createRunDispatch(): RunDispatch {
   // In the order they came; the one that came last is the one the person just started.
-  const waiting: Response[] = [];
+  const waiting: Waiting[] = [];
   const forget = (response: Response): void => {
-    const index = waiting.indexOf(response);
+    const index = waiting.findIndex((runner) => runner.response === response);
     if (index !== -1) waiting.splice(index, 1);
   };
 
   return {
     hand(request) {
-      const runner = waiting.pop();
-      if (runner === undefined) return false;
+      if (waiting.length === 0) return 'nobody';
+      const kind: RunKind = request.kind ?? 'work';
+      const index = waiting.findLastIndex((runner) => runner.accepts.has(kind));
+      if (index === -1) return 'outdated';
+      const [runner] = waiting.splice(index, 1);
       const event: RunRequest = { type: 'run.requested', ...request };
-      runner.end(`data: ${JSON.stringify(event)}\n\n`);
-      return true;
+      runner?.response.end(`data: ${JSON.stringify(event)}\n\n`);
+      return 'handed';
     },
 
     handler(token, { heartbeatMs = SSE_HEARTBEAT_MS } = {}) {
@@ -45,13 +64,16 @@ export function createRunDispatch(): RunDispatch {
         if (!hasSessionToken(request.headers.authorization, token)) {
           throw new HttpError(401, 'UNAUTHORIZED', 'Waiting for runs needs the session token.');
         }
+        const query = parseQuery(routes['runs.stream'], request.query);
+        if (!query.ok) throw invalidRequest(query.issues);
+        const { accepts = [] } = query.data as RunsQuery;
         response.status(200).set({
           'Content-Type': 'text/event-stream; charset=utf-8',
           Connection: 'keep-alive',
         });
         response.flushHeaders();
         response.write(`retry: ${SSE_RETRY_MS}\n\n`);
-        waiting.push(response);
+        waiting.push({ response, accepts: new Set<RunKind>(['work', ...accepts]) });
 
         const heartbeat = setInterval(() => response.write(':ping\n\n'), heartbeatMs);
         heartbeat.unref();
@@ -66,8 +88,21 @@ export function createRunDispatch(): RunDispatch {
   };
 }
 
-/** What the page is told when nothing waits: how to start a runner, or the session itself. */
-export function noRunner(taskId: string): HttpError {
+/**
+ * What the page is told when nothing waits: how to start a runner, or the session itself. When
+ * runners wait but none can start this kind, they are of an earlier version: update one.
+ */
+export function noRunner(taskId: string, why: Exclude<Handed, 'handed'> = 'nobody'): HttpError {
+  if (why === 'outdated') {
+    return new HttpError(
+      409,
+      'NO_AGENT_RUNNER',
+      'The runner waiting for this board cannot start this kind of session: it is of an earlier ' +
+        'version. Update local-project-board, start `npx local-project-board claude --wait` ' +
+        'again and try again.',
+      { id: taskId },
+    );
+  }
   return new HttpError(
     409,
     'NO_AGENT_RUNNER',

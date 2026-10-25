@@ -215,6 +215,21 @@ export const claudeModelSchema = z.union([
 ]);
 
 /**
+ * The focus of a research, as the person typed it: at most 4 000 characters, no NUL (ADR-0030
+ * R2, D12). One rule for the page, the runner and the begin, so none of them lets through what
+ * another refuses. It reaches the begin record and the handoff, never a command line.
+ */
+export const researchCommentSchema = z
+  .string()
+  .min(1)
+  .max(COMMENT_MAX_LENGTH)
+  .refine((text) => !text.includes('\0'), 'Must not contain NUL');
+
+/** The kinds a runner can be asked to start besides the work of a task (ADR-0029 T54). */
+const RUN_KINDS = ['work', 'check', 'research'] as const;
+const otherRunKindSchema = z.enum(['check', 'research']);
+
+/**
  * "Start this agent on this task": a name, and at most a model of the closed form above; never
  * a program, an argument or a prompt (T27). No model means the settings of Claude Code.
  */
@@ -223,21 +238,35 @@ export const runTaskRequestSchema = z
     agent: agentSchema,
     model: claudeModelSchema.optional(),
     /**
-     * `work` (also when absent) is the run of the task; `check` is an actuality check, recorded
-     * apart from the run (ADR-0030 §6). A check is always a new session: no `mode`, or `new`.
+     * `work` (also when absent) is the run of the task; `check` is an actuality check and
+     * `research` a research, both recorded apart from the run (ADR-0030 §6, R1). Neither has a
+     * session to continue: no `mode`, or `new`.
      */
-    kind: z.enum(['work', 'check']).optional(),
+    kind: z.enum(RUN_KINDS).optional(),
     /**
      * `new` (also when absent) starts a session; `resume` continues the session of the last run
      * of the task (T36); `restart` starts the work of the last run over in a new session (T37).
      * A session itself is never sent: the runner reads it from the board, or makes a new one.
      */
     mode: z.enum(['new', 'resume', 'restart']).optional(),
+    /** Only with `research`: the person's focus, carried by the runner into the begin. */
+    comment: researchCommentSchema.optional(),
   })
   .refine(
-    (request) => request.kind !== 'check' || request.mode === undefined || request.mode === 'new',
-    'A check is always a new session: it takes no mode but "new".',
-  );
+    (request) =>
+      request.kind === undefined ||
+      request.kind === 'work' ||
+      request.mode === undefined ||
+      request.mode === 'new',
+    {
+      message: 'A check or a research is always a new session: it takes no mode but "new".',
+      path: ['mode'],
+    },
+  )
+  .refine((request) => request.comment === undefined || request.kind === 'research', {
+    message: 'A comment belongs to a research: send kind "research" with it.',
+    path: ['comment'],
+  });
 
 /** The request was handed to a runner; the session is its business from here on. */
 export const runStartedSchema = z.strictObject({
@@ -246,18 +275,40 @@ export const runStartedSchema = z.strictObject({
   model: claudeModelSchema.optional(),
   /** The board answers with it only for `resume` and `restart`: a new run needs no word (T36). */
   mode: z.enum(['new', 'resume', 'restart']).optional(),
-  /** Only for a check; a run of the task says nothing, as it always did (ADR-0030 §6). */
-  kind: z.literal('check').optional(),
+  /**
+   * Only for a check or a research; a run of the task says nothing, as it always did. The
+   * comment is not repeated: the page has it, and the board keeps it nowhere until the begin.
+   */
+  kind: otherRunKindSchema.optional(),
 });
 
 /** What a waiting runner receives on `GET /runs`, and nothing else ever. */
-export const runRequestSchema = z.strictObject({
-  type: z.literal('run.requested'),
-  taskId: taskIdSchema,
-  agent: agentSchema,
-  model: claudeModelSchema.optional(),
-  mode: z.enum(['resume', 'restart']).optional(),
-  kind: z.literal('check').optional(),
+export const runRequestSchema = z
+  .strictObject({
+    type: z.literal('run.requested'),
+    taskId: taskIdSchema,
+    agent: agentSchema,
+    model: claudeModelSchema.optional(),
+    mode: z.enum(['resume', 'restart']).optional(),
+    kind: otherRunKindSchema.optional(),
+    comment: researchCommentSchema.optional(),
+  })
+  .refine((request) => request.comment === undefined || request.kind === 'research', {
+    message: 'A comment belongs to a research.',
+    path: ['comment'],
+  });
+
+/**
+ * What a runner says it can start, on `GET /runs?accepts=check,research` (D13, ADR-0029 T54): a
+ * list of the kinds besides `work`, of closed form. Without it the runner is one of an earlier
+ * version and is handed work only; every runner starts work.
+ */
+export const runsQuerySchema = z.strictObject({
+  accepts: z
+    .string()
+    .regex(/^(check|research)(,(check|research))*$/, 'A list of kinds: check, research')
+    .transform((list) => [...new Set(list.split(','))] as ('check' | 'research')[])
+    .optional(),
 });
 
 /**
@@ -346,12 +397,7 @@ export const checkBeginRequestSchema = z
     /** Absent is an actuality check (ADR-0030 R1). */
     kind: checkKindSchema.optional(),
     /** The focus of a research, as sent: at most 4 000 characters, no NUL (R2, D12). */
-    comment: z
-      .string()
-      .min(1)
-      .max(COMMENT_MAX_LENGTH)
-      .refine((text) => !text.includes('\0'), 'Must not contain NUL')
-      .optional(),
+    comment: researchCommentSchema.optional(),
   })
   .refine((request) => request.comment === undefined || request.kind !== undefined, {
     message: 'A comment belongs to a research: send kind "research" with it.',
@@ -410,5 +456,6 @@ export type Session = z.infer<typeof sessionSchema>;
 export type RunTaskRequest = z.infer<typeof runTaskRequestSchema>;
 export type RunStarted = z.infer<typeof runStartedSchema>;
 export type RunRequest = z.infer<typeof runRequestSchema>;
+export type RunsQuery = z.infer<typeof runsQuerySchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

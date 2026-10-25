@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { researchCommentSchema } from '../../contract/v1/index.js';
 
 export type Command = 'serve' | 'instructions' | 'handoff' | 'claude' | 'export' | 'help';
 
@@ -19,6 +20,10 @@ export interface ParsedArgs {
   recover?: boolean;
   /** Only for claude, with an id: check whether the task is still current (ADR-0030). */
   check?: boolean;
+  /** Only for claude, with an id: research how to approach the task (ADR-0029 T54). */
+  research?: boolean;
+  /** Only with --research: the person's focus, checked by the rule of the route. */
+  comment?: string;
   /** Only with --recover: the person says the session is stopped when this machine cannot tell. */
   confirmStopped?: boolean;
 }
@@ -33,6 +38,9 @@ export const USAGE = [
   '  claude <id>            start Claude Code on a task, in this terminal',
   '  claude <id> --check    start Claude Code on an actuality check of a task: it reports',
   '                         whether the task still matches the repository, and changes nothing',
+  '  claude <id> --research start Claude Code on a research of a task: it reports how to approach',
+  '                         the task, and changes nothing',
+  '      --comment <text>   with --research: what to focus on; it goes to the board, not to claude',
   '  claude --wait          start Claude Code in this terminal on each task sent from the',
   '                         board with Send to AI → Claude Code, one after another',
   '  claude --recover <id>  check whether the AI run of a task is still alive on this machine,',
@@ -74,6 +82,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         wait: { type: 'boolean' },
         recover: { type: 'boolean' },
         check: { type: 'boolean' },
+        research: { type: 'boolean' },
+        comment: { type: 'string' },
         'confirm-stopped': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -92,6 +102,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const wait = values.wait === true;
   const recover = values.recover === true;
   const check = values.check === true;
+  const research = values.research === true;
+  const comment = values.comment;
   const confirmStopped = values['confirm-stopped'] === true;
   if (wait && command !== 'claude') {
     throw new UsageError('The --wait flag belongs to the claude command.');
@@ -106,6 +118,22 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     throw new UsageError(
       'claude --check takes one task and starts a check of it: leave out --wait and --recover.',
     );
+  }
+  if (research && command !== 'claude') {
+    throw new UsageError('The --research flag belongs to the claude command.');
+  }
+  if (research && (wait || recover || check)) {
+    throw new UsageError(
+      'claude --research takes one task and starts a research of it: leave out --wait, ' +
+        '--recover and --check.',
+    );
+  }
+  if (comment !== undefined && !research) {
+    throw new UsageError('The --comment flag belongs to claude <id> --research.');
+  }
+  // The same rule as the route's, so that nothing starts that the board would refuse.
+  if (comment !== undefined && !researchCommentSchema.safeParse(comment).success) {
+    throw new UsageError('The comment of a research is text of 1 to 4000 characters, without NUL.');
   }
   if (recover && wait) {
     throw new UsageError('claude --recover takes one task and cannot wait: leave out --wait.');
@@ -147,6 +175,8 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(recover ? { recover } : {}),
     ...(confirmStopped ? { confirmStopped } : {}),
     ...(check ? { check } : {}),
+    ...(research ? { research } : {}),
+    ...(comment === undefined ? {} : { comment }),
   };
 }
 

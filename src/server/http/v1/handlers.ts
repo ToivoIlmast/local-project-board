@@ -92,16 +92,22 @@ export const handlers: Handlers = {
   // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
   'tasks.run': async (context, { params, body }) => {
     await context.tasks.get(params.id);
-    if (body.kind === 'check') {
-      // A check is recorded apart from the run of the task and takes nothing from it: it is
-      // not refused while a run works, nor while another check does (ADR-0030 §6).
+    if (body.kind === 'check' || body.kind === 'research') {
+      // A check or a research is recorded apart from the run of the task and takes nothing from
+      // it: it is not refused while a run works, nor while another check does (ADR-0030 §6,
+      // R1). The comment goes to the runner, which puts it in the begin; the board keeps it
+      // nowhere before that (ADR-0029 T54).
       const check = {
         taskId: params.id,
         agent: body.agent,
-        kind: 'check' as const,
+        kind: body.kind,
         ...(body.model === undefined ? {} : { model: body.model }),
       };
-      if (!context.runs.hand(check)) throw noRunner(params.id);
+      const handed = context.runs.hand({
+        ...check,
+        ...(body.comment === undefined ? {} : { comment: body.comment }),
+      });
+      if (handed !== 'handed') throw noRunner(params.id, handed);
       return check;
     }
     // Refused here, before any runner is asked: no run of any mode starts while one works
@@ -116,7 +122,8 @@ export const handlers: Handlers = {
       ...(body.model === undefined ? {} : { model: body.model }),
       ...(body.mode === undefined || body.mode === 'new' ? {} : { mode: body.mode }),
     };
-    if (!context.runs.hand(request)) throw noRunner(params.id);
+    const handed = context.runs.hand(request);
+    if (handed !== 'handed') throw noRunner(params.id, handed);
     return request;
   },
 
