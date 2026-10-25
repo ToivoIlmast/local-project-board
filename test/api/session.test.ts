@@ -97,6 +97,21 @@ describe('the token on the wire', () => {
         sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
       })
       .expect(200);
+    const research = {
+      agent: 'claude-code',
+      sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+      kind: 'research',
+    };
+    await board.post(`${API}/tasks/T1/checks`, research).expect(200);
+    await board
+      .post(`${API}/tasks/T1/checks/2/report`, {
+        agent: 'claude-code',
+        summary: 's',
+        findings: [],
+        recommendations: [],
+        markdown: '# Research\n',
+      })
+      .expect(200);
 
     const paths: Record<string, string> = {
       'project.get': '/project',
@@ -109,6 +124,7 @@ describe('the token on the wire', () => {
       'checks.list': '/tasks/T1/checks',
       'checks.get': '/tasks/T1/checks/1',
       'checks.handoff': '/tasks/T1/checks/1/handoff',
+      'checks.reportMarkdown': '/tasks/T1/checks/2/report.md',
       'workflow.get': '/workflow',
       'documents.list': '/tasks/T1/documents',
       'documents.read': '/tasks/T1/documents/plan.md',

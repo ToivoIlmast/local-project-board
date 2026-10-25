@@ -84,6 +84,8 @@ const calls: Record<RouteId, Call | NotCalled> = {
     body: { agent: 'claude-code', sessionId: SESSION },
   },
   'checks.report': { path: '/tasks/T1/checks/2/report', body: REPORT },
+  // Check 3, a research with a report, is made in beforeEach below.
+  'checks.reportMarkdown': { path: '/tasks/T1/checks/3/report.md' },
   'checks.end': { path: '/tasks/T1/checks/1/end', body: { sessionId: SESSION, exitCode: 0 } },
   'checks.decide': {
     path: '/tasks/T1/checks/1/decisions',
@@ -114,6 +116,16 @@ beforeEach(async () => {
   await board.post(`${API}/tasks/T1/checks`, begin).expect(200);
   await board.post(`${API}/tasks/T1/checks/1/report`, REPORT).expect(200);
   await board.post(`${API}/tasks/T1/checks`, begin).expect(200);
+  await board.post(`${API}/tasks/T1/checks`, { ...begin, kind: 'research' }).expect(200);
+  await board
+    .post(`${API}/tasks/T1/checks/3/report`, {
+      agent: 'claude-code',
+      summary: 'Done.',
+      findings: [],
+      recommendations: [],
+      markdown: '# Research\n',
+    })
+    .expect(200);
   // An HTML report, because that is the media the contract declares for reports.read;
   // a markdown report is served as markdown, which reports.test.ts covers.
   await board

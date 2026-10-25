@@ -190,6 +190,7 @@ describe('versions', () => {
       'GET /tasks/:id/checks',
       'GET /tasks/:id/checks/:n',
       'GET /tasks/:id/checks/:n/handoff',
+      'GET /tasks/:id/checks/:n/report.md',
       'GET /tasks/:id/versions',
       'GET /tasks/:id/versions/:n',
       'POST /tasks/:id/checks',
@@ -679,5 +680,333 @@ describe('POST /tasks/:id/run with kind check', () => {
       .expect(200);
     expect(await taskFile(task.id)).toBe(before);
     expect(await historyFiles(task.id)).toEqual(files);
+  });
+});
+
+describe('research (ADR-0030 R1–R5, T56)', () => {
+  const researchReport = (over: object = {}) => ({
+    agent: 'claude-code',
+    summary: 'Two steps are enough.\nThe rest is detail.',
+    findings: [
+      {
+        id: 'f1',
+        title: 'Moved',
+        explanation: 'It moved.',
+        evidence: [{ kind: 'file', ref: 'src/server/git/reader.ts' }],
+      },
+    ],
+    recommendations: [
+      {
+        id: 'r1',
+        findings: ['f1'],
+        text: 'Update the path.',
+        edit: { field: 'body', find: 'src/git.ts', replace: 'src/server/git/reader.ts' },
+      },
+      {
+        id: 'r2',
+        findings: [],
+        text: 'Change the plan.',
+        targets: [{ kind: 'document', name: 'plan.md' }],
+      },
+    ],
+    markdown: '# Research\n\nTwo steps. <script>alert(1)</script>\n',
+    ...over,
+  });
+  const beginResearch = async (
+    id: string,
+    over: object = {},
+  ): Promise<{ number: number; version: number }> =>
+    (
+      await board
+        .post(`${API}/tasks/${id}/checks`, {
+          agent: 'claude-code',
+          sessionId: SESSION,
+          kind: 'research',
+          ...over,
+        })
+        .expect(200)
+    ).body as { number: number; version: number };
+  const send = (id: string, number: number, body: object) =>
+    board.post(`${API}/tasks/${id}/checks/${number}/report`, body);
+  const decide = (id: string, number: number, body: object) =>
+    board.post(`${API}/tasks/${id}/checks/${number}/decisions`, body);
+
+  it('begins with its kind and comment, and lists them without the whole comment', async () => {
+    const task = await createTask();
+    await board
+      .put(`${API}/tasks/${task.id}/documents/plan.md`, { content: '# Plan\n' })
+      .expect(200);
+    const comment = `Look at the API.\n${'x'.repeat(300)}`;
+    const { number } = await beginResearch(task.id, { comment });
+
+    const one = checkSchema.parse(
+      (await board.get(`${API}/tasks/${task.id}/checks/${number}`)).body,
+    );
+    expect(one.begin).toMatchObject({
+      kind: 'research',
+      comment,
+      documents: [{ name: 'plan.md', size: 7 }],
+    });
+    const list = await board.get(`${API}/tasks/${task.id}/checks`).expect(200);
+    expect(list.body).toEqual([
+      expect.objectContaining({ number, kind: 'research', comment: 'Look at the API.…' }),
+    ]);
+    expect(JSON.stringify(list.body)).not.toContain('xxxxxxxx');
+  });
+
+  it('refuses a comment without a research, and a comment over its limit, as a bad request', async () => {
+    const task = await createTask();
+    const files = await historyFiles(task.id);
+    for (const over of [
+      { comment: 'Look.' },
+      { comment: 'x'.repeat(4001) },
+      { comment: '' },
+      { kind: 'work' },
+    ]) {
+      await board
+        .post(`${API}/tasks/${task.id}/checks`, {
+          agent: 'claude-code',
+          sessionId: SESSION,
+          ...over,
+        })
+        .expect(400);
+    }
+    expect(await historyFiles(task.id)).toEqual(files);
+  });
+
+  it('numbers researches and checks of one task in turn, and a comment stays with its own begin', async () => {
+    const task = await createTask();
+    const first = await beginResearch(task.id, { comment: 'First.' });
+    const second = await begin(task.id);
+    const third = await beginResearch(task.id, { comment: 'Third.' });
+    expect([first.number, second.number, third.number]).toEqual([1, 2, 3]);
+    const read = async (n: number) =>
+      checkSchema.parse((await board.get(`${API}/tasks/${task.id}/checks/${n}`)).body);
+    expect((await read(1)).begin.comment).toBe('First.');
+    expect((await read(2)).begin).not.toHaveProperty('comment');
+    expect((await read(3)).begin.comment).toBe('Third.');
+  });
+
+  it('takes the report of a research once, with the markdown in its own route (INVARIANT)', async () => {
+    const task = await createTask();
+    const { number } = await beginResearch(task.id);
+    const sent = researchReport();
+
+    const response = await send(task.id, number, sent).expect(200);
+    const check = checkSchema.parse(response.body);
+    expect(check.state).toBe('reported');
+    expect(check.report).not.toHaveProperty('verdict');
+    expect(check.report?.markdown).toEqual({ bytes: expect.any(Number), hash: expect.any(String) });
+    // The text is not in the record; it is read apart.
+    expect(JSON.stringify(response.body)).not.toContain('<script>');
+
+    const text = await board.get(`${API}/tasks/${task.id}/checks/${number}/report.md`).expect(200);
+    expect(text.headers['content-type']).toContain('text/markdown');
+    expect(text.headers['content-type']).not.toContain('html');
+    expect(text.text).toBe(sent.markdown);
+
+    const again = await send(task.id, number, researchReport({ markdown: '# Other\n' })).expect(
+      409,
+    );
+    expect(code(again.body)).toBe('CHECK_ALREADY_FINAL');
+    expect((await board.get(`${API}/tasks/${task.id}/checks/${number}/report.md`)).text).toBe(
+      sent.markdown,
+    );
+  });
+
+  it('answers 422 for a report of the wrong kind and for a markdown over its limit, and writes nothing', async () => {
+    const task = await createTask();
+    const { number } = await beginResearch(task.id);
+    const plain = await begin(task.id);
+    const files = await historyFiles(task.id);
+
+    for (const body of [
+      researchReport({ markdown: undefined }),
+      researchReport({ verdict: 'current' }),
+      researchReport({ markdown: '  ' }),
+      researchReport({ markdown: 'x'.repeat(200_001) }),
+    ]) {
+      const response = await send(task.id, number, body).expect(422);
+      expect(code(response.body)).toBe('INVALID_CHECK_REPORT');
+    }
+    const asCheck = await send(task.id, plain.number, researchReport()).expect(422);
+    expect(code(asCheck.body)).toBe('INVALID_CHECK_REPORT');
+    expect(await historyFiles(task.id)).toEqual(files);
+    expect(
+      checkSchema.parse((await board.get(`${API}/tasks/${task.id}/checks/${number}`)).body).state,
+    ).toBe('working');
+  });
+
+  it('refuses a target outside the project as a bad request (D4)', async () => {
+    const task = await createTask();
+    const { number } = await beginResearch(task.id);
+    const body = researchReport({
+      recommendations: [
+        { id: 'r1', findings: [], text: 't', targets: [{ kind: 'file', ref: '../secret' }] },
+      ],
+    });
+    await send(task.id, number, body).expect(400);
+  });
+
+  describe('the route of the markdown', () => {
+    it('is 409 until the report is published, 404 for a check without one or without a number', async () => {
+      const task = await createTask();
+      const { number } = await beginResearch(task.id);
+      const path = (n: number) => `${API}/tasks/${task.id}/checks/${n}/report.md`;
+      const working = await board.get(path(number)).expect(409);
+      expect(code(working.body)).toBe('CHECK_NOT_REPORTED');
+
+      const plain = await begin(task.id);
+      await send(task.id, plain.number, report()).expect(200);
+      const none = await board.get(path(plain.number)).expect(404);
+      expect(code(none.body)).toBe('CHECK_NOT_FOUND');
+      expect(code((await board.get(path(9)).expect(404)).body)).toBe('CHECK_NOT_FOUND');
+      expect(code((await board.get(`${API}/tasks/T99/checks/1/report.md`).expect(404)).body)).toBe(
+        'TASK_NOT_FOUND',
+      );
+    });
+
+    it('needs no token to read, and has no route that writes it (INVARIANT)', async () => {
+      const task = await createTask();
+      const { number } = await beginResearch(task.id);
+      await send(task.id, number, researchReport()).expect(200);
+      await board.get(`${API}/tasks/${task.id}/checks/${number}/report.md`).expect(200);
+      const path = `${API}/tasks/${task.id}/checks/${number}/report.md`;
+      for (const response of [
+        await board.post(path, { content: 'x' }),
+        await board.put(path, { content: 'x' }),
+        await board.del(path),
+      ]) {
+        expect([404, 405]).toContain(response.status);
+      }
+      // Nor is it a document of the task.
+      expect((await board.get(`${API}/tasks/${task.id}/documents`).expect(200)).body).toEqual([]);
+    });
+  });
+
+  it('changes no byte of task.md, no run and no document (INVARIANT)', async () => {
+    const task = await createTask();
+    await board
+      .put(`${API}/tasks/${task.id}/documents/plan.md`, { content: '# Plan\n' })
+      .expect(200);
+    await board
+      .post(`${API}/tasks/${task.id}/ai-run`, { sessionId: SESSION, mode: 'new' })
+      .expect(200);
+    await begin(task.id); // makes the baseline version, so only the research is measured below
+    const before = [
+      await taskFile(task.id),
+      (await board.get(`${API}/tasks/${task.id}/documents`)).body,
+      (await board.get(`${API}/tasks/${task.id}/documents/plan.md`)).text,
+    ];
+
+    const { number } = await beginResearch(task.id, { comment: 'Look around.' });
+    await send(task.id, number, researchReport()).expect(200);
+    await decide(task.id, number, { recommendation: 'r1', decision: 'accepted' }).expect(200);
+    await decide(task.id, number, {
+      recommendation: 'r2',
+      decision: 'rejected',
+      note: 'No.',
+    }).expect(200);
+    await board
+      .post(`${API}/tasks/${task.id}/checks/${number}/end`, { sessionId: SESSION })
+      .expect(200);
+    await board.get(`${API}/tasks/${task.id}/checks/${number}/handoff`).expect(200);
+
+    expect([
+      await taskFile(task.id),
+      (await board.get(`${API}/tasks/${task.id}/documents`)).body,
+      (await board.get(`${API}/tasks/${task.id}/documents/plan.md`)).text,
+    ]).toEqual(before);
+  });
+
+  it('runs three researches through, each on the version that is current; the first is stale after the task moved (INVARIANT)', async () => {
+    const task = await createTask({ labels: [] });
+    const first = await beginResearch(task.id, { comment: 'Round one.' });
+    await send(task.id, first.number, researchReport()).expect(200);
+    await board
+      .post(`${API}/tasks/${task.id}/checks/${first.number}/end`, { sessionId: SESSION })
+      .expect(200);
+    await decide(task.id, first.number, { recommendation: 'r1', decision: 'accepted' }).expect(200);
+    const markdown = (await board.get(`${API}/tasks/${task.id}/checks/1/report.md`)).text;
+
+    const applied = await board
+      .patch(`${API}/tasks/${task.id}`, {
+        body: 'See `src/server/git/reader.ts`.\n',
+        ifContentHash: hashOf(task),
+        fromCheck: { check: 1, recommendations: ['r1'], basis: 'report' },
+      })
+      .expect(200);
+    const second = await beginResearch(task.id, { comment: 'Round two.' });
+    expect(second.version).toBe((await versions(task.id)).versions.at(-1)?.number);
+    await send(task.id, second.number, researchReport({ recommendations: [] })).expect(200);
+    await decide(task.id, first.number, {
+      recommendation: 'r2',
+      decision: 'rejected',
+      note: 'Frozen.',
+    }).expect(200);
+
+    // The task moved on after the first research: it cannot be applied to what the task is now.
+    const before = await taskFile(task.id);
+    const stale = await board
+      .patch(`${API}/tasks/${task.id}`, {
+        labels: ['x'],
+        ifContentHash: hashOf(applied.body as { title: string; body: string; labels: string[] }),
+        fromCheck: { check: 1, recommendations: ['r1'], basis: 'report' },
+      })
+      .expect(409);
+    expect(code(stale.body)).toBe('STALE_CHECK');
+    expect(await taskFile(task.id)).toBe(before);
+
+    const third = await beginResearch(task.id, { comment: 'Round three.' });
+    expect([first.number, second.number, third.number]).toEqual([1, 2, 3]);
+    expect(third.version).toBe(second.version);
+    // The first research reads as it did.
+    expect((await board.get(`${API}/tasks/${task.id}/checks/1/report.md`)).text).toBe(markdown);
+    expect(
+      checkSchema.parse((await board.get(`${API}/tasks/${task.id}/checks/1`)).body).begin.comment,
+    ).toBe('Round one.');
+  });
+
+  it('serves a handoff with the pinned snapshot, the comment, the earlier decisions and no token', async () => {
+    const task = await createTask({ body: 'Original text.\n' });
+    const first = await beginResearch(task.id);
+    await send(
+      task.id,
+      first.number,
+      researchReport({ recommendations: [{ id: 'r1', findings: [], text: 'Do it.' }] }),
+    ).expect(200);
+    await decide(task.id, first.number, {
+      recommendation: 'r1',
+      decision: 'rejected',
+      note: 'Out of scope: frozen.',
+    }).expect(200);
+    const second = await beginResearch(task.id, { comment: 'Focus on the API.' });
+    await board.patch(`${API}/tasks/${task.id}`, { body: 'Edited after.\n' });
+
+    const response = await board
+      .get(`${API}/tasks/${task.id}/checks/${second.number}/handoff`)
+      .expect(200);
+    expect(response.headers['content-type']).toContain('text/markdown');
+    expect(response.text).toContain('Original text.');
+    expect(response.text).not.toContain('Edited after');
+    expect(response.text).toContain('Focus on the API.');
+    expect(response.text).toContain('r1: rejected, note: "Out of scope: frozen."');
+    expect(response.text).toContain(
+      `GET ${board.origin}${API}/tasks/${task.id}/checks/1/report.md`,
+    );
+    expect(response.text).not.toContain(board.token);
+    expect(response.text).not.toContain('How to work on this task');
+    const again = await board.get(`${API}/tasks/${task.id}/checks/${second.number}/handoff`);
+    expect(again.text).toBe(response.text);
+  });
+
+  it('leaves the handoff of an actuality check without a focus or an index', async () => {
+    const task = await createTask();
+    const { number } = await begin(task.id);
+    const response = await board
+      .get(`${API}/tasks/${task.id}/checks/${number}/handoff`)
+      .expect(200);
+    expect(response.text).toContain(`# Check ${task.id}-C${number}`);
+    expect(response.text).not.toContain('Earlier checks');
   });
 });

@@ -555,7 +555,7 @@ export const routes = {
     id: 'checks.list',
     method: 'GET',
     path: '/tasks/:id/checks',
-    summary: 'List the actuality checks of a task, with their state and the version each read',
+    summary: 'List the checks and researches of a task, with their state and the version each read',
     params: taskParams,
     response: json(z.array(s.checkSummarySchema)),
     example: {
@@ -579,7 +579,8 @@ export const routes = {
     id: 'checks.get',
     method: 'GET',
     path: '/tasks/:id/checks/:n',
-    summary: 'Read one actuality check: its begin, its report as the agent sent it, its decisions',
+    summary:
+      'Read one check or research: its begin, its report as the agent sent it, its decisions',
     params: checkParams,
     response: json(s.checkSchema),
     example: { params: { id: 'T12', n: 1 }, response: exampleCheck },
@@ -590,7 +591,7 @@ export const routes = {
     id: 'checks.begin',
     method: 'POST',
     path: '/tasks/:id/checks',
-    summary: 'Runner: begin an actuality check, pinned to the version that is on disk',
+    summary: 'Runner: begin an actuality check or a research, pinned to the version on disk',
     params: taskParams,
     request: s.checkBeginRequestSchema,
     response: json(s.checkBeginResponseSchema),
@@ -635,6 +636,21 @@ export const routes = {
       response: exampleCheck,
     },
     // Described in the handoff of the check, with the number of the check in the URL.
+    ai: { include: false },
+  }),
+
+  'checks.reportMarkdown': route({
+    id: 'checks.reportMarkdown',
+    method: 'GET',
+    path: '/tasks/:id/checks/:n/report.md',
+    summary: 'Read the markdown of a published research report, exactly as it was written',
+    params: checkParams,
+    response: { schema: z.string(), media: 'text/markdown' },
+    example: {
+      params: { id: 'T12', n: 2 },
+      response: '# Research\n\n## What the task asks for\n\nMove the parser into server/git.\n',
+    },
+    // Read by the page; an agent's research is read by the person, not handed to another agent.
     ai: { include: false },
   }),
 

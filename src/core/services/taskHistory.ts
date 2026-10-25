@@ -2,10 +2,10 @@ import { BoardError } from '../errors.js';
 import type { FromCheck, TaskContent, TaskVersion } from '../model/history.js';
 import type { Storage } from '../ports.js';
 import {
+  applyBlockers,
   changedFields,
   contentHash,
   contentOf,
-  latestDecisions,
   sameContent,
 } from '../rules/history.js';
 
@@ -127,11 +127,12 @@ export async function assertFromCheck(
     );
   }
   const pinned = await storage.readVersion(taskId, check.begin.version);
-  const latest = latestDecisions(check.decisions);
-  const notAccepted = fromCheck.recommendations.filter(
-    (id) => latest.get(id)?.decision !== 'accepted',
-  );
-  if (pinned === null || !sameContent(pinned.snapshot, content) || notAccepted.length > 0) {
+  const { blocked, notAccepted } = applyBlockers({
+    stale: pinned === null || !sameContent(pinned.snapshot, content),
+    decisions: check.decisions,
+    recommendations: fromCheck.recommendations,
+  });
+  if (blocked) {
     throw new BoardError(
       'STALE_CHECK',
       `Check ${fromCheck.check} of task "${taskId}" cannot be applied to the task as it is now.`,

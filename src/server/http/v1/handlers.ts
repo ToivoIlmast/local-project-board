@@ -7,7 +7,7 @@ import {
   type ResponseOf,
   type RouteId,
 } from '../../../contract/v1/index.js';
-import type { Project } from '../../../core/index.js';
+import { BoardError, type Project } from '../../../core/index.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
 import { noRunner } from '../runs.js';
@@ -147,6 +147,18 @@ export const handlers: Handlers = {
     }),
     media: 'text/markdown',
   }),
+  // The text of a research report, apart from the record (ADR-0030 R3); only a research has one.
+  'checks.reportMarkdown': async (context, { params }) => {
+    const text = await context.history.reportMarkdown(params.id, params.n);
+    if (text === null) {
+      throw new BoardError(
+        'CHECK_NOT_FOUND',
+        `Check ${params.n} of task "${params.id}" has no report text: it is not a research.`,
+        { id: params.id, check: params.n },
+      );
+    }
+    return { text, media: 'text/markdown' };
+  },
   'checks.report': (context, { params, body }) => context.history.report(params.id, params.n, body),
   'checks.end': (context, { params, body }) => context.history.endCheck(params.id, params.n, body),
   'checks.decide': (context, { params, body }) => context.history.decide(params.id, params.n, body),

@@ -1,10 +1,15 @@
 import { BoardError } from '../errors.js';
 import type {
   Check,
+  CheckReport,
+  CheckKind,
   CheckReportContent,
   CheckSummary,
+  CheckVerdict,
   Decision,
+  DecisionCounts,
   RepoState,
+  ResearchReportContent,
   TaskVersion,
   VersionList,
 } from '../model/history.js';
@@ -14,8 +19,11 @@ import {
   changedFields,
   contentHash,
   contentOf,
+  latestDecisions,
+  reportKindProblems,
   reportProblems,
   sameContent,
+  summarizeComment,
 } from '../rules/history.js';
 import { assertContentHash, latestVersion, syncHistory } from './taskHistory.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
@@ -33,7 +41,20 @@ export interface BeginCheckInput {
   agent: string;
   sessionId: string;
   model?: string | undefined;
+  /** Absent for an actuality check (ADR-0030 R1). */
+  kind?: CheckKind | undefined;
+  /** The focus of a research, as sent (ADR-0030 R2). */
+  comment?: string | undefined;
 }
+
+/**
+ * What an agent sends as a report: an actuality check's has a `verdict`, a research's has its
+ * `markdown`. Which one is right is the check's to say (`reportKindProblems`), not the type's.
+ */
+export type ReportInput = Omit<CheckReportContent, 'verdict'> & {
+  verdict?: CheckReportContent['verdict'] | undefined;
+  markdown?: ResearchReportContent['markdown'] | undefined;
+};
 
 export interface EndCheckInput {
   sessionId: string;
@@ -62,7 +83,12 @@ export interface HistoryService {
   /** Runner: pins the check to a version that exists and equals what is on disk. */
   beginCheck(taskId: string, input: BeginCheckInput): Promise<{ number: number; version: number }>;
   /** Agent: the one report of a check that works. */
-  report(taskId: string, number: number, content: CheckReportContent): Promise<Check>;
+  report(taskId: string, number: number, content: ReportInput): Promise<Check>;
+  /**
+   * The markdown of a published research report, as written (ADR-0030 R3); null for a check
+   * that has none. Refuses with `CHECK_NOT_REPORTED` until the report is published.
+   */
+  reportMarkdown(taskId: string, number: number): Promise<string | null>;
   /** Runner: the one end of a check. */
   endCheck(taskId: string, number: number, input: EndCheckInput): Promise<Check>;
   decide(taskId: string, number: number, input: DecisionInput): Promise<Decision>;
@@ -121,9 +147,23 @@ export function createHistoryService({
     version: check.begin.version,
     createdAt: check.begin.createdAt,
     agent: check.report?.agent ?? check.begin.agent,
-    ...(check.report === undefined ? {} : { verdict: check.report.verdict }),
+    ...(check.begin.kind === undefined ? {} : { kind: check.begin.kind }),
+    ...(check.begin.comment === undefined
+      ? {}
+      : { comment: summarizeComment(check.begin.comment) }),
+    ...(check.report?.verdict === undefined ? {} : { verdict: check.report.verdict }),
+    ...(check.report === undefined ? {} : { decisions: decisionCounts(check.report, check) }),
     ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),
   });
+
+  /** How the recommendations of a report stand: by their latest decision (ADR-0030 §2). */
+  function decisionCounts(report: CheckReport, check: Check): DecisionCounts {
+    const latest = latestDecisions(check.decisions);
+    const counts = { accepted: 0, rejected: 0, undecided: 0 };
+    for (const { id } of report.recommendations)
+      counts[latest.get(id)?.decision ?? 'undecided'] += 1;
+    return counts;
+  }
 
   return {
     async versions(taskId) {
@@ -202,12 +242,29 @@ export function createHistoryService({
         // Pinned to a version that exists and equals what is on disk (ADR-0030 §6).
         const appended = await syncHistory(storage, taskId, contentOf(task));
         const pinned = latestVersion([...(await storage.listVersions(taskId))]) as TaskVersion;
+        if (input.comment !== undefined && input.kind === undefined) {
+          throw new BoardError(
+            'INVALID_REQUEST',
+            'A comment belongs to a research: send kind "research" with it.',
+            { issues: [{ path: 'comment', message: 'Only with kind "research".' }] },
+          );
+        }
+        // What the research saw of the documents: names, sizes and times, never the text.
+        const documents =
+          input.kind === 'research'
+            ? (await storage.listDocuments(taskId))
+                .map(({ name, size, updatedAt }) => ({ name, size, updatedAt }))
+                .sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name))
+            : undefined;
         const begin = await storage.beginCheck(taskId, {
           version: pinned.number,
           agent: input.agent,
           sessionId: input.sessionId,
           ...(input.model === undefined ? {} : { model: input.model }),
           repo: await repoState(),
+          ...(input.kind === undefined ? {} : { kind: input.kind }),
+          ...(input.comment === undefined ? {} : { comment: input.comment }),
+          ...(documents === undefined ? {} : { documents }),
         });
         announceVersions(taskId, appended);
         events.publish({ type: 'check.updated', taskId, number: begin.number });
@@ -232,7 +289,11 @@ export function createHistoryService({
             { id: taskId, version: check.begin.version },
           );
         }
-        const problems = reportProblems(content, pinned.snapshot);
+        // The kind is the one the check began as; the report cannot choose another (R1).
+        const problems = [
+          ...reportKindProblems(check.begin.kind, content),
+          ...reportProblems(content, pinned.snapshot),
+        ];
         if (problems.length > 0) {
           throw new BoardError(
             'INVALID_CHECK_REPORT',
@@ -240,14 +301,31 @@ export function createHistoryService({
             { id: taskId, check: number, version: pinned.number, problems },
           );
         }
+        // `reportKindProblems` has seen to it that the report holds what its kind needs.
+        const { verdict, markdown, ...rest } = content;
         await storage.writeCheckReport(taskId, number, {
-          ...content,
+          ...rest,
+          ...(check.begin.kind === 'research'
+            ? { markdown: markdown as string }
+            : { verdict: verdict as CheckVerdict }),
           version: check.begin.version,
           repo: await repoState(),
         });
         events.publish({ type: 'check.updated', taskId, number });
         return requireCheck(taskId, number);
       }),
+
+    async reportMarkdown(taskId, number) {
+      const check = await requireCheck(taskId, number);
+      if (check.state !== 'reported') {
+        throw new BoardError(
+          'CHECK_NOT_REPORTED',
+          `Check ${number} of task "${taskId}" has no published report.`,
+          { id: taskId, check: number, state: check.state },
+        );
+      }
+      return storage.readCheckMarkdown(taskId, number);
+    },
 
     endCheck: (taskId, number, input) =>
       locks.run(taskId, async () => {
