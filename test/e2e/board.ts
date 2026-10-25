@@ -16,7 +16,8 @@ export interface RunningBoard {
   api(path: string, init?: { method?: string; body?: unknown }): Promise<unknown>;
   /**
    * Wait for Send to AI as `claude --wait` does, starting nothing: resolves with the one request
-   * the board hands to a waiting runner. A runner is waiting once this has been called.
+   * the board hands to a waiting runner, one of the current version (it accepts a check and a
+   * research, as the real runner says). A runner is waiting once this has been called.
    */
   waitForRun(): Promise<{ request: Promise<unknown> }>;
   /** Stop the process the way Ctrl+C does, leaving the project directory as it is. */
@@ -103,7 +104,7 @@ async function startBoard(): Promise<{ board: RunningBoard; dispose: () => Promi
       await spawnBoard(Number(new URL(url).port));
     },
     async waitForRun() {
-      const response = await fetch(`${url.replace(/\/$/, '')}/api/v1/runs`, {
+      const response = await fetch(`${url.replace(/\/$/, '')}/api/v1/runs?accepts=check,research`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
       });
       if (!response.ok) throw new Error(`/api/v1/runs answered ${response.status}`);
