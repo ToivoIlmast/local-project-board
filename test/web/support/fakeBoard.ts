@@ -1,7 +1,6 @@
 import type {
   BoardEvent,
   Check,
-  CheckSummary,
   Decision,
   DocumentMeta,
   EffectiveWorkflow,
@@ -24,6 +23,7 @@ import {
   generateHandoff,
   latestDecisions,
   sameContent,
+  summarizeCheck,
 } from '../../../src/contract/v1/index';
 import { rankForPosition } from '../../../src/core/rules/rank';
 import { defaultWorkflow, resolveWorkflow } from '../../../src/core/rules/workflow';
@@ -45,6 +45,8 @@ export interface FakeBoardOptions {
   versions?: Record<string, Omit<TaskVersion, 'taskId' | 'number' | 'createdAt'>[]>;
   /** Checks a task already has, with their reports and decisions. */
   checks?: Record<string, Check[]>;
+  /** The markdown of each research report, by `<task>/<number>`. */
+  researchMarkdown?: Record<string, string>;
 }
 
 export interface FakeBoard {
@@ -329,9 +331,13 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       record('runTask', () => {
         require(id);
         runs.push({ taskId: id, ...structuredClone(request) });
-        // As the board answers: `kind` only for a check, never "work".
-        const { kind, ...rest } = structuredClone(request);
-        return { taskId: id, ...rest, ...(kind === 'check' ? { kind } : {}) };
+        // As the board answers: `kind` only for a check or a research, never "work"; no comment.
+        const { kind, comment: _comment, ...rest } = structuredClone(request);
+        return {
+          taskId: id,
+          ...rest,
+          ...(kind === 'check' || kind === 'research' ? { kind } : {}),
+        };
       }),
     handoff: (id) =>
       record('handoff', () => {
@@ -392,20 +398,20 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         emit({ type: 'task.updated', task: { ...task } });
         return { task: { ...task }, changed: true };
       }),
-    checks: (taskId) =>
-      record('checks', () =>
-        checksOf(taskId).map((check): CheckSummary => ({
-          taskId,
-          number: check.begin.number,
-          state: check.state,
-          version: check.begin.version,
-          createdAt: check.begin.createdAt,
-          agent: check.report?.agent ?? check.begin.agent,
-          ...(check.report === undefined ? {} : { verdict: check.report.verdict }),
-          ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),
-        })),
-      ),
+    checks: (taskId) => record('checks', () => checksOf(taskId).map(summarizeCheck)),
     check: (taskId, number) => record('check', () => structuredClone(requireCheck(taskId, number))),
+    checkReportMarkdown: (taskId, number) =>
+      record('checkReportMarkdown', () => {
+        const check = requireCheck(taskId, number);
+        if (check.report === undefined) {
+          throw new ApiError(409, 'CHECK_NOT_REPORTED', 'The check has no report yet.');
+        }
+        const text = options.researchMarkdown?.[`${taskId}/${number}`];
+        if (text === undefined) {
+          throw new ApiError(404, 'CHECK_NOT_FOUND', 'It is not a research.');
+        }
+        return text;
+      }),
     decide: (taskId, number, input) =>
       record('decide', () => {
         const check = requireCheck(taskId, number);

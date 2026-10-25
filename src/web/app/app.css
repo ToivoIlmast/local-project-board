@@ -544,6 +544,20 @@
   color: var(--ink-muted);
 }
 
+.history__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* The focus and the counts of a research, each on a line of its own under the item. */
+.history__comment,
+.history__counts {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .history__compare {
   display: flex;
   flex-direction: column;
@@ -663,7 +677,21 @@
 
 .check__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.check__focus {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.check__reject {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .check__recommendation {

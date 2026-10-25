@@ -148,3 +148,47 @@ export function aCheck(overrides: Partial<Check> = {}, taskId = 'T1', number = 1
     ...overrides,
   };
 }
+
+/**
+ * A research with its report: no verdict, its markdown described in the record, a focus, and
+ * three recommendations — an edit of the task, one aimed at a document and one at a file.
+ */
+export function aResearch(
+  overrides: Partial<Check> = {},
+  taskId = 'T1',
+  number = 1,
+  comment: string | undefined = 'Look at the git adapter only.',
+): Check {
+  const base = aCheck({}, taskId, number);
+  const { verdict: _verdict, ...report } = base.report!;
+  return {
+    ...base,
+    begin: {
+      ...base.begin,
+      kind: 'research',
+      ...(comment === undefined ? {} : { comment }),
+      documents: [],
+    },
+    report: {
+      ...report,
+      summary: 'The adapter moved; the plan document is behind.',
+      markdown: { bytes: 64, hash: 'a'.repeat(16) },
+      recommendations: [
+        { ...report.recommendations[0]!, targets: [{ kind: 'task' }] },
+        {
+          id: 'r2',
+          findings: ['f1'],
+          text: 'Update the plan.',
+          targets: [{ kind: 'document', name: 'plan.md' }],
+        },
+        {
+          id: 'r3',
+          findings: [],
+          text: 'Rename the reader.',
+          targets: [{ kind: 'file', ref: 'src/server/git/reader.ts' }],
+        },
+      ],
+    },
+    ...overrides,
+  };
+}

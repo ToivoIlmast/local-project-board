@@ -308,7 +308,7 @@ test('the AI settings of a task are changed with the keyboard, and the handoff c
   await page.keyboard.press('Enter');
   const task = page.getByRole('complementary', { name: 'Task T1' });
   await expect(task).toBeFocused();
-  const ai = task.getByRole('region', { name: 'AI' });
+  const ai = task.getByRole('region', { name: 'AI', exact: true });
 
   // A task with nothing of its own is one line, and the handoff is one menu away.
   await expect(ai).toContainText('Uses the settings of column todo');

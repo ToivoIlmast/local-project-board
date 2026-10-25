@@ -79,9 +79,11 @@ export interface BoardClient {
     number: number,
     ifContentHash: string,
   ): Promise<RestoreVersionResponse>;
-  /** The actuality checks of a task, newest last. */
+  /** The checks of a task, actuality checks and research alike, newest last. */
   checks(taskId: string): Promise<CheckSummary[]>;
   check(taskId: string, number: number): Promise<Check>;
+  /** The markdown of a published research report, as it was written (ADR-0030 R3). */
+  checkReportMarkdown(taskId: string, number: number): Promise<string>;
   /** The person's decision on one recommendation of a reported check. */
   decide(taskId: string, number: number, decision: DecisionRequest): Promise<Decision>;
 
@@ -194,6 +196,7 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
       call('versions.restore', { params: { id, n }, body: { ifContentHash } }),
     checks: (id) => call('checks.list', { params: { id } }),
     check: (id, n) => call('checks.get', { params: { id, n } }),
+    checkReportMarkdown: (id, n) => call('checks.reportMarkdown', { params: { id, n } }),
     decide: (id, n, body) => call('checks.decide', { params: { id, n }, body }),
 
     listDocuments: (id) => call('documents.list', { params: { id } }),

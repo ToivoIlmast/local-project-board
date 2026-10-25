@@ -6,8 +6,10 @@ import type {
   CheckReportContent,
   CheckKind,
   CheckState,
+  CheckSummary,
   ContentField,
   Decision,
+  DecisionCounts,
   Recommendation,
   RepoState,
   ReportMarkdown,
@@ -474,6 +476,47 @@ export function summarizeComment(comment: string): string {
   return `${cut ? first.slice(0, COMMENT_SUMMARY_LENGTH) : first}${cut || first.length < text.length ? '…' : ''}`;
 }
 
+/** How the recommendations of a report stand: by their latest decision (ADR-0030 §2). */
+export function decisionCounts(check: Check): DecisionCounts | undefined {
+  if (check.report === undefined) return undefined;
+  const latest = latestDecisions(check.decisions);
+  const counts = { accepted: 0, rejected: 0, undecided: 0 };
+  for (const { id } of check.report.recommendations)
+    counts[latest.get(id)?.decision ?? 'undecided'] += 1;
+  return counts;
+}
+
+/** A check as the lists show it: its begin, its state, and how its recommendations stand. */
+export function summarizeCheck(check: Check): CheckSummary {
+  const decisions = decisionCounts(check);
+  return {
+    taskId: check.begin.taskId,
+    number: check.begin.number,
+    state: check.state,
+    version: check.begin.version,
+    createdAt: check.begin.createdAt,
+    agent: check.report?.agent ?? check.begin.agent,
+    ...(check.begin.kind === undefined ? {} : { kind: check.begin.kind }),
+    ...(check.begin.comment === undefined
+      ? {}
+      : { comment: summarizeComment(check.begin.comment) }),
+    ...(check.report?.verdict === undefined ? {} : { verdict: check.report.verdict }),
+    ...(decisions === undefined ? {} : { decisions }),
+    ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),
+  };
+}
+
+/**
+ * Whether a later check or research of the task has reported (ADR-0030 R5): a note on the older
+ * one, which blocks nothing and changes no data.
+ */
+export function isSuperseded(
+  checks: readonly { number: number; state: CheckState }[],
+  check: number,
+): boolean {
+  return checks.some((c) => c.number > check && c.state === 'reported');
+}
+
 export type RecommendationDecision = 'undecided' | Decision['decision'];
 export type RecommendationApplication =
   { state: 'applied'; versions: number[] } | { state: 'not-applied' } | { state: 'not-applicable' };
@@ -523,11 +566,10 @@ export function recommendationAxes(input: {
         ? { state: 'not-applied' }
         : { state: 'not-applicable' };
 
-  const superseded = input.checks.some((c) => c.number > check && c.state === 'reported');
   return {
     decision: decision ?? 'undecided',
     application,
-    currency: input.stale ? 'stale' : superseded ? 'superseded' : 'current',
+    currency: input.stale ? 'stale' : isSuperseded(input.checks, check) ? 'superseded' : 'current',
   };
 }
 

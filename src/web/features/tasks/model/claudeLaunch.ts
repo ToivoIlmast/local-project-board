@@ -57,6 +57,20 @@ export function runRequest(model: string | undefined, mode: SessionMode = 'new')
   };
 }
 
+/**
+ * The body of `POST /tasks/:id/run` for a research (ADR-0029 T54): the kind, the model only when
+ * one was chosen, and the focus only when something was typed — a blank one is not a focus. It
+ * is never a run of the task and takes no session: a research starts nothing else.
+ */
+export function researchRequest(model: string | undefined, focus: string): RunTaskRequest {
+  return {
+    agent: 'claude-code',
+    kind: 'research',
+    ...(model === undefined ? {} : { model }),
+    ...(/\S/.test(focus) ? { comment: focus } : {}),
+  };
+}
+
 /** How the session of a start relates to the last one. */
 export type SessionMode = 'new' | 'resume' | 'restart';
 
