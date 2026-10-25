@@ -310,3 +310,89 @@ describe('the routes of a research (ADR-0030 R2, R3, R9)', () => {
     expect(parseParams(route, { id: 'T1', n: '2' })).toMatchObject({ ok: true });
   });
 });
+
+describe('starting a research (ADR-0029 T54)', () => {
+  const run = (body: object) => parseBody(routes['tasks.run'], { agent: 'claude-code', ...body });
+
+  it('takes kind research, with a comment and a model, and a comment only with a research', () => {
+    expect(run({ kind: 'research' })).toMatchObject({ ok: true });
+    expect(run({ kind: 'research', comment: 'Look at the API.', model: 'opus' })).toMatchObject({
+      ok: true,
+    });
+    expect(run({ kind: 'research', mode: 'new' })).toMatchObject({ ok: true });
+    for (const body of [
+      { comment: 'Look at the API.' },
+      { kind: 'work', comment: 'Look at the API.' },
+      { kind: 'check', comment: 'Look at the API.' },
+      { kind: 'research', mode: 'resume' },
+      { kind: 'research', mode: 'restart' },
+    ]) {
+      expect([body, run(body).ok]).toEqual([body, false]);
+    }
+  });
+
+  it('bounds the comment as the begin does: not empty, no NUL, at most 4 000 characters (D12)', () => {
+    expect(run({ kind: 'research', comment: 'x'.repeat(4000) })).toMatchObject({ ok: true });
+    for (const comment of ['', 'x'.repeat(4001), 'a\0b', 3, null]) {
+      expect(run({ kind: 'research', comment }).ok).toBe(false);
+    }
+  });
+
+  it('lets the runner receive a research with its comment, and a comment with nothing else', () => {
+    const request = (over: object) =>
+      routes['runs.stream'].response.schema.safeParse({
+        type: 'run.requested',
+        taskId: 'T1',
+        agent: 'claude-code',
+        ...over,
+      }).success;
+    expect(request({ kind: 'research' })).toBe(true);
+    expect(request({ kind: 'research', comment: 'Look at the API.' })).toBe(true);
+    expect(request({ kind: 'check', comment: 'Look at the API.' })).toBe(false);
+    expect(request({ comment: 'Look at the API.' })).toBe(false);
+    expect(request({ kind: 'research', comment: 'x'.repeat(4001) })).toBe(false);
+  });
+
+  it('answers the page with the kind, never with the comment', () => {
+    const started = routes['tasks.run'].response.schema;
+    expect(
+      started.safeParse({ taskId: 'T1', agent: 'claude-code', kind: 'research' }).success,
+    ).toBe(true);
+    expect(
+      started.safeParse({ taskId: 'T1', agent: 'claude-code', kind: 'research', comment: 'x' })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('what a runner accepts (ADR-0029 T54, D13)', () => {
+  const query = (value: object) => parseQuery(routes['runs.stream'], value);
+
+  it('is a list of kinds from check and research, or nothing at all', () => {
+    expect(query({})).toMatchObject({ ok: true, data: {} });
+    expect(query({ accepts: 'check,research' })).toMatchObject({
+      ok: true,
+      data: { accepts: ['check', 'research'] },
+    });
+    expect(query({ accepts: 'research' })).toMatchObject({
+      ok: true,
+      data: { accepts: ['research'] },
+    });
+  });
+
+  it('refuses anything that is not of that closed form', () => {
+    for (const accepts of [
+      '',
+      'work',
+      'check,',
+      ',check',
+      'check research',
+      'CHECK',
+      'x',
+      ['check', 'research'],
+    ]) {
+      expect([accepts, query({ accepts }).ok]).toEqual([accepts, false]);
+    }
+    expect(query({ other: '1' }).ok).toBe(false);
+  });
+});

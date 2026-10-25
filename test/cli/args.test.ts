@@ -86,6 +86,44 @@ describe('the command line', () => {
     );
   });
 
+  it('takes --research <id> for the claude command, and --comment only with it (ADR-0029 T54)', () => {
+    expect(parseCliArgs(['claude', 'T57', '--research'])).toEqual({
+      command: 'claude',
+      id: 'T57',
+      research: true,
+    });
+    expect(parseCliArgs(['claude', 'T57', '--research', '--comment', 'Only the runner.'])).toEqual({
+      command: 'claude',
+      id: 'T57',
+      research: true,
+      comment: 'Only the runner.',
+    });
+    // A comment that looks like a flag is still the text of the comment, not an option.
+    expect(parseCliArgs(['claude', 'T57', '--research', '--comment=--model opus'])).toMatchObject({
+      comment: '--model opus',
+    });
+    expect(() => parseCliArgs(['claude', '--research'])).toThrow(/id of a task/);
+    expect(() => parseCliArgs(['claude', 'T1', '--comment', 'x'])).toThrow(/--research/);
+    expect(() => parseCliArgs(['handoff', 'T1', '--research'])).toThrow(/claude/);
+    for (const other of ['--check', '--recover']) {
+      expect(() => parseCliArgs(['claude', 'T1', '--research', other])).toThrow(UsageError);
+    }
+    expect(() => parseCliArgs(['claude', '--wait', '--research'])).toThrow(UsageError);
+    // The form of --comment-file is not decided (ADR-0029 T54): there is no such option.
+    expect(() => parseCliArgs(['claude', 'T1', '--research', '--comment-file', 'x.md'])).toThrow(
+      UsageError,
+    );
+  });
+
+  it('checks the comment by the rule of the route: not empty, no NUL, at most 4 000 characters', () => {
+    const comment = (text: string) => () =>
+      parseCliArgs(['claude', 'T1', '--research', '--comment', text]);
+    expect(comment('x'.repeat(4000))).not.toThrow();
+    for (const text of ['', 'x'.repeat(4001), 'a\0b']) {
+      expect(comment(text)).toThrow(UsageError);
+    }
+  });
+
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });
@@ -117,6 +155,8 @@ describe('the command line', () => {
       'handoff <id>',
       'claude <id>',
       'claude --wait',
+      'claude <id> --research',
+      '--comment <text>',
       'export',
       '--port',
       '--no-open',

@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { claudeCheckPrompt } from '../../src/contract/v1/index.js';
+import { claudeCheckPrompt, researchPrompt } from '../../src/contract/v1/index.js';
 import { deliverPendingCheckEnds } from '../../src/server/cli/checkEnd.js';
 import {
   checkJournalSchema,
@@ -47,7 +47,11 @@ async function api(state: RuntimeState, method: string, path: string, body?: unk
 
 const json = async <T>(answer: Response): Promise<T> => (await answer.json()) as T;
 
-async function board(): Promise<{ root: string; state: RuntimeState }> {
+async function board(): Promise<{
+  root: string;
+  state: RuntimeState;
+  stop: () => Promise<void>;
+}> {
   const root = await tmpDir();
   const start = await cli(['--port', String(await freePort()), '--no-open'], { cwd: root });
   expect(start.exitCode).toBe(0);
@@ -58,7 +62,7 @@ async function board(): Promise<{ root: string; state: RuntimeState }> {
       201,
     );
   }
-  return { root, state: runtime.state };
+  return { root, state: runtime.state, stop: start.stop ?? (() => Promise.resolve()) };
 }
 
 const boardUrl = (state: RuntimeState): string => state.url.replace(/\/$/, '');
@@ -75,7 +79,12 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean): Pr
 
 const checkOf = (state: RuntimeState, id: string, number: number) =>
   api(state, 'GET', `/tasks/${id}/checks/${number}`).then((a) =>
-    json<{ state: string; end?: { exitCode?: number }; report?: { summary: string } }>(a),
+    json<{
+      state: string;
+      begin: { comment?: string };
+      end?: { exitCode?: number };
+      report?: { summary: string };
+    }>(a),
   );
 
 const journalNames = async (root: string): Promise<string[]> =>
@@ -449,5 +458,265 @@ describe('delivering the end of a check', () => {
     expect(await checkOf(state, 'T1', 1)).toMatchObject({ state: 'working' });
     const task = await json<{ aiRun: { state: string } }>(await api(state, 'GET', '/tasks/T1'));
     expect(task.aiRun.state).toBe('failed');
+  });
+});
+
+/**
+ * `claude <ID> --research [--comment <text>]` and the runner with `kind: 'research'` (ADR-0029
+ * T54): a research is a check of its own kind (ADR-0030 R1). It starts the same way, with the
+ * same journal; the comment goes to the begin and the handoff, and never to the command line.
+ */
+describe('local-project-board claude <ID> --research', () => {
+  // Unlike anything the board or the test would print, so that a leak cannot hide.
+  const COMMENT = 'FOCUS-7f3a: look only at the runner; "quoted" $(not run) --model opus';
+
+  const beginFile = (root: string, id: string, n: number): Promise<string> =>
+    readFile(join(root, '.board', 'tasks', id, 'history', 'checks', `${n}.begin.json`), 'utf8');
+
+  const researchOf = (state: RuntimeState, id: string, n: number) =>
+    api(state, 'GET', `/tasks/${id}/checks/${n}`).then((a) =>
+      json<{ state: string; begin: { kind?: string; comment?: string; sessionId: string } }>(a),
+    );
+
+  it('puts the comment in the begin and the handoff, and never in the argv or env of claude (INVARIANT)', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+
+    const run = await cli(['claude', 'T2', '--research', '--comment', COMMENT], {
+      cwd: root,
+      env: claude.env({ agent: 'read' }),
+    });
+
+    expect(run.exitCode).toBe(0);
+    const calls = await claude.calls();
+    expect(calls).toHaveLength(1);
+    const [call] = calls;
+    expect(call?.argv).toEqual([
+      '--session-id',
+      expect.any(String),
+      researchPrompt('T2', 1, boardUrl(state)),
+    ]);
+    expect(JSON.stringify(calls)).not.toContain('FOCUS-7f3a');
+    expect(JSON.parse(await beginFile(root, 'T2', 1))).toMatchObject({
+      kind: 'research',
+      comment: COMMENT,
+      sessionId: call?.argv[1],
+    });
+    const [read] = await claude.reads();
+    expect(read?.handoff).toContain(COMMENT);
+  });
+
+  it('begins a research without a comment, and leaves the run of the task alone (INVARIANT)', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+    const before = await json<Record<string, unknown>>(await api(state, 'GET', '/tasks/T1'));
+
+    await cli(['claude', 'T1', '--research'], { cwd: root, env: claude.env() });
+
+    const begin = (await researchOf(state, 'T1', 1)).begin;
+    expect(begin.kind).toBe('research');
+    expect(begin).not.toHaveProperty('comment');
+    const after = await json<Record<string, unknown>>(await api(state, 'GET', '/tasks/T1'));
+    expect(after).toEqual(before);
+    expect(after).not.toHaveProperty('aiRun');
+  });
+
+  it('refuses a comment the route would refuse, before any session', async () => {
+    const { root } = await board();
+    const claude = await fakeClaude();
+    const run = await cli(['claude', 'T1', '--research', '--comment', 'x'.repeat(4001)], {
+      cwd: root,
+      env: claude.env(),
+    });
+    expect(run.exitCode).toBe(1);
+    expect(run.text).toContain('Usage:');
+    expect(await claude.calls()).toEqual([]);
+  });
+});
+
+describe('the runner of claude --wait with a research', () => {
+  const COMMENT = 'FOCUS-91c2: the dispatch only';
+
+  it('starts a check session of kind research, not a run, with the comment on the board only (INVARIANT)', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], {
+      cwd: root,
+      env: claude.env({ agent: 'read' }),
+    });
+    await runner.printed(WAITING);
+
+    const answer = await api(state, 'POST', '/tasks/T2/run', {
+      agent: 'claude-code',
+      kind: 'research',
+      comment: COMMENT,
+      model: 'sonnet',
+    });
+
+    expect(answer.status).toBe(200);
+    const [call] = await until(claude.calls, (calls) => calls.length >= 1);
+    expect(call?.argv).toEqual([
+      '--model',
+      'sonnet',
+      '--session-id',
+      expect.any(String),
+      researchPrompt('T2', 1, boardUrl(state)),
+    ]);
+    expect(JSON.stringify(call)).not.toContain('FOCUS-91c2');
+    await runner.printed(/^Starting Claude Code on a research of T2\./);
+    const check = await until(
+      () => checkOf(state, 'T2', 1),
+      (found) => found.end !== undefined,
+    );
+    expect(check).toMatchObject({
+      begin: { kind: 'research', comment: COMMENT, model: 'sonnet', sessionId: call?.argv[3] },
+    });
+    const [read] = await claude.reads();
+    expect(read?.handoff).toContain(COMMENT);
+    expect(
+      await json<Record<string, unknown>>(await api(state, 'GET', '/tasks/T2')),
+    ).not.toHaveProperty('aiRun');
+    await runner.printed(WAITING, 2);
+  });
+
+  it('two researches with different comments get two numbers, and the second replaces nothing', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+    const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+    await runner.printed(WAITING);
+
+    for (const [n, comment] of [
+      [1, 'First focus.'],
+      [2, 'Second focus.'],
+    ] as const) {
+      await runner.printed(WAITING, n);
+      const answer = await api(state, 'POST', '/tasks/T1/run', {
+        agent: 'claude-code',
+        kind: 'research',
+        comment,
+      });
+      expect(answer.status).toBe(200);
+      await until(
+        () => checkOf(state, 'T1', n),
+        (found) => found.end !== undefined,
+      );
+    }
+
+    expect(await checkOf(state, 'T1', 1)).toMatchObject({ begin: { comment: 'First focus.' } });
+    expect(await checkOf(state, 'T1', 2)).toMatchObject({ begin: { comment: 'Second focus.' } });
+  });
+
+  it('two researches of one task at once, on two runners: two numbers, neither overwritten', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+    const release = join(await tmpDir(), 'release');
+    const env = claude.env({ holdUntil: release });
+    const first = cliInBackground(['claude', '--wait'], { cwd: root, env });
+    await first.printed(WAITING);
+    const second = cliInBackground(['claude', '--wait'], { cwd: root, env });
+    await second.printed(WAITING);
+
+    for (const comment of ['Left.', 'Right.']) {
+      const answer = await api(state, 'POST', '/tasks/T1/run', {
+        agent: 'claude-code',
+        kind: 'research',
+        comment,
+      });
+      expect(answer.status).toBe(200);
+    }
+    const calls = await until(claude.calls, (found) => found.length >= 2);
+    expect(new Set(calls.map((c) => c.argv[1])).size).toBe(2);
+    expect(await journalNames(root)).toEqual(['T1-check-1.json', 'T1-check-2.json']);
+
+    await writeFile(release, '', 'utf8');
+    const ends = await Promise.all(
+      [1, 2].map((n) =>
+        until(
+          () => checkOf(state, 'T1', n),
+          (found) => found.end !== undefined,
+        ),
+      ),
+    );
+    const comments = ends.map((check) => check.begin.comment);
+    expect(comments.sort()).toEqual(['Left.', 'Right.']);
+    // The runner removes its journal once the board has taken the end, a moment later.
+    const left = await until(
+      () => journalNames(root),
+      (names) => names.length === 0,
+    );
+    expect(left).toEqual([]);
+    // Each runner may still be delivering the other's end when it is told to stop: it stops.
+    expect((await first.stop()).exitCode).toBe(0);
+    expect((await second.stop()).exitCode).toBe(0);
+  });
+});
+
+describe('the journal of a research (ADR-0029 T54)', () => {
+  it('is the journal of a check, holds no comment, and leaves a work journal of the same number alone (INVARIANT)', async () => {
+    const { root, state } = await board();
+    const claude = await fakeClaude();
+    // A work run of the same task with the same number, whose journal must not be touched.
+    expect(
+      (await api(state, 'POST', '/tasks/T1/ai-run', { sessionId: SESSION, mode: 'new' })).status,
+    ).toBe(200);
+    const work: RunJournal = {
+      formatVersion: 1,
+      taskId: 'T1',
+      runId: 1,
+      sessionId: SESSION,
+      host: 'box',
+      platform: 'linux',
+      runner: { pid: 4200 },
+    };
+    await writeJournal(root, work);
+    const workText = await readFile(join(journalDir(root), 'T1-1.json'), 'utf8');
+    const release = join(await tmpDir(), 'release');
+    const session = cliInBackground(['claude', 'T1', '--research', '--comment', 'FOCUS-a1'], {
+      cwd: root,
+      env: claude.env({ holdUntil: release }),
+    });
+    await until(claude.calls, (calls) => calls.length >= 1);
+
+    expect(await journalNames(root)).toEqual(['T1-1.json', 'T1-check-1.json']);
+    const text = await readFile(join(journalDir(root), 'T1-check-1.json'), 'utf8');
+    expect(checkJournalSchema.parse(JSON.parse(text))).toMatchObject({ kind: 'check', check: 1 });
+    expect(text).not.toContain('FOCUS-a1');
+
+    // --recover reads the work journal only, and leaves the research's alone.
+    await cli(['claude', '--recover', 'T1'], { cwd: root });
+    expect(await journalNames(root)).toContain('T1-check-1.json');
+    expect(await checkOf(state, 'T1', 1)).toMatchObject({ state: 'working' });
+
+    await writeFile(release, '', 'utf8');
+    expect((await session.done).exitCode).toBe(0);
+    expect((await checkOf(state, 'T1', 1)).end).toBeDefined();
+    expect(await journalNames(root)).toEqual(['T1-1.json']);
+    expect(await readFile(join(journalDir(root), 'T1-1.json'), 'utf8')).toBe(workText);
+  });
+
+  it('delivers the end to the board that was restarted while the research ran', async () => {
+    const { root, state, stop } = await board();
+    const claude = await fakeClaude();
+    const release = join(await tmpDir(), 'release');
+    const session = cliInBackground(['claude', 'T1', '--research'], {
+      cwd: root,
+      env: claude.env({ holdUntil: release, exit: 4 }),
+    });
+    await until(claude.calls, (calls) => calls.length >= 1);
+
+    await stop();
+    const again = await cli(['--port', String(await freePort()), '--no-open'], { cwd: root });
+    expect(again.exitCode).toBe(0);
+    const runtime = await readRuntime(root);
+    if (runtime.kind !== 'state') throw new Error('unreachable');
+    expect(runtime.state.token).not.toBe(state.token);
+
+    await writeFile(release, '', 'utf8');
+    expect((await session.done).exitCode).toBe(4);
+    expect(await checkOf(runtime.state, 'T1', 1)).toMatchObject({
+      state: 'failed',
+      end: { exitCode: 4 },
+    });
+    expect(await journalNames(root)).toEqual([]);
   });
 });

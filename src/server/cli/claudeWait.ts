@@ -10,6 +10,9 @@ import type { RuntimeState } from './runtime.js';
 /** How long to wait before asking again for a board that stopped or a stream that broke. */
 const RECONNECT_MS = 500;
 
+/** The kinds this runner starts besides work (ADR-0029 T54). */
+const ACCEPTS = 'check,research';
+
 export interface WaitEnvironment {
   env: NodeJS.ProcessEnv;
   write: (text: string) => void;
@@ -85,24 +88,38 @@ export async function waitForRuns(
       write(
         next.kind === 'check'
           ? `Starting Claude Code on a check of ${next.taskId}.`
-          : `Starting Claude Code on ${next.taskId}.`,
+          : next.kind === 'research'
+            ? `Starting Claude Code on a research of ${next.taskId}.`
+            : `Starting Claude Code on ${next.taskId}.`,
       );
       inSession = true;
       try {
         // Looked for again: `claude` may have gone since the wait began.
         const program = await findClaude(env);
+        // A check and a research begin through the check routes, never through aiRun; the
+        // comment of a research goes to the begin, not to the command line (ADR-0029 T54).
         const code =
           next.kind === 'check'
             ? await startCheckSession(program, next.taskId, current, board.root, env, next.model)
-            : await startSession(
-                program,
-                next.taskId,
-                current,
-                board.root,
-                env,
-                next.model,
-                next.mode ?? 'new',
-              );
+            : next.kind === 'research'
+              ? await startCheckSession(
+                  program,
+                  next.taskId,
+                  current,
+                  board.root,
+                  env,
+                  next.model,
+                  { comment: next.comment },
+                )
+              : await startSession(
+                  program,
+                  next.taskId,
+                  current,
+                  board.root,
+                  env,
+                  next.model,
+                  next.mode ?? 'new',
+                );
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
         writeError(error instanceof Error ? error.message : String(error));
@@ -127,11 +144,14 @@ async function nextRequest(
   signal: AbortSignal,
   onWaiting: () => void,
 ): Promise<RunRequest | 'lost' | 'stopped'> {
+  // A stop that came while the ends were delivered fires no event any more: it is read here.
+  if (signal.aborted) return 'stopped';
   const connection = new AbortController();
   const abort = (): void => connection.abort();
   signal.addEventListener('abort', abort);
   try {
-    const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs`, {
+    // Says what this runner can start, so that the board hands it nothing it cannot (D13).
+    const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?accepts=${ACCEPTS}`, {
       headers: { authorization: `Bearer ${board.token}` },
       signal: connection.signal,
     });

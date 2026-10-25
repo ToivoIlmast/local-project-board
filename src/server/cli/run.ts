@@ -80,6 +80,7 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
           exitCode: await launchClaude(board, args.id as string, {
             env: environment.env,
             check: args.check === true,
+            research: args.research === true ? { comment: args.comment } : undefined,
           }),
         };
       case 'export':

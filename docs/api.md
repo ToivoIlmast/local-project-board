@@ -1400,6 +1400,8 @@ Wait for Send to AI (SSE, with the token): one request, then the stream ends; th
 
 Not given to AI agents in the generated instructions.
 
+Query: ?accepts=check%2Cresearch
+
 Response — 200, text/event-stream:
 
 ```

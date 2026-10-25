@@ -7,7 +7,7 @@ import { claudeCodePrompt, continuationPrompt } from '../../contract/v1/index.js
 import { isTaskId } from '../../core/rules/ids.js';
 import type { ResolvedBoard } from './board.js';
 import { identify, procProbe } from './processProbe.js';
-import { startCheckSession } from './checkSession.js';
+import { startCheckSession, type Research } from './checkSession.js';
 import { deliverPendingCheckEnds } from './checkEnd.js';
 import { deliverEnd, deliverPendingEnds } from './runEnd.js';
 import { boardMessage, findRunningBoard, get, post } from './running.js';
@@ -35,7 +35,12 @@ const PROGRAM = 'claude';
 export async function launchClaude(
   board: ResolvedBoard,
   id: string,
-  environment: { env: NodeJS.ProcessEnv; check?: boolean | undefined },
+  environment: {
+    env: NodeJS.ProcessEnv;
+    check?: boolean | undefined;
+    /** A research of the task, with the person's focus if any (ADR-0029 T54). */
+    research?: Research | undefined;
+  },
 ): Promise<number> {
   if (!isTaskId(id)) {
     const prefix = board.config.tasks.idPrefix;
@@ -57,6 +62,18 @@ export async function launchClaude(
   // An actuality check is a session of its own kind, recorded apart from the run (ADR-0030 §6).
   if (environment.check === true) {
     return startCheckSession(program, id, running, board.root, environment.env);
+  }
+  // So is a research; the comment goes into the begin, never onto the command line.
+  if (environment.research !== undefined) {
+    return startCheckSession(
+      program,
+      id,
+      running,
+      board.root,
+      environment.env,
+      undefined,
+      environment.research,
+    );
   }
   return startSession(program, id, running, board.root, environment.env);
 }

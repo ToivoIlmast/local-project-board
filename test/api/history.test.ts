@@ -36,6 +36,7 @@ afterEach(async () => {
 });
 
 const code = (body: unknown): string => errorResponseSchema.parse(body).error.code;
+const message = (body: unknown): string => errorResponseSchema.parse(body).error.message;
 const hashOf = (task: { title: string; body: string; labels: string[] }): string =>
   contentHash({ title: task.title, body: task.body, labels: task.labels });
 
@@ -610,10 +611,11 @@ describe('decisions and applying a recommendation', () => {
 describe('POST /tasks/:id/run with kind check', () => {
   const RUNS = `${API}${routes['runs.stream'].path}`;
 
+  // A runner that starts checks says so (D13); one that does not is asked for work only.
   async function runner(): Promise<SseClient<RunRequest>> {
     const client = await openStream(
       board.port,
-      RUNS,
+      `${RUNS}?accepts=check`,
       { authorization: `Bearer ${board.token}` },
       (data) => runRequestSchema.parse(data),
     );
@@ -680,6 +682,188 @@ describe('POST /tasks/:id/run with kind check', () => {
       .expect(200);
     expect(await taskFile(task.id)).toBe(before);
     expect(await historyFiles(task.id)).toEqual(files);
+  });
+});
+
+describe('POST /tasks/:id/run with kind research (ADR-0029 T54)', () => {
+  const RUNS = `${API}${routes['runs.stream'].path}`;
+
+  async function runner(accepts = 'check,research'): Promise<SseClient<RunRequest>> {
+    const client = await openStream(
+      board.port,
+      accepts === '' ? RUNS : `${RUNS}?accepts=${accepts}`,
+      { authorization: `Bearer ${board.token}` },
+      (data) => runRequestSchema.parse(data),
+    );
+    open.push(client);
+    return client;
+  }
+
+  const research = (id: string, over: object = {}) =>
+    board.post(`${API}/tasks/${id}/run`, { agent: 'claude-code', kind: 'research', ...over });
+
+  it('hands the research, its comment and its model to the runner, and answers without the comment', async () => {
+    const task = await createTask();
+    const waiting = await runner();
+    const response = await research(task.id, {
+      comment: 'Look at the API.',
+      model: 'sonnet',
+    }).expect(200);
+    expect(response.body).toEqual({
+      taskId: task.id,
+      agent: 'claude-code',
+      kind: 'research',
+      model: 'sonnet',
+    });
+    await waiting.waitForEvents(1);
+    expect(waiting.events).toEqual([
+      {
+        type: 'run.requested',
+        taskId: task.id,
+        agent: 'claude-code',
+        kind: 'research',
+        model: 'sonnet',
+        comment: 'Look at the API.',
+      },
+    ]);
+  });
+
+  it('is not refused while a run works, and changes nothing on the board before begin (INVARIANT)', async () => {
+    const task = await createTask({ status: 'in-progress' });
+    await board
+      .post(`${API}/tasks/${task.id}/ai-run`, {
+        sessionId: 'c1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+      })
+      .expect(200);
+    await runner();
+    const files = await historyFiles(task.id);
+    const before = await taskFile(task.id);
+    await research(task.id, { comment: 'Only the storage.' }).expect(200);
+    // No run, no check, no version: the comment waits in the runner, not on the board.
+    expect(await taskFile(task.id)).toBe(before);
+    expect(await historyFiles(task.id)).toEqual(files);
+  });
+
+  it('refuses a comment without research, one too long, and a mode but new: 400, nothing handed (INVARIANT)', async () => {
+    const task = await createTask();
+    const waiting = await runner();
+    for (const body of [
+      { agent: 'claude-code', comment: 'Look.' },
+      { agent: 'claude-code', kind: 'check', comment: 'Look.' },
+      { agent: 'claude-code', kind: 'research', comment: 'x'.repeat(4001) },
+      { agent: 'claude-code', kind: 'research', comment: '' },
+      { agent: 'claude-code', kind: 'research', mode: 'resume' },
+      { agent: 'claude-code', kind: 'research', mode: 'restart' },
+    ]) {
+      const answer = await board.post(`${API}/tasks/${task.id}/run`, body);
+      expect([body, answer.status, code(answer.body)]).toEqual([body, 400, 'INVALID_REQUEST']);
+    }
+    expect(waiting.events).toEqual([]);
+    expect(waiting.ended()).toBe(false);
+  });
+
+  it('says NO_AGENT_RUNNER when none waits, and needs the task', async () => {
+    const task = await createTask();
+    const none = await research(task.id).expect(409);
+    expect(code(none.body)).toBe('NO_AGENT_RUNNER');
+    await runner();
+    await research('T99').expect(404);
+  });
+
+  it('two researches with different comments are two requests, each with its own comment', async () => {
+    const task = await createTask();
+    const first = await runner();
+    const second = await runner();
+    await research(task.id, { comment: 'First focus.' }).expect(200);
+    await research(task.id, { comment: 'Second focus.' }).expect(200);
+    await first.waitForEvents(1);
+    await second.waitForEvents(1);
+    expect([...first.events, ...second.events].map((event) => event.comment).sort()).toEqual([
+      'First focus.',
+      'Second focus.',
+    ]);
+  });
+});
+
+describe('GET /runs?accepts: a runner is handed only what it can start (ADR-0029 T54, D13)', () => {
+  const RUNS = `${API}${routes['runs.stream'].path}`;
+
+  async function runner(accepts?: string): Promise<SseClient<RunRequest>> {
+    const client = await openStream(
+      board.port,
+      accepts === undefined ? RUNS : `${RUNS}?accepts=${accepts}`,
+      { authorization: `Bearer ${board.token}` },
+      // What a runner of an earlier version sees is whatever comes: it is not parsed here.
+      (data) => data as RunRequest,
+    );
+    open.push(client);
+    return client;
+  }
+
+  const send = (id: string, kind?: string) =>
+    board.post(`${API}/tasks/${id}/run`, {
+      agent: 'claude-code',
+      ...(kind === undefined ? {} : { kind }),
+    });
+
+  it('a runner without accepts is asked for work only: a research or a check is 409, and it keeps waiting (INVARIANT)', async () => {
+    const task = await createTask();
+    const old = await runner();
+    for (const kind of ['research', 'check']) {
+      const answer = await send(task.id, kind).expect(409);
+      expect(code(answer.body)).toBe('NO_AGENT_RUNNER');
+      // The page is told to update the runner, not to start one: one is waiting.
+      expect(message(answer.body)).toMatch(/update/i);
+    }
+    expect(old.events).toEqual([]);
+    expect(old.ended()).toBe(false);
+    // It is still there for the work of the task.
+    await send(task.id).expect(200);
+    await old.waitForEvents(1);
+    expect(old.events).toEqual([{ type: 'run.requested', taskId: task.id, agent: 'claude-code' }]);
+  });
+
+  it('a runner that accepts check only is not handed a research', async () => {
+    const task = await createTask();
+    const checks = await runner('check');
+    expect(code((await send(task.id, 'research').expect(409)).body)).toBe('NO_AGENT_RUNNER');
+    expect(checks.events).toEqual([]);
+    await send(task.id, 'check').expect(200);
+    await checks.waitForEvents(1);
+    expect(checks.events[0]).toMatchObject({ kind: 'check' });
+  });
+
+  it('passes over a runner that cannot start the kind for one that can, whatever their order', async () => {
+    const task = await createTask();
+    const able = await runner('check,research');
+    const old = await runner();
+    await send(task.id, 'research').expect(200);
+    await able.waitForEvents(1);
+    expect(able.events[0]).toMatchObject({ kind: 'research' });
+    expect(old.events).toEqual([]);
+    expect(old.ended()).toBe(false);
+  });
+
+  it('hands work to a runner that accepts check and research too', async () => {
+    const task = await createTask();
+    const able = await runner('check,research');
+    await send(task.id).expect(200);
+    await able.waitForEvents(1);
+    expect(able.events).toEqual([{ type: 'run.requested', taskId: task.id, agent: 'claude-code' }]);
+  });
+
+  it('refuses an accepts that is not of the closed form, after the token', async () => {
+    for (const accepts of ['work', 'check,', 'x', 'check%20research']) {
+      const answer = await board
+        .agent()
+        .get(`${RUNS}?accepts=${accepts}`)
+        .set({ authorization: `Bearer ${board.token}` })
+        .expect(400);
+      expect(code(answer.body)).toBe('INVALID_REQUEST');
+    }
+    const noToken = await board.agent().get(`${RUNS}?accepts=work`).expect(401);
+    expect(code(noToken.body)).toBe('UNAUTHORIZED');
   });
 });
 

@@ -921,8 +921,13 @@ export const routes = {
     path: '/runs',
     summary:
       'Wait for Send to AI (SSE, with the token): one request, then the stream ends; the CLI runner uses it',
+    // The kinds the runner can start besides work (D13): it is handed nothing else.
+    query: s.runsQuerySchema,
     response: { schema: s.runRequestSchema, media: 'text/event-stream' },
-    example: { response: { type: 'run.requested', taskId: 'T12', agent: 'claude-code' } },
+    example: {
+      query: { accepts: 'check,research' },
+      response: { type: 'run.requested', taskId: 'T12', agent: 'claude-code' },
+    },
     ai: { include: false },
   }),
 

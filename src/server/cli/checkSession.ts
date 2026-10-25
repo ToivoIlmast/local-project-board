@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { claudeCheckPrompt } from '../../contract/v1/index.js';
+import { claudeCheckPrompt, researchPrompt } from '../../contract/v1/index.js';
 import { deliverCheckEnd } from './checkEnd.js';
 import { writeCheckJournal, type CheckJournal } from './checkJournal.js';
 import { boardMessage, post } from './running.js';
@@ -23,6 +23,11 @@ const END_RETRY_INITIAL_DELAY_MS = 200;
  * - `claude` is given `--session-id <uuid> <prompt>`, the prompt naming the handoff of this
  *   check. A check is always a new session; no token and no handoff text are on the command line.
  *
+ * A research is a check of its own kind (ADR-0030 R1, ADR-0029 T54): `research` makes the begin
+ * say so and carry the person's comment, and the prompt is `researchPrompt`. The comment goes
+ * into the JSON body of the begin and nowhere else: not into the argv or the environment of
+ * `claude`, and not into the journal.
+ *
  * Resolves to the exit code of the session, so the command ends as `claude` did.
  */
 export async function startCheckSession(
@@ -32,11 +37,15 @@ export async function startCheckSession(
   root: string,
   env: NodeJS.ProcessEnv,
   model?: string,
+  research?: Research,
 ): Promise<number> {
   const boardUrl = board.url.replace(/\/+$/, '');
   const sessionId = randomUUID();
-  const check = await beginCheck(board, id, sessionId, model);
-  const prompt = claudeCheckPrompt(id, check, boardUrl);
+  const check = await beginCheck(board, id, sessionId, model, research);
+  const prompt =
+    research === undefined
+      ? claudeCheckPrompt(id, check, boardUrl)
+      : researchPrompt(id, check, boardUrl);
 
   // The prompt stays the last argument.
   const args = [
@@ -51,6 +60,11 @@ export async function startCheckSession(
   return spawnSession(program, args, root, env, {
     onEnd: (input) => endCheck(journal, input),
   });
+}
+
+/** What makes a check a research: the kind, and the focus the person gave, if any. */
+export interface Research {
+  comment?: string | undefined;
 }
 
 function journalOf(taskId: string, check: number, sessionId: string): CheckJournal {
@@ -69,11 +83,14 @@ async function beginCheck(
   taskId: string,
   sessionId: string,
   model: string | undefined,
+  research: Research | undefined,
 ): Promise<number> {
   const response = await post(board, `/tasks/${taskId}/checks`, {
     agent: AGENT,
     sessionId,
     ...(model === undefined ? {} : { model }),
+    ...(research === undefined ? {} : { kind: 'research' }),
+    ...(research?.comment === undefined ? {} : { comment: research.comment }),
   });
   if (response === undefined) {
     throw new Error(
