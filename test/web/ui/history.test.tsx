@@ -1120,3 +1120,133 @@ describe('AI research (T58)', () => {
     );
   });
 });
+
+describe('read-only evidence in the report (ADR-0030 R6, T59)', () => {
+  const HEAD = '9f1c1a2b3c4d5e6f';
+  const atV2 = (check: ReturnType<typeof aResearch>) => {
+    check.begin.version = 2;
+    if (check.report) check.report.version = 2;
+    return check;
+  };
+  const accepted = (check: ReturnType<typeof aResearch>) => {
+    check.decisions.push({
+      taskId: 'T1',
+      check: 1,
+      number: 1,
+      recommendation: 'r1',
+      decision: 'accepted',
+      createdAt: '2026-10-17T10:06:00.000Z',
+    });
+    return check;
+  };
+  const aCommit = (sha: string) => ({
+    sha,
+    subject: 'A commit',
+    author: 'Someone',
+    date: '2026-10-18T10:00:00.000Z',
+  });
+
+  async function openReport(options: Parameters<typeof renderBoard>[0]) {
+    const rendered = await renderBoard({
+      tasks: [aTaskWithHistory()],
+      versions: twoVersions,
+      ...options,
+    });
+    await openTask(rendered);
+    await rendered.user.click(await within(panel()).findByRole('button', { name: 'Open T1-C1' }));
+    return within(screen.getByRole('dialog', { name: 'Research T1-C1' }));
+  }
+
+  it('says the working tree changed during the research, and names the files, blaming no one', async () => {
+    const research = atV2(aResearch());
+    research.report!.repo = {
+      branch: 'main',
+      head: HEAD,
+      clean: false,
+      changes: { files: ['src/a.ts'], diffHash: '1'.repeat(16) },
+    };
+    const report = await openReport({ checks: { T1: [research] } });
+
+    const notice = await report.findByText(/working tree changed during the research/i);
+    expect(notice).toHaveTextContent('src/a.ts');
+    expect(notice).toHaveTextContent(/not who changed/);
+    expect(notice).not.toHaveTextContent(/agent/i);
+  });
+
+  it('tells a tree dirty at the start and changed again by its diffHash, from the end too', async () => {
+    const dirty = (diffHash: string) => ({
+      branch: 'main',
+      head: HEAD,
+      clean: false,
+      changes: { files: ['a.txt'], diffHash },
+    });
+    const research = atV2(aResearch());
+    research.begin.repo = dirty('1'.repeat(16));
+    research.report!.repo = dirty('1'.repeat(16));
+    research.end = {
+      taskId: 'T1',
+      check: 1,
+      sessionId: research.begin.sessionId,
+      endedAt: '2026-10-17T10:07:00.000Z',
+      repo: dirty('2'.repeat(16)),
+    };
+    const report = await openReport({ checks: { T1: [research] } });
+
+    const notice = await report.findByText(/working tree changed during the research/i);
+    expect(notice).toHaveTextContent('a.txt');
+    expect(notice).toHaveTextContent(/already had uncommitted changes/);
+  });
+
+  it('says nothing of the tree when it stayed as it was, dirty or not', async () => {
+    const research = atV2(aResearch());
+    const dirty = {
+      branch: 'main',
+      head: HEAD,
+      clean: false,
+      changes: { files: ['a.txt'], diffHash: '1'.repeat(16) },
+    };
+    research.begin.repo = dirty;
+    research.report!.repo = { ...dirty, changes: { ...dirty.changes } };
+    const report = await openReport({ checks: { T1: [research] }, commits: [aCommit(HEAD)] });
+
+    await report.findByRole('region', { name: 'Summary' });
+    expect(report.queryByText(/working tree changed/i)).not.toBeInTheDocument();
+    expect(report.queryByText(/moved on since the report/i)).not.toBeInTheDocument();
+  });
+
+  it('says which documents changed since the research: changed, added and removed', async () => {
+    const research = atV2(aResearch());
+    research.begin.documents = [
+      { name: 'old.md', size: 3, updatedAt: '2026-09-22T10:00:00.000Z' },
+      { name: 'plan.md', size: 7, updatedAt: '2026-09-22T10:00:00.000Z' },
+      { name: 'same.md', size: 4, updatedAt: '2026-09-22T10:00:00.000Z' },
+    ];
+    const report = await openReport({
+      checks: { T1: [research] },
+      documents: [
+        { taskId: 'T1', name: 'plan.md', content: '# Plan, longer\n' },
+        { taskId: 'T1', name: 'new.md', content: 'n' },
+        { taskId: 'T1', name: 'same.md', content: 'same' },
+      ],
+    });
+
+    const notice = await report.findByText(/documents changed since the research/i);
+    expect(notice).toHaveTextContent('plan.md (changed)');
+    expect(notice).toHaveTextContent('new.md (added)');
+    expect(notice).toHaveTextContent('old.md (removed)');
+    expect(notice).not.toHaveTextContent('same.md');
+  });
+
+  it('says the repository moved on since the report, and still offers Apply (D6)', async () => {
+    const other = 'ffffffffffffffffffffffffffffffffffffffff';
+    const report = await openReport({
+      checks: { T1: [accepted(atV2(aResearch()))] },
+      commits: [aCommit(other)],
+    });
+
+    const notice = await report.findByText(/repository moved on since the report/i);
+    expect(notice).toHaveTextContent('9f1c1a2');
+    expect(notice).toHaveTextContent('fffffff');
+    expect(report.getByRole('button', { name: 'Apply accepted' })).toBeEnabled();
+  });
+});

@@ -65,6 +65,19 @@ export const versionListSchema = z.strictObject({
 });
 export type VersionList = z.infer<typeof versionListSchema>;
 
+/** The most paths `changes.files` keeps (ADR-0030 R3, R6, D12); the hash covers them all. */
+export const REPO_CHANGES_MAX_FILES = 200;
+
+/**
+ * What the working tree held besides HEAD: the paths, and a hash of the status and of the diffs,
+ * so that a tree dirty at begin and dirty at the end can still be told apart (ADR-0030 R6).
+ */
+export const repoChangesSchema = z.strictObject({
+  files: z.array(z.string().min(1)).max(REPO_CHANGES_MAX_FILES),
+  diffHash: z.string().regex(/^[0-9a-f]{16}$/),
+});
+export type RepoChanges = z.infer<typeof repoChangesSchema>;
+
 /** Where the repository stood: read-only, and absent without git. */
 export const repoStateSchema = z
   .strictObject({
@@ -74,6 +87,8 @@ export const repoStateSchema = z
       .regex(/^[0-9a-f]{7,64}$/)
       .nullable(),
     clean: z.boolean(),
+    /** Absent for a clean tree, and in every record written before T59. */
+    changes: repoChangesSchema.optional(),
   })
   .nullable();
 export type RepoState = z.infer<typeof repoStateSchema>;
@@ -264,6 +279,8 @@ export const checkEndSchema = z.strictObject({
   sessionId: z.uuid(),
   exitCode: z.int().optional(),
   endedAt: isoDateTimeSchema,
+  /** Where the repository stood at the end (ADR-0030 R6); absent in an end written before. */
+  repo: repoStateSchema.optional(),
 });
 export type CheckEnd = z.infer<typeof checkEndSchema>;
 
