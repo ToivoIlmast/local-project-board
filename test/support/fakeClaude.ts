@@ -25,8 +25,15 @@ export interface FakeClaudeBehaviour {
    * report the run back through the API (`aiRun`, `report.md`), as a real agent is told to.
    * `read` only reads, and changes nothing on the board. `check` is the agent of an actuality
    * check: it reads the handoff of the check and sends the one report that handoff asks for.
+   * `research` is the agent of a research when the prompt names the handoff of a check, and the
+   * agent of the work (as `true`) when it names the handoff of a task: one runner, both kinds.
    */
-  agent?: boolean | 'read' | 'check';
+  agent?: boolean | 'read' | 'check' | 'research';
+  /**
+   * For `research`: a directory where `<n>.json` is the report the agent sends for check `n`.
+   * While `<n>.hold` exists there, that session stays open after its report.
+   */
+  reports?: string;
   /** Stay in the session until this file exists, to see what happens meanwhile. */
   holdUntil?: string;
 }
@@ -68,7 +75,7 @@ export async function fakeClaude(): Promise<FakeClaude> {
     join(bin, 'claude'),
     [
       `#!${process.execPath}`,
-      "const { appendFileSync, existsSync } = require('node:fs');",
+      "const { appendFileSync, existsSync, readFileSync } = require('node:fs');",
       'const env = process.env;',
       'appendFileSync(env.FAKE_CLAUDE_LOG, JSON.stringify({',
       '  argv: process.argv.slice(2), cwd: process.cwd(), env, pid: process.pid,',
@@ -95,7 +102,23 @@ export async function fakeClaude(): Promise<FakeClaude> {
       '    });',
       "    if (!answer.ok) throw new Error('report: ' + answer.status + ' ' + await answer.text());",
       '  }',
-      "  if (env.FAKE_CLAUDE_AGENT === 'act') {",
+      "  const addressed = /read GET (\\S+) and follow it/.exec(process.argv.at(-1) ?? '')?.[1] ?? '';",
+      '  const found = /^(.*)\\/tasks\\/([^/]+)\\/checks\\/(\\d+)\\/handoff$/.exec(addressed);',
+      "  if (env.FAKE_CLAUDE_AGENT === 'research' && found) {",
+      '    const [, api, id, number] = found;',
+      "    const report = readFileSync(env.FAKE_CLAUDE_REPORTS + '/' + number + '.json', 'utf8');",
+      "    const { token } = await (await fetch(api + '/session')).json();",
+      "    const answer = await fetch(api + '/tasks/' + id + '/checks/' + number + '/report', {",
+      "      method: 'POST',",
+      "      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },",
+      '      body: report,',
+      '    });',
+      "    if (!answer.ok) throw new Error('report: ' + answer.status + ' ' + await answer.text());",
+      "    while (existsSync(env.FAKE_CLAUDE_REPORTS + '/' + number + '.hold')) {",
+      '      await new Promise((resolve) => setTimeout(resolve, 20));',
+      '    }',
+      '  }',
+      "  if (env.FAKE_CLAUDE_AGENT === 'act' || (env.FAKE_CLAUDE_AGENT === 'research' && !found)) {",
       "    const prompt = process.argv[process.argv.length - 1] ?? '';",
       '    const urlMatch = /read GET (\\S+) and follow it/.exec(prompt);',
       '    const url = urlMatch[1];',
@@ -148,15 +171,14 @@ export async function fakeClaude(): Promise<FakeClaude> {
     bin,
     calls: () => lines<FakeClaudeCall>(log),
     reads: () => lines<FakeClaudeRead>(readLog),
-    env: ({ exit = 0, signal, agent = false, holdUntil } = {}) => ({
+    env: ({ exit = 0, signal, agent = false, holdUntil, reports } = {}) => ({
       PATH: bin,
       FAKE_CLAUDE_LOG: log,
       FAKE_CLAUDE_READS: readLog,
       FAKE_CLAUDE_EXIT: String(exit),
       ...(signal === undefined ? {} : { FAKE_CLAUDE_SIGNAL: signal }),
-      ...(agent === false
-        ? {}
-        : { FAKE_CLAUDE_AGENT: agent === 'read' ? 'read' : agent === 'check' ? 'check' : 'act' }),
+      ...(agent === false ? {} : { FAKE_CLAUDE_AGENT: agent === true ? 'act' : agent }),
+      ...(reports === undefined ? {} : { FAKE_CLAUDE_REPORTS: reports }),
       ...(holdUntil === undefined ? {} : { FAKE_CLAUDE_HOLD: holdUntil }),
     }),
   };

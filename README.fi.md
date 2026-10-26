@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 5941654ed6c3736ab44f7b243863ecf8638d1c04 -->
+<!-- Based on README.md @ 1da0fe08a1c47400e161bbafa241c2d561d2a5bd -->
 
 # local-project-board
 
@@ -25,15 +25,16 @@ Taulu käynnistyy osoitteessa `http://127.0.0.1:7432/` (tai seuraavassa vapaassa
 on varattu) ja avautuu selaimeen. Ei rekisteröitymistä, ei tiliä, ei tietokantaa, ei verkkoa oman
 koneen ulkopuolelle.
 
-| Komento                                         | Mitä se tekee                                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `npx local-project-board`                       | Käynnistää taulun                                                                     |
-| `npx local-project-board instructions`          | Tulostaa API-ohjeet tekoälyagentille annettavaksi                                     |
-| `npx local-project-board claude <ID>`           | Käynnistää Claude Coden tehtävään tässä terminaalissa                                 |
-| `npx local-project-board claude <ID> --check`   | Käynnistää Claude Coden tarkistamaan, onko tehtävä ajan tasalla                       |
-| `npx local-project-board claude --wait`         | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään                |
-| `npx local-project-board claude --recover <ID>` | Tarkistaa ajon, jonka odottaja kuoli; merkitsee sen kadonneeksi todisteen perusteella |
-| `npx local-project-board export`                | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)                    |
+| Komento                                          | Mitä se tekee                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `npx local-project-board`                        | Käynnistää taulun                                                                     |
+| `npx local-project-board instructions`           | Tulostaa API-ohjeet tekoälyagentille annettavaksi                                     |
+| `npx local-project-board claude <ID>`            | Käynnistää Claude Coden tehtävään tässä terminaalissa                                 |
+| `npx local-project-board claude <ID> --check`    | Käynnistää Claude Coden tarkistamaan, onko tehtävä ajan tasalla                       |
+| `npx local-project-board claude <ID> --research` | Käynnistää Claude Coden tutkimaan, miten tehtävään kannattaa tarttua                  |
+| `npx local-project-board claude --wait`          | Käynnistää Claude Coden tässä jokaiseen taululta lähetettyyn tehtävään                |
+| `npx local-project-board claude --recover <ID>`  | Tarkistaa ajon, jonka odottaja kuoli; merkitsee sen kadonneeksi todisteen perusteella |
+| `npx local-project-board export`                 | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)                    |
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
 `--no-open` (älä avaa selainta), `--help`.
@@ -66,6 +67,24 @@ Taulu on yksi näkymä: projektin tilat sarakkeina ja oikealla paneeli sille, mi
   siirtynyt pois, merkitään vanhentuneeksi, eikä sitä sovelleta puolestasi. Tarkistus ei muuta
   yhtään tiedostoa eikä Git-tilaa; taulu ei valvo sitä, vaan näyttää repositorion ennen ja
   jälkeen. Katso [Claude Code](#claude-code).
+- **AI-tutkimus.** Tarkistusten vieressä **Uusi tutkimus…** pyytää Claude Codea (saman odottajan
+  kautta) selvittämään, miten tehtävään kannattaa tarttua: mitä se pyytää, mitä repositoriossa jo
+  on, miten työn voisi tehdä ja mikä voisi mennä pieleen. Voit antaa sille painopisteen ja mallin.
+  Tutkimus lukee tehtävän siinä versiossa, joka oli voimassa sen alkaessa, ja kirjoittaa
+  Markdown-raportin havaintoineen ja suosituksineen; raportti tallennetaan kerran eikä sitä
+  koskaan kirjoiteta uudelleen. Se ei anna arviota eikä sano, onko tehtävä valmis toteutettavaksi
+  — se jää sinulle. Hyväksyt tai hylkäät jokaisen suosituksen, hylkäyksen halutessasi perusteluineen.
+  Otsikkoa, tunnisteita tai kuvausta muuttava suositus sovelletaan editorin kautta kuten
+  tarkistuksessa; dokumenttiin tai projektin tiedostoon kohdistuva viedään perille käsin. Tehtävän
+  seuraavalle tutkimukselle näytetään aiemmat päätöksinesi ja perusteluinesi, ja sitä kehotetaan
+  olemaan ehdottamatta uudelleen hylkäämääsi ilman uutta näyttöä. Tutkimus ei koskaan aloita työtä
+  eikä koske tehtävän **AI-ajoon**: työ on erillinen **Lähetä tekoälylle → Claude Code**, jonka
+  dialogi mainitsee yhä käynnissä olevan tutkimuksen tai ratkaisemattomat suositukset ja käynnistyy
+  silti. Tutkimusta kehotetaan olemaan muuttamatta mitään; taulu näyttää, muuttuiko jotain: haaran,
+  commitin ja sen, oliko työhakemisto puhdas alussa, raportin tullessa ja lopussa, tiedostot, jotka
+  muuttuivat sillä välin, tehtävän dokumentit, jotka ovat muuttuneet sen jälkeen, ja repositorion,
+  joka on edennyt raportin jälkeen. Kuka muutoksen teki, sitä taulu ei kerro. Katso
+  [Claude Code](#claude-code).
 - **Dokumentit.** Lue markdownina, kirjoita ja muuta sivulla, poista. `.html`-dokumentti avautuu
   omaan kehykseensä, jonka palvelin eristää.
 - **Raportit.** Mitä agentti on tallentanut, HTML tai markdown, avattuna yhtä turvallisesti.
@@ -242,6 +261,16 @@ Hyvä tietää:
   työhakemisto puhdas, kun tarkistus alkoi ja kun se raportoi. Sen loppu säilyy tiedostossa
   `.board/runner/<ID>-check-<n>.json`, kunnes taulu ottaa sen vastaan, erillään ajojen
   päiväkirjoista.
+- **Uusi tutkimus…** tehtävässä käynnistää saman odottajan tutkimukseen, ja
+  `npx local-project-board claude <ID> --research --comment "<painopiste>"` käynnistää sen suoraan
+  (`--comment` on valinnainen, enintään 4000 merkkiä). Tutkimus on oma tarkistuslajinsa: se
+  numeroidaan tehtävän tarkistusten kanssa (`T13-C2`), sillä on samanlainen päiväkirja, sitä ei
+  evätä ajon aikana, eikä se muuta tehtävää ennen kuin sovellat jonkin suosituksen. Painopiste
+  kulkee taululle tutkimuksen aloituksen mukana ja Claudelle sen handoffin kautta, ei koskaan
+  komentorivin kautta. Sen raportti, päätöksesi ja sen istunnon loppu säilyvät taulun
+  uudelleenkäynnistyksen yli. Tutkimus, jonka istunto kuoli, jää tilaan **working**, ei estä mitään
+  eikä sitä palauteta: aloita uusi. Aiemman version odottajalle ei koskaan anneta tutkimusta; sivu
+  kehottaa silloin päivittämään sen.
 
 ## Periaatteet
 
