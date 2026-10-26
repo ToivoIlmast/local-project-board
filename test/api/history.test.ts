@@ -12,9 +12,11 @@ import {
   versionListSchema,
   type RunRequest,
 } from '../../src/contract/v1/index.js';
+import { gitReader } from '../../src/server/git/index.js';
+import { git, repoWithCommit, writeRepoFile } from '../support/gitRepo.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { openStream, type SseClient } from '../support/sse.js';
-import { cleanTmpDirs } from '../support/tmp.js';
+import { cleanTmpDirs, tmpDir } from '../support/tmp.js';
 
 /**
  * The history of a task over HTTP (T46, ADR-0030): versions of its content, restore, the
@@ -1192,5 +1194,106 @@ describe('research (ADR-0030 R1–R5, T56)', () => {
       .expect(200);
     expect(response.text).toContain(`# Check ${task.id}-C${number}`);
     expect(response.text).not.toContain('Earlier checks');
+  });
+});
+
+describe('read-only evidence: the repository at begin, report and end (ADR-0030 R6, T59)', () => {
+  const research = {
+    agent: 'claude-code',
+    summary: 'Nothing to change.',
+    findings: [],
+    recommendations: [],
+    markdown: '# Research\n\nNothing.\n',
+  };
+
+  /** A board in a repository of its own, read through the real, read-only GitReader. */
+  async function boardInRepo(): Promise<string> {
+    await board.close();
+    const root = await repoWithCommit(await tmpDir());
+    board = await createTestBoard({ root, git: gitReader({ root }) });
+    return root;
+  }
+
+  async function researchOf(id: string, change: () => Promise<void>) {
+    const { number } = (
+      await board
+        .post(`${API}/tasks/${id}/checks`, {
+          agent: 'claude-code',
+          sessionId: SESSION,
+          kind: 'research',
+        })
+        .expect(200)
+    ).body as { number: number };
+    // The fake agent: it is told to change nothing, and changes a file anyway.
+    await change();
+    await board.post(`${API}/tasks/${id}/checks/${number}/report`, research).expect(200);
+    const ended = await board
+      .post(`${API}/tasks/${id}/checks/${number}/end`, { sessionId: SESSION, exitCode: 0 })
+      .expect(200);
+    return checkSchema.parse(ended.body);
+  }
+
+  it('records the changed files at report and at end when the agent edits a file (29)', async () => {
+    const root = await boardInRepo();
+    const task = await createTask();
+    const check = await researchOf(task.id, () => writeRepoFile(root, 'a.txt', 'b\n'));
+
+    // The board's own files are not a change of the project: `.board` ignores itself.
+    expect(check.begin.repo).toMatchObject({ clean: true });
+    expect(check.begin.repo?.changes).toBeUndefined();
+    for (const later of [check.report?.repo, check.end?.repo]) {
+      expect(later).toMatchObject({
+        clean: false,
+        changes: { files: ['a.txt'], diffHash: expect.stringMatching(/^[0-9a-f]{16}$/) },
+      });
+    }
+    expect(check.end?.repo).toEqual(check.report?.repo);
+  });
+
+  it('tells a second edit of a tree that was dirty already by its diffHash (30)', async () => {
+    const root = await boardInRepo();
+    const task = await createTask();
+    await writeRepoFile(root, 'a.txt', 'dirty before\n');
+    const check = await researchOf(task.id, () => writeRepoFile(root, 'a.txt', 'dirty during\n'));
+
+    const [before, after] = [check.begin.repo, check.end?.repo];
+    expect(before).toMatchObject({ clean: false, changes: { files: ['a.txt'] } });
+    expect(after).toMatchObject({ clean: false, changes: { files: ['a.txt'] } });
+    expect(after?.changes?.diffHash).not.toBe(before?.changes?.diffHash);
+  });
+
+  it('sees a staged change and an untracked file, and keeps the same hash for the same tree', async () => {
+    const root = await boardInRepo();
+    const task = await createTask();
+    await writeRepoFile(root, 'a.txt', 'staged\n');
+    await git(root, 'add', 'a.txt');
+    const check = await researchOf(task.id, () => writeRepoFile(root, 'new.txt', 'n\n'));
+
+    expect(check.begin.repo?.changes?.files).toEqual(['a.txt']);
+    expect(check.report?.repo?.changes?.files).toEqual(['a.txt', 'new.txt']);
+    // Nothing happened between the report and the end: the same tree, the same hash.
+    expect(check.end?.repo?.changes?.diffHash).toBe(check.report?.repo?.changes?.diffHash);
+  });
+
+  it('keeps at most 200 paths (D12) and still refuses no report', async () => {
+    const root = await boardInRepo();
+    const task = await createTask();
+    const check = await researchOf(task.id, async () => {
+      for (let index = 0; index < 205; index += 1) {
+        await writeRepoFile(root, `f${String(index).padStart(3, '0')}.txt`, 'x\n');
+      }
+    });
+    expect(check.state).toBe('reported');
+    expect(check.report?.repo?.changes?.files).toHaveLength(200);
+    expect(check.report?.repo?.changes?.files[0]).toBe('f000.txt');
+  });
+
+  it('is null without git at begin, report and end, and the research goes on', async () => {
+    const task = await createTask();
+    const check = await researchOf(task.id, async () => {});
+    expect(check.state).toBe('reported');
+    expect(check.begin.repo).toBeNull();
+    expect(check.report?.repo).toBeNull();
+    expect(check.end?.repo).toBeNull();
   });
 });

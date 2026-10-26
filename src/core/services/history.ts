@@ -18,6 +18,7 @@ import {
   contentHash,
   contentOf,
   reportKindProblems,
+  repoChanges,
   reportProblems,
   sameContent,
   summarizeCheck,
@@ -28,7 +29,7 @@ import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 export interface HistoryServiceOptions {
   storage: Storage;
   events: EventSink;
-  /** Read-only; the repository as it stands when a check begins and when its report comes. */
+  /** Read-only; the repository as it stands when a check begins, reports and ends (R6). */
   git?: GitReader | undefined;
   /** Shared with the task service: one lock per task, taken once per request (ADR-0030 §3). */
   locks?: TaskLocks | undefined;
@@ -119,12 +120,20 @@ export function createHistoryService({
     if (git === undefined) return null;
     try {
       if (!(await git.available())) return null;
-      const [branch, status, commits] = await Promise.all([
+      const [branch, status, commits, unstaged, staged] = await Promise.all([
         git.currentBranch(),
         git.status(),
         git.commits({ limit: 1 }),
+        git.diff({}),
+        git.diff({ staged: true }),
       ]);
-      return { branch: branch.name, head: commits[0]?.sha ?? null, clean: status.clean };
+      const changes = repoChanges(status.files, { unstaged: unstaged.text, staged: staged.text });
+      return {
+        branch: branch.name,
+        head: commits[0]?.sha ?? null,
+        clean: status.clean,
+        ...(changes === undefined ? {} : { changes }),
+      };
     } catch {
       // A repository that cannot be read is no reason to refuse a check; it is shown as absent.
       return null;
@@ -322,6 +331,7 @@ export function createHistoryService({
           sessionId: input.sessionId,
           ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
           ...(input.endedAt === undefined ? {} : { endedAt: input.endedAt }),
+          repo: await repoState(),
         });
         events.publish({ type: 'check.updated', taskId, number });
         return requireCheck(taskId, number);

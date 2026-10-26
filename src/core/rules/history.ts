@@ -11,6 +11,7 @@ import type {
   Decision,
   DecisionCounts,
   Recommendation,
+  RepoChanges,
   RepoState,
   ReportMarkdown,
   ResearchReportContent,
@@ -19,6 +20,7 @@ import type {
 } from '../model/history.js';
 import {
   CONTENT_FIELDS,
+  REPO_CHANGES_MAX_FILES,
   RESEARCH_MARKDOWN_MAX_LENGTH,
   checkReportSchema,
   projectPathProblem,
@@ -42,13 +44,39 @@ const MASK_64 = 0xffffffffffffffffn;
  * the server and in the page, so the page never asks for a hash (ADR-0030 §1).
  */
 export function contentHash(content: TaskContent): string {
-  const text = JSON.stringify([content.title, content.body, content.labels]);
+  return textHash(JSON.stringify([content.title, content.body, content.labels]));
+}
+
+/** FNV-1a, 64 bits, over the UTF-16 code units of a text, as 16 hex digits. */
+function textHash(text: string): string {
   let hash = FNV_OFFSET;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= BigInt(text.charCodeAt(index));
     hash = (hash * FNV_PRIME) & MASK_64;
   }
   return hash.toString(16).padStart(16, '0');
+}
+
+/**
+ * What the working tree holds besides HEAD (ADR-0030 R6): its paths, sorted and cut at the limit
+ * of D12, and a hash of the whole status and of both diffs, so that a tree dirty before and dirty
+ * after is still told apart. Undefined for a clean tree. An untracked file is seen by its path
+ * only: git shows no diff of it.
+ */
+export function repoChanges(
+  files: readonly { path: string; staged: boolean; status: string }[],
+  diffs: { unstaged: string; staged: string },
+): RepoChanges | undefined {
+  if (files.length === 0) return undefined;
+  // In an order of their own, so the same tree has the same hash whatever git printed first.
+  const status = files
+    .map(({ path, staged, status }) => `${path}\0${String(staged)}\0${status}`)
+    .sort();
+  const paths = [...new Set(files.map(({ path }) => path))].sort();
+  return {
+    files: paths.slice(0, REPO_CHANGES_MAX_FILES),
+    diffHash: textHash(JSON.stringify([status, diffs.unstaged, diffs.staged])),
+  };
 }
 
 /** Exact comparison: a string differs in one character, labels as ordered arrays. */

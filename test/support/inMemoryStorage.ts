@@ -244,6 +244,7 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         sessionId: input.sessionId,
         ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
         endedAt: input.endedAt ?? now(),
+        ...(input.repo === undefined ? {} : { repo: input.repo }),
       };
       return structuredClone(check.end);
     },

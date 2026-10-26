@@ -5,10 +5,12 @@ import {
   latestDecisions,
   recommendationAxes,
   type Check,
+  type CheckBegin,
   type CheckKind,
   type CheckSummary,
   type Decision,
   type DecisionCounts,
+  type DocumentMeta,
   type Recommendation,
   type RecommendationAxes,
   type RepoState,
@@ -211,11 +213,74 @@ export function describeRepo(repo: RepoState): string {
   return `${repo.branch ?? 'detached'} @ ${head}, ${repo.clean ? 'clean' : 'uncommitted changes'}`;
 }
 
+/** Whether the branch or HEAD moved between the begin and the report; the tree is `treeChange`. */
 export function repoChanged(check: Check): boolean {
-  return (
-    check.report !== undefined &&
-    JSON.stringify(check.begin.repo) !== JSON.stringify(check.report.repo)
-  );
+  if (check.report === undefined) return false;
+  const [before, after] = [check.begin.repo, check.report.repo];
+  if (before === null || after === null) return before !== after;
+  return before.branch !== after.branch || before.head !== after.head;
+}
+
+/** How the working tree changed while a check or research ran (ADR-0030 R6). */
+export interface TreeChange {
+  /** The paths that came or went; the paths dirty now when only their content changed. */
+  files: string[];
+  dirtyAtStart: boolean;
+}
+
+/**
+ * The tree at the begin against the latest record of it: the end, or the report before there is
+ * an end. Told apart by `clean` and by `changes.diffHash`, so a tree that was dirty before and is
+ * dirty after differently is seen too. A fact about the tree, not about who changed it.
+ */
+export function treeChange(check: Check): TreeChange | undefined {
+  const before = check.begin.repo;
+  const after = check.end?.repo ?? check.report?.repo;
+  if (before === null || after === null || after === undefined) return undefined;
+  if (before.clean === after.clean && before.changes?.diffHash === after.changes?.diffHash) {
+    return undefined;
+  }
+  const was = before.changes?.files ?? [];
+  const now = after.changes?.files ?? [];
+  const moved = [
+    ...now.filter((file) => !was.includes(file)),
+    ...was.filter((file) => !now.includes(file)),
+  ];
+  return { files: (moved.length > 0 ? moved : now).sort(), dirtyAtStart: !before.clean };
+}
+
+export interface DocumentChange {
+  name: string;
+  change: 'changed' | 'added' | 'removed';
+}
+
+/**
+ * The documents of the task now against what the research saw at its begin (ADR-0030 R2): by
+ * name, size and time, as the begin holds them; the text is never compared.
+ */
+export function documentChanges(
+  begun: CheckBegin['documents'],
+  now: readonly DocumentMeta[] | undefined,
+): DocumentChange[] {
+  if (begun === undefined || now === undefined) return [];
+  const changes: DocumentChange[] = [];
+  for (const document of now) {
+    const seen = begun.find(({ name }) => name === document.name);
+    if (seen === undefined) changes.push({ name: document.name, change: 'added' });
+    else if (seen.size !== document.size || seen.updatedAt !== document.updatedAt) {
+      changes.push({ name: document.name, change: 'changed' });
+    }
+  }
+  for (const { name } of begun) {
+    if (!now.some((document) => document.name === name)) changes.push({ name, change: 'removed' });
+  }
+  return changes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/** Whether HEAD is no longer the commit the report was made on; unknown is not moved. */
+export function movedOnSince(report: RepoState, head: string | null | undefined): boolean {
+  if (report === null || report.head === null || head === undefined || head === null) return false;
+  return !head.startsWith(report.head) && !report.head.startsWith(head);
 }
 
 export type DecisionState = 'undecided' | 'accepted' | 'rejected';

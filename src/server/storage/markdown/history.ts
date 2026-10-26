@@ -293,6 +293,7 @@ export function historyFiles(options: {
         sessionId: input.sessionId,
         ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
         endedAt: input.endedAt ?? options.now(),
+        ...(input.repo === undefined ? {} : { repo: input.repo }),
       });
       if ((await createOnce(checkFile(taskId, number, 'end'), end)) === 'exists') {
         throw alreadyFinal(taskId, number);

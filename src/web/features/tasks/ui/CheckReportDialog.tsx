@@ -24,13 +24,16 @@ import {
   checkId,
   decisionOf,
   describeRepo,
+  documentChanges,
   isSuperseded,
   kindLabel,
+  movedOnSince,
   recommendationState,
   repoChanged,
   staleness,
   stalenessText,
   taskContent,
+  treeChange,
 } from '../model/history';
 import { useCheck, useReportMarkdown } from '../model/useTaskHistory';
 
@@ -83,8 +86,9 @@ export function CheckReportDialog({
   onCheckAgain,
   onNewResearch,
 }: CheckReportDialogProps) {
-  const { store } = useBoard();
+  const { state, store, client } = useBoard();
   const { check, error, retry } = useCheck(task.id, number);
+  const [head, setHead] = useState<string | null | undefined>(undefined);
   const decide = useAsyncAction(
     (recommendation: string, decision: 'accepted' | 'rejected', note?: string) =>
       store.decide(task.id, number, {
@@ -101,6 +105,32 @@ export function CheckReportDialog({
     check === undefined ? undefined : staleness(task, list, { version: check.begin.version });
   const staleText = stale === undefined ? undefined : stalenessText(stale);
   const superseded = isSuperseded(checks ?? [], number);
+
+  // The evidence of read-only (R6): facts about the tree, the documents and HEAD, never blame.
+  const tree = check === undefined ? undefined : treeChange(check);
+  const documents = state.documents[task.id];
+  const begunDocuments = research ? check?.begin.documents : undefined;
+  const changedDocuments = documentChanges(begunDocuments, documents);
+  const reportHead = report?.repo?.head ?? null;
+  const movedOn = report !== undefined && movedOnSince(report.repo, head);
+
+  useEffect(() => {
+    if (begunDocuments === undefined || documents !== undefined) return;
+    store.loadDocuments(task.id).catch(() => undefined);
+  }, [store, task.id, begunDocuments, documents]);
+
+  useEffect(() => {
+    if (reportHead === null) return;
+    let alive = true;
+    // HEAD as it is now; a repository that cannot be read says nothing.
+    client.gitCommits(1).then(
+      (commits) => alive && setHead(commits[0]?.sha ?? null),
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [client, reportHead]);
 
   const axes = (recommendation: Recommendation) =>
     recommendationState(task, list, checks ?? [], check!, recommendation);
@@ -218,6 +248,29 @@ export function CheckReportDialog({
             <p className="notice" role="note">
               A later check or research has reported since. This report is kept as it was; deciding
               on it and applying it are still possible.
+            </p>
+          )}
+
+          {tree === undefined ? null : (
+            <p className="notice" role="status">
+              The working tree changed during the {research ? 'research' : 'check'}
+              {tree.files.length === 0 ? '.' : `: ${tree.files.join(', ')}.`}
+              {tree.dirtyAtStart ? ' It already had uncommitted changes when it began.' : ''} The
+              board shows what changed, not who changed it: the tree may also have been edited by
+              you or by another program meanwhile.
+            </p>
+          )}
+          {changedDocuments.length === 0 ? null : (
+            <p className="notice" role="status">
+              Documents changed since the research:{' '}
+              {changedDocuments.map(({ name, change }) => `${name} (${change})`).join(', ')}.
+            </p>
+          )}
+          {!movedOn ? null : (
+            <p className="notice" role="note">
+              The repository moved on since the report: it was made at {reportHead?.slice(0, 7)},
+              and HEAD is now {head?.slice(0, 7)}. This blocks nothing; the report speaks of the
+              repository as it was.
             </p>
           )}
 
