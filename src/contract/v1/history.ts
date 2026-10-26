@@ -12,9 +12,12 @@ export {
   diffContent,
   diffLines,
   isReportStale,
+  isSuperseded,
   latestDecisions,
   occurrences,
+  recommendationAxes,
   sameContent,
+  summarizeCheck,
 } from '../../core/rules/history.js';
 export type {
   AppliedRecommendations,
@@ -22,4 +25,5 @@ export type {
   DiffKind,
   DiffLine,
   NotApplied,
+  RecommendationAxes,
 } from '../../core/rules/history.js';

@@ -1,10 +1,16 @@
 import {
   contentHash,
   contentOf,
+  isSuperseded,
   latestDecisions,
+  recommendationAxes,
   type Check,
+  type CheckKind,
   type CheckSummary,
   type Decision,
+  type DecisionCounts,
+  type Recommendation,
+  type RecommendationAxes,
   type RepoState,
   type Task,
   type TaskContent,
@@ -222,17 +228,85 @@ export function decisionHistory(check: Check, recommendation: string): Decision[
   return check.decisions.filter((decision) => decision.recommendation === recommendation);
 }
 
-/** The versions made from a recommendation: derived from `fromCheck`, never stored twice. */
-export function appliedIn(
+export { isSuperseded };
+
+export const KIND_LABELS = { research: 'Research', check: 'Actuality check' } as const;
+
+/** A check without a kind is an actuality check (ADR-0030 R1). */
+export function kindLabel(kind: CheckKind | undefined): string {
+  return kind === 'research' ? KIND_LABELS.research : KIND_LABELS.check;
+}
+
+export function countsText(counts: DecisionCounts | undefined): string | undefined {
+  return counts === undefined
+    ? undefined
+    : `${counts.accepted} accepted · ${counts.rejected} rejected · ${counts.undecided} undecided`;
+}
+
+/**
+ * The three values of one recommendation, derived from what the board holds (ADR-0030 R5): the
+ * latest decision, the versions that name it, and whether its report is stale or superseded.
+ */
+export function recommendationState(
+  task: Task,
   list: VersionList | undefined,
-  check: number,
-  recommendation: string,
-): number[] {
-  return (list?.versions ?? [])
-    .filter(
-      (version) =>
-        version.fromCheck?.check === check &&
-        version.fromCheck.recommendations.includes(recommendation),
-    )
-    .map((version) => version.number);
+  checks: readonly Pick<CheckSummary, 'number' | 'state'>[],
+  check: Check,
+  recommendation: Pick<Recommendation, 'id' | 'edit' | 'targets'>,
+): RecommendationAxes {
+  return recommendationAxes({
+    check: check.begin.number,
+    decisions: check.decisions,
+    recommendation,
+    versions: list?.versions ?? [],
+    stale: staleness(task, list, { version: check.begin.version }).stale,
+    checks,
+  });
+}
+
+export const AXIS_LABELS = {
+  decision: { undecided: 'Undecided', accepted: 'Accepted', rejected: 'Rejected' },
+  currency: { current: 'Current', stale: 'Stale', superseded: 'Superseded' },
+} as const;
+
+/** Each axis said on its own: none is read from another (ADR-0030 R5). */
+export function axisLabels(axes: RecommendationAxes): {
+  decision: string;
+  application: string;
+  currency: string;
+} {
+  const { application } = axes;
+  return {
+    decision: AXIS_LABELS.decision[axes.decision],
+    application:
+      application.state === 'applied'
+        ? `Applied in ${application.versions.map((n) => `v${n}`).join(', ')}`
+        : application.state === 'not-applied'
+          ? 'Not applied'
+          : 'Not applicable here',
+    currency: AXIS_LABELS.currency[axes.currency],
+  };
+}
+
+/**
+ * What the start of an implementation should know of the research of the task (D11): a research
+ * still working, and recommendations no one decided on. A note, never a reason not to start.
+ */
+export function launchNotice(checks: readonly CheckSummary[] | undefined): string | undefined {
+  const research = (checks ?? []).filter((check) => check.kind === 'research');
+  const lines = [
+    ...research
+      .filter((check) => check.state === 'working')
+      .map(
+        (check) =>
+          `${checkId(check.taskId, check.number)} is still researching this task. Starting now does not wait for it.`,
+      ),
+    ...research
+      .filter((check) => (check.decisions?.undecided ?? 0) > 0)
+      .map(
+        (check) =>
+          `${checkId(check.taskId, check.number)} has ${check.decisions?.undecided} undecided recommendation${check.decisions?.undecided === 1 ? '' : 's'}. Starting now does not decide them.`,
+      ),
+  ];
+  return lines.length === 0 ? undefined : lines.join(' ');
 }

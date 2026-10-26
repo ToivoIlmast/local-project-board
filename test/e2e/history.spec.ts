@@ -132,3 +132,108 @@ test('check, decide, apply, save and restore, from the page', async ({ page, boa
   expect(final.versions.map((v) => v.source)).toEqual(['create', 'edit', 'restore']);
   expect(final.versions[2]?.restoredFrom).toBe(1);
 });
+
+/**
+ * T58 in a real browser: a research is asked for from the AI research section with the keyboard
+ * alone, reaches the runner as a research with its focus, shows only once the board has it, and
+ * its report is read and a recommendation rejected with a reason, all passing the accessibility
+ * check.
+ */
+test('research from the keyboard: ask, read the report, reject with a reason', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Extract the git adapter', status: 'todo', body: 'See `src/git.ts`.\n' },
+  });
+  const runner = await board.waitForRun();
+  await page.goto(board.url);
+  await page.getByRole('button', { name: 'Extract the git adapter' }).click();
+  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const section = details.getByRole('region', { name: 'AI research' });
+
+  await section.getByRole('button', { name: 'New research…' }).focus();
+  await page.keyboard.press('Enter');
+  const ask = page.getByRole('dialog', { name: 'New research on T1' });
+  await expect(ask.getByLabel('Focus (optional)')).toBeFocused();
+  const askAxe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+  expect(askAxe.violations.map((violation) => violation.id)).toEqual([]);
+  await page.keyboard.type('Only the adapter.');
+  await ask.getByRole('button', { name: 'Start research' }).focus();
+  await page.keyboard.press('Enter');
+
+  expect(await runner.request).toEqual({
+    type: 'run.requested',
+    taskId: 'T1',
+    agent: 'claude-code',
+    kind: 'research',
+    comment: 'Only the adapter.',
+  });
+  await expect(details.getByText('A research of T1 was handed to Claude Code.')).toBeVisible();
+  // Nothing is in the list until the board has the research (ADR-0025).
+  await expect(section.getByRole('listitem')).toHaveCount(0);
+
+  await board.api('/api/v1/tasks/T1/checks', {
+    method: 'POST',
+    body: {
+      agent: 'claude-code',
+      sessionId: SESSION,
+      kind: 'research',
+      comment: 'Only the adapter.',
+    },
+  });
+  await expect(section.getByRole('listitem')).toContainText('Research · Working');
+  await board.api('/api/v1/tasks/T1/checks/1/report', {
+    method: 'POST',
+    body: {
+      agent: 'claude-code',
+      summary: 'The adapter moved.',
+      markdown: '# What I found\n\nThe adapter lives in `src/server/git` now.\n',
+      findings: [],
+      recommendations: [
+        {
+          id: 'r1',
+          findings: [],
+          text: 'Update the plan.',
+          targets: [{ kind: 'document', name: 'plan.md' }],
+        },
+      ],
+    },
+  });
+  await expect(section.getByRole('listitem')).toContainText(
+    '0 accepted · 0 rejected · 1 undecided',
+  );
+
+  await section.getByRole('button', { name: 'Open T1-C1' }).focus();
+  await page.keyboard.press('Enter');
+  const report = page.getByRole('dialog', { name: 'Research T1-C1' });
+  await expect(report.getByRole('region', { name: 'Focus' })).toContainText('Only the adapter.');
+  await expect(report.getByText('Not applicable here')).toBeVisible();
+  await report.getByText('Report', { exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(report.getByRole('heading', { name: 'What I found' })).toBeVisible();
+  const reportAxe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+  expect(reportAxe.violations.map((violation) => violation.id)).toEqual([]);
+
+  await report.getByRole('button', { name: 'Reject r1' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(report.getByLabel('Why reject r1? (optional)')).toBeFocused();
+  await page.keyboard.type('The plan is not ours.');
+  await report.getByRole('button', { name: 'Confirm rejecting r1' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(report.getByText(/The plan is not ours\./)).toBeVisible();
+
+  const decided = (await board.api('/api/v1/tasks/T1/checks/1')) as {
+    decisions: { recommendation: string; decision: string; note?: string }[];
+  };
+  expect(decided.decisions).toMatchObject([
+    { recommendation: 'r1', decision: 'rejected', note: 'The plan is not ours.' },
+  ]);
+  // A research changes nothing of the task.
+  expect(((await board.api('/api/v1/tasks/T1')) as { body: string }).body).toBe(
+    'See `src/git.ts`.\n',
+  );
+  await page.keyboard.press('Escape');
+  await expect(report).toBeHidden();
+});

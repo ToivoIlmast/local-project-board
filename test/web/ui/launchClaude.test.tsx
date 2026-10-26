@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import type { AiRun, Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
-import { aTask } from '../support/fixtures';
+import { aResearch, aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
 
 /**
@@ -249,5 +249,39 @@ describe('the dialog from the menu of a card (T38)', () => {
 
     await screen.findByText(STARTING);
     expect(rendered.board.runs).toEqual([{ taskId: 'T1', agent: 'claude-code', model: 'haiku' }]);
+  });
+});
+
+describe('research and the start of an implementation (D11)', () => {
+  it('names a research still working and undecided recommendations, and does not block Start (INVARIANT)', async () => {
+    const working = aResearch({ state: 'working' }, 'T1', 2);
+    delete working.report;
+    const rendered = await openLaunch({}, { checks: { T1: [aResearch(), working] } });
+
+    const notice = await within(dialog()).findByText(/T1-C2 is still researching this task/);
+    expect(notice).toBeInTheDocument();
+    expect(within(dialog()).getByText(/T1-C1 has 3 undecided recommendations/)).toBeInTheDocument();
+    expect(start()).toBeEnabled();
+
+    await rendered.user.click(start());
+    await waitFor(() => expect(rendered.board.runs).toHaveLength(1));
+    // The implementation is a run of the task: no research is started with it.
+    expect(rendered.board.runs[0]).toEqual({ taskId: 'T1', agent: 'claude-code' });
+  });
+
+  it('says nothing when every research is decided', async () => {
+    const decided = aResearch({
+      decisions: ['r1', 'r2', 'r3'].map((recommendation, index) => ({
+        taskId: 'T1',
+        check: 1,
+        number: index + 1,
+        recommendation,
+        decision: 'rejected' as const,
+        createdAt: '2026-10-17T10:06:00.000Z',
+      })),
+    });
+    const rendered = await openLaunch({}, { checks: { T1: [decided] } });
+    await waitFor(() => expect(rendered.board.calls).toContain('checks'));
+    expect(within(dialog()).queryByText(/research|undecided/i)).not.toBeInTheDocument();
   });
 });

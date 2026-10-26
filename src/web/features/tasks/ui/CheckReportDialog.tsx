@@ -1,9 +1,13 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   applyRecommendations,
+  latestDecisions,
   occurrences,
   type Check,
+  type CheckSummary,
   type FromCheck,
   type Recommendation,
+  type RecommendationTarget,
   type Task,
   type TaskContent,
   type VersionList,
@@ -11,21 +15,24 @@ import {
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { formatDate } from '../../../shared/lib/format';
-import { Badge, Button, Modal, Text } from '../../../shared/ui/index';
+import { Markdown } from '../../../shared/lib/Markdown';
+import { Badge, Button, Field, Modal, Text, Textarea } from '../../../shared/ui/index';
 import {
   STATE_LABELS,
   VERDICT_LABELS,
-  appliedIn,
+  axisLabels,
   checkId,
   decisionOf,
   describeRepo,
+  isSuperseded,
+  kindLabel,
+  recommendationState,
   repoChanged,
   staleness,
   stalenessText,
   taskContent,
-  type DecisionState,
 } from '../model/history';
-import { useCheck } from '../model/useTaskHistory';
+import { useCheck, useReportMarkdown } from '../model/useTaskHistory';
 
 /** What the report asks the page to open in the editor: the draft and where it came from. */
 export interface ApplyRequest {
@@ -41,10 +48,14 @@ export interface CheckReportDialogProps {
   task: Task;
   number: number;
   list: VersionList | undefined;
+  /** Every check of the task, for whether a later report superseded this one. */
+  checks: readonly CheckSummary[] | undefined;
   onClose: () => void;
   onApply: (request: ApplyRequest) => void;
   /** Asks for a new check of the task; resolves when it was handed to a runner. */
   onCheckAgain: () => void;
+  /** Opens the dialog of a new research, in place of this report. */
+  onNewResearch: () => void;
 }
 
 const NOT_APPLIED_REASON = {
@@ -52,36 +63,55 @@ const NOT_APPLIED_REASON = {
   'not-found': 'the text it replaces is no longer in the description',
   ambiguous: 'the text it replaces now occurs more than once',
   'blank-title': 'the title it proposes is blank',
+  elsewhere: 'it is aimed at a document or a file, not at the task: carry it over by hand',
 } as const;
 
 /**
- * One check as the board stored it: the report exactly as the agent sent it, the state of each
- * recommendation, and the way to decide on them and to apply them (ADR-0030 §7). Nothing is
- * applied here: a recommendation becomes a change only through the editor, by a person who
- * saves it. A report that no longer matches the task is said to be stale, and is not applied.
+ * One check or research as the board stored it: the report exactly as the agent sent it, the
+ * state of each recommendation on three axes, and the way to decide on them and to apply them
+ * (ADR-0030 §7, R4, R5). Nothing is applied here: a recommendation becomes a change only through
+ * the editor, by a person who saves it, and only an edit of the task is ever applied. A report
+ * that no longer matches the task is said to be stale, and is not applied.
  */
 export function CheckReportDialog({
   task,
   number,
   list,
+  checks,
   onClose,
   onApply,
   onCheckAgain,
+  onNewResearch,
 }: CheckReportDialogProps) {
   const { store } = useBoard();
   const { check, error, retry } = useCheck(task.id, number);
-  const decide = useAsyncAction((recommendation: string, decision: 'accepted' | 'rejected') =>
-    store.decide(task.id, number, { recommendation, decision }),
+  const decide = useAsyncAction(
+    (recommendation: string, decision: 'accepted' | 'rejected', note?: string) =>
+      store.decide(task.id, number, {
+        recommendation,
+        decision,
+        ...(note === undefined ? {} : { note }),
+      }),
   );
 
+  const research = check?.begin.kind === 'research';
+  const report = check?.report;
+  const markdown = useReportMarkdown(task.id, number, research && report !== undefined);
   const stale =
     check === undefined ? undefined : staleness(task, list, { version: check.begin.version });
   const staleText = stale === undefined ? undefined : stalenessText(stale);
-  const report = check?.report;
+  const superseded = isSuperseded(checks ?? [], number);
 
+  const axes = (recommendation: Recommendation) =>
+    recommendationState(task, list, checks ?? [], check!, recommendation);
   const accepted = (report?.recommendations ?? []).filter(
     (recommendation) => check !== undefined && decisionOf(check, recommendation.id) === 'accepted',
   );
+  // An edit aimed at a document or a file is applied by nobody (R4): it is said, not drafted.
+  const elsewhere = (recommendation: Recommendation) =>
+    recommendation.edit !== undefined &&
+    axes(recommendation).application.state === 'not-applicable';
+  const applicable = accepted.filter((r) => r.edit !== undefined && !elsewhere(r));
 
   const apply = (basis: 'report' | 'manual'): void => {
     if (report === undefined || accepted.length === 0) return;
@@ -97,32 +127,42 @@ export function CheckReportDialog({
       });
       return;
     }
-    const result = applyRecommendations(content, accepted);
+    const result = applyRecommendations(
+      content,
+      accepted.filter((r) => !elsewhere(r)),
+    );
     onApply({
       draft: result.content,
       fromCheck: { check: number, recommendations: result.applied, basis },
-      notApplied: result.notApplied.map(({ id, reason }) => ({
-        id,
-        text: accepted.find((r) => r.id === id)?.text ?? id,
-        reason: NOT_APPLIED_REASON[reason],
-      })),
+      notApplied: [
+        ...result.notApplied.map(({ id, reason }) => ({
+          id,
+          text: accepted.find((r) => r.id === id)?.text ?? id,
+          reason: NOT_APPLIED_REASON[reason],
+        })),
+        ...accepted
+          .filter(elsewhere)
+          .map(({ id, text }) => ({ id, text, reason: NOT_APPLIED_REASON.elsewhere })),
+      ],
       recommendations: accepted,
       title: `Apply ${checkId(task.id, number)} to ${task.id}`,
     });
   };
 
-  const applicable = accepted.filter((r) => r.edit !== undefined);
-
   return (
     <Modal
-      title={`Check ${checkId(task.id, number)}`}
+      title={`${check === undefined ? 'Check' : research ? 'Research' : 'Check'} ${checkId(task.id, number)}`}
       onClose={onClose}
       width="wide"
       footer={
         <>
           {report === undefined || stale === undefined ? null : stale.stale ? (
             <>
-              <Button onClick={onCheckAgain}>Check again</Button>
+              {research ? (
+                <Button onClick={onNewResearch}>New research…</Button>
+              ) : (
+                <Button onClick={onCheckAgain}>Check again</Button>
+              )}
               <Button disabled={accepted.length === 0} onClick={() => apply('manual')}>
                 Reconcile by hand
               </Button>
@@ -155,15 +195,16 @@ export function CheckReportDialog({
       ) : (
         <div className="check">
           <p className="check__meta">
-            <Badge>{STATE_LABELS[check.state]}</Badge>{' '}
+            <Badge>{kindLabel(check.begin.kind)}</Badge> <Badge>{STATE_LABELS[check.state]}</Badge>{' '}
             {report?.verdict === undefined ? null : (
               <Badge tone={report.verdict === 'current' ? 'accent' : 'warning'}>
                 {VERDICT_LABELS[report.verdict]}
               </Badge>
             )}{' '}
+            {superseded ? <Badge>Superseded</Badge> : null}{' '}
             <span>
-              Checked v{check.begin.version} · {formatDate(check.begin.createdAt)} ·{' '}
-              {check.begin.agent}
+              {research ? 'Researched' : 'Checked'} v{check.begin.version} ·{' '}
+              {formatDate(check.begin.createdAt)} · {check.begin.agent}
               {check.begin.model === undefined ? '' : ` (${check.begin.model})`}
             </span>
           </p>
@@ -173,23 +214,37 @@ export function CheckReportDialog({
               {staleText} Its recommendations are not applied to the current content.
             </p>
           )}
+          {!superseded ? null : (
+            <p className="notice" role="note">
+              A later check or research has reported since. This report is kept as it was; deciding
+              on it and applying it are still possible.
+            </p>
+          )}
+
+          {check.begin.comment === undefined ? null : (
+            <section aria-label="Focus">
+              <h3 className="check__heading">Focus</h3>
+              <p className="check__focus">{check.begin.comment}</p>
+            </section>
+          )}
 
           {report === undefined ? (
             <Text tone="muted">
               {check.state === 'failed'
-                ? `The check ended without a report${
+                ? `The ${research ? 'research' : 'check'} ended without a report${
                     check.end?.exitCode === undefined || check.end.exitCode === 0
                       ? '.'
                       : ` (exit code ${check.end.exitCode}).`
                   }`
-                : 'The check has no report yet. It may still be working, or its process may have ended without one.'}
+                : `The ${research ? 'research' : 'check'} has no report yet. It may still be working, or its process may have ended without one.`}
             </Text>
           ) : (
             <>
               {!repoChanged(check) ? null : (
                 <p className="notice" role="status">
-                  The repository changed while the check ran: {describeRepo(check.begin.repo)} at
-                  the start, {describeRepo(report.repo)} when the report came.
+                  The repository changed while the {research ? 'research' : 'check'} ran:{' '}
+                  {describeRepo(check.begin.repo)} at the start, {describeRepo(report.repo)} when
+                  the report came.
                 </p>
               )}
               <section aria-label="Summary">
@@ -205,6 +260,49 @@ export function CheckReportDialog({
                   {describeRepo(report.repo)}.
                 </Text>
               </section>
+
+              <section aria-label="Recommendations">
+                <h3 className="check__heading">Recommendations</h3>
+                {decide.error === undefined ? null : (
+                  <p className="form__error" role="alert">
+                    {decide.error}
+                  </p>
+                )}
+                {report.recommendations.length === 0 ? (
+                  <Text tone="muted">None.</Text>
+                ) : (
+                  <ul className="check__list">
+                    {report.recommendations.map((recommendation) => (
+                      <RecommendationItem
+                        key={recommendation.id}
+                        check={check}
+                        task={task}
+                        recommendation={recommendation}
+                        labels={axisLabels(axes(recommendation))}
+                        pending={decide.pending}
+                        onDecide={(decision, note) => decide.run(recommendation.id, decision, note)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              {!research ? null : (
+                <section aria-label="Report">
+                  <details className="check__report">
+                    <summary className="check__heading">Report</summary>
+                    {markdown.error !== undefined ? (
+                      <p className="form__error" role="alert">
+                        {markdown.error}
+                      </p>
+                    ) : markdown.markdown === undefined ? (
+                      <Text tone="muted">Loading…</Text>
+                    ) : (
+                      <Markdown headingLevel={4}>{markdown.markdown}</Markdown>
+                    )}
+                  </details>
+                </section>
+              )}
 
               <section aria-label="Findings">
                 <h3 className="check__heading">Findings</h3>
@@ -234,32 +332,6 @@ export function CheckReportDialog({
                   </ul>
                 )}
               </section>
-
-              <section aria-label="Recommendations">
-                <h3 className="check__heading">Recommendations</h3>
-                {decide.error === undefined ? null : (
-                  <p className="form__error" role="alert">
-                    {decide.error}
-                  </p>
-                )}
-                {report.recommendations.length === 0 ? (
-                  <Text tone="muted">None.</Text>
-                ) : (
-                  <ul className="check__list">
-                    {report.recommendations.map((recommendation) => (
-                      <RecommendationItem
-                        key={recommendation.id}
-                        check={check}
-                        task={task}
-                        list={list}
-                        recommendation={recommendation}
-                        pending={decide.pending}
-                        onDecide={(decision) => void decide.run(recommendation.id, decision)}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </section>
             </>
           )}
         </div>
@@ -268,29 +340,57 @@ export function CheckReportDialog({
   );
 }
 
+function targetText(target: RecommendationTarget): string {
+  return target.kind === 'task'
+    ? 'the task'
+    : target.kind === 'document'
+      ? `document ${target.name}`
+      : `file ${target.ref}`;
+}
+
 function RecommendationItem({
   check,
   task,
-  list,
   recommendation,
+  labels,
   pending,
   onDecide,
 }: {
   check: Check;
   task: Task;
-  list: VersionList | undefined;
   recommendation: Recommendation;
+  labels: ReturnType<typeof axisLabels>;
   pending: boolean;
-  onDecide: (decision: 'accepted' | 'rejected') => void;
+  onDecide: (decision: 'accepted' | 'rejected', note?: string) => Promise<boolean>;
 }) {
-  const state: DecisionState = decisionOf(check, recommendation.id);
-  const applied = appliedIn(list, check.begin.number, recommendation.id);
+  const latest = latestDecisions(check.decisions).get(recommendation.id);
+  const state = latest?.decision ?? 'undecided';
   const edit = recommendation.edit;
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (rejecting) reasonRef.current?.focus();
+  }, [rejecting]);
+
+  const reject = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    // A blank reason is no reason: none is sent (ADR-0030 §2, `note`).
+    if (await onDecide('rejected', /\S/.test(reason) ? reason : undefined)) {
+      setRejecting(false);
+      setReason('');
+    }
+  };
+
   return (
     <li className="check__recommendation">
       <p>
         <Badge title="Recommendation id">{recommendation.id}</Badge> {recommendation.text}
       </p>
+      {recommendation.targets === undefined ? null : (
+        <p className="check__edit">Aimed at: {recommendation.targets.map(targetText).join(', ')}</p>
+      )}
       {edit === undefined ? (
         <Text tone="muted">Advice: there is nothing to apply.</Text>
       ) : (
@@ -314,13 +414,12 @@ function RecommendationItem({
           )}
         </p>
       )}
+      {/* Three values, each derived on its own (ADR-0030 R5): none is read from another. */}
       <p className="check__decision">
-        <span>
-          {state === 'undecided' ? 'Undecided' : state === 'accepted' ? 'Accepted' : 'Rejected'}
-        </span>
-        {applied.length === 0 ? null : (
-          <span> · Applied in {applied.map((n) => `v${n}`).join(', ')}</span>
-        )}
+        <span title="Decision">{labels.decision}</span> ·{' '}
+        <span title="Application">{labels.application}</span> ·{' '}
+        <span title="Currency">{labels.currency}</span>
+        {latest?.note === undefined ? null : <span> — {latest.note}</span>}
       </p>
       <div className="check__actions">
         <Button
@@ -328,7 +427,7 @@ function RecommendationItem({
           aria-label={`Accept ${recommendation.id}`}
           aria-pressed={state === 'accepted'}
           disabled={pending || state === 'accepted'}
-          onClick={() => onDecide('accepted')}
+          onClick={() => void onDecide('accepted')}
         >
           Accept
         </Button>
@@ -336,12 +435,42 @@ function RecommendationItem({
           size="small"
           aria-label={`Reject ${recommendation.id}`}
           aria-pressed={state === 'rejected'}
+          aria-expanded={rejecting}
           disabled={pending || state === 'rejected'}
-          onClick={() => onDecide('rejected')}
+          onClick={() => setRejecting(true)}
         >
           Reject
         </Button>
       </div>
+      {!rejecting ? null : (
+        <form className="check__reject" onSubmit={(event) => void reject(event)}>
+          <Field label={`Why reject ${recommendation.id}? (optional)`}>
+            {(id) => (
+              <Textarea
+                id={id}
+                ref={reasonRef}
+                rows={2}
+                maxLength={2000}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="check__actions">
+            <Button
+              size="small"
+              type="submit"
+              aria-label={`Confirm rejecting ${recommendation.id}`}
+              disabled={pending}
+            >
+              Reject
+            </Button>
+            <Button size="small" onClick={() => setRejecting(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
     </li>
   );
 }

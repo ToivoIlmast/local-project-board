@@ -17,6 +17,7 @@ import {
 } from '../model/history';
 import { useTaskHistory, useVersion } from '../model/useTaskHistory';
 import { CheckReportDialog, type ApplyRequest } from './CheckReportDialog';
+import { NewResearchDialog } from './NewResearchDialog';
 import { TaskAiRun } from './TaskAiRun';
 import { TaskAiSettings } from './TaskAiSettings';
 import { TaskChecks } from './TaskChecks';
@@ -42,6 +43,7 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
   const [opened, setOpened] = useState<number | undefined>(undefined);
   const [applying, setApplying] = useState<ApplyRequest | undefined>(undefined);
   const [done, setDone] = useState<string | undefined>(undefined);
+  const [researching, setResearching] = useState(false);
 
   const selected = normalizeSelection(chosen, task, history?.list);
   const viewing = selected === CURRENT ? undefined : selected;
@@ -197,7 +199,13 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
         onRetry={retry}
         onView={(next) => setChosen(next)}
       />
-      <TaskChecks task={task} checks={history?.checks} list={history?.list} onOpen={setOpened} />
+      <TaskChecks
+        task={task}
+        checks={history?.checks}
+        list={history?.list}
+        onOpen={setOpened}
+        onNewResearch={() => setResearching(true)}
+      />
 
       <TaskDocuments taskId={task.id} />
 
@@ -221,14 +229,32 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
           task={task}
           number={opened}
           list={history?.list}
+          checks={history?.checks}
           onClose={() => setOpened(undefined)}
           onCheckAgain={() => {
             setOpened(undefined);
             void check.run();
           }}
+          onNewResearch={() => {
+            setOpened(undefined);
+            setResearching(true);
+          }}
           onApply={(request) => {
             setOpened(undefined);
             setApplying(request);
+          }}
+        />
+      )}
+
+      {!researching ? null : (
+        <NewResearchDialog
+          taskId={task.id}
+          aiRun={task.aiRun}
+          onClose={() => setResearching(false)}
+          onDone={(message) => {
+            setResearching(false);
+            check.clearError();
+            setDone(message);
           }}
         />
       )}

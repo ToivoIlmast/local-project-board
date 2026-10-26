@@ -295,8 +295,10 @@ describe('Send to AI → Claude Code (T27)', () => {
     await within(details()).findByText(STARTING);
 
     // The handoff is read by the session itself, from the board, when it starts. The dialog
-    // reads the language in effect for the task (T38), and that is all it reads.
-    expect(rendered.board.calls.slice(before).filter((call) => call !== 'taskWorkflow')).toEqual([
+    // reads the language in effect for the task (T38) and the history of the task, for the note
+    // on its research (D11), and that is all it reads.
+    const reads = new Set(['taskWorkflow', 'versions', 'checks']);
+    expect(rendered.board.calls.slice(before).filter((call) => !reads.has(call))).toEqual([
       'runTask',
     ]);
     expect(await navigator.clipboard.readText()).toBe('what was there before');

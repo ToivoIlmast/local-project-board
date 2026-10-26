@@ -1,7 +1,17 @@
-import { contentHash, type DiffLine, type VersionList } from '../../../src/contract/v1/index';
 import {
-  appliedIn,
+  contentHash,
+  type DiffLine,
+  type RecommendationAxes,
+  type VersionList,
+} from '../../../src/contract/v1/index';
+import {
+  axisLabels,
   checkId,
+  countsText,
+  isSuperseded,
+  kindLabel,
+  launchNotice,
+  recommendationState,
   currentVersion,
   decisionOf,
   describeRepo,
@@ -15,7 +25,7 @@ import {
   versionSummaryText,
 } from '../../../src/web/features/tasks/model/history';
 import { foldContext } from '../../../src/web/features/tasks/ui/ContentDiffView';
-import { aCheck, aTask } from '../support/fixtures';
+import { aCheck, aResearch, aTask } from '../support/fixtures';
 
 const task = aTask({ id: 'T1', title: 'A', body: 'text\n', labels: ['x'] });
 const hashOf = (t: { title: string; body: string; labels: string[] }): string =>
@@ -221,9 +231,14 @@ describe('the repository and the decisions of a check', () => {
         },
       ],
     };
-    expect(appliedIn(list, 1, 'r1')).toEqual([2]);
-    expect(appliedIn(list, 1, 'r2')).toEqual([]);
-    expect(appliedIn(undefined, 1, 'r1')).toEqual([]);
+    const r1 = check.report!.recommendations[0]!;
+    expect(recommendationState(task, list, [], check, r1).application).toEqual({
+      state: 'applied',
+      versions: [2],
+    });
+    expect(recommendationState(task, undefined, [], check, r1).application).toEqual({
+      state: 'not-applied',
+    });
     expect(checkId('T12', 3)).toBe('T12-C3');
   });
 });
@@ -253,5 +268,129 @@ describe('foldContext', () => {
       true,
     );
     expect(foldContext([])).toEqual([]);
+  });
+});
+
+describe('the three axes of a recommendation, as the page says them (ADR-0030 R5)', () => {
+  it.each<[RecommendationAxes, ReturnType<typeof axisLabels>]>([
+    [
+      { decision: 'undecided', application: { state: 'not-applied' }, currency: 'current' },
+      { decision: 'Undecided', application: 'Not applied', currency: 'Current' },
+    ],
+    [
+      { decision: 'accepted', application: { state: 'not-applied' }, currency: 'current' },
+      { decision: 'Accepted', application: 'Not applied', currency: 'Current' },
+    ],
+    [
+      {
+        decision: 'rejected',
+        application: { state: 'applied', versions: [2, 4] },
+        currency: 'stale',
+      },
+      { decision: 'Rejected', application: 'Applied in v2, v4', currency: 'Stale' },
+    ],
+    [
+      { decision: 'accepted', application: { state: 'not-applicable' }, currency: 'superseded' },
+      { decision: 'Accepted', application: 'Not applicable here', currency: 'Superseded' },
+    ],
+  ])('%j → %j', (axes, labels) => {
+    expect(axisLabels(axes)).toEqual(labels);
+  });
+
+  it('does not take "applied" from "accepted": only a version that names it (INVARIANT)', () => {
+    const accepted = aCheck({
+      decisions: [
+        {
+          taskId: 'T1',
+          check: 1,
+          number: 1,
+          recommendation: 'r1',
+          decision: 'accepted',
+          createdAt: '2026-10-17T10:06:00.000Z',
+        },
+      ],
+    });
+    const r1 = accepted.report!.recommendations[0]!;
+    const state = recommendationState(task, listAt(hashOf(task)), [], accepted, r1);
+    expect(state.decision).toBe('accepted');
+    expect(axisLabels(state).application).toBe('Not applied');
+  });
+
+  it('says a recommendation aimed at a document or a file is not applicable here (D4)', () => {
+    const research = aResearch();
+    const [r1, r2, r3] = research.report!.recommendations;
+    const state = (r: typeof r1) =>
+      axisLabels(recommendationState(task, undefined, [], research, r!)).application;
+    expect(state(r1)).toBe('Not applied');
+    expect(state(r2)).toBe('Not applicable here');
+    expect(state(r3)).toBe('Not applicable here');
+  });
+});
+
+describe('superseded and the counts of the list', () => {
+  const summaries = (...states: ('working' | 'reported' | 'failed')[]) =>
+    states.map((state, index) => ({ number: index + 1, state }));
+
+  it('is superseded only by a later check or research that reported', () => {
+    expect(isSuperseded(summaries('reported', 'reported'), 1)).toBe(true);
+    expect(isSuperseded(summaries('reported', 'working'), 1)).toBe(false);
+    expect(isSuperseded(summaries('reported', 'failed'), 1)).toBe(false);
+    expect(isSuperseded(summaries('reported', 'reported'), 2)).toBe(false);
+  });
+
+  it('marks the recommendations of a superseded report, and stale wins over it', () => {
+    const research = aResearch();
+    const r1 = research.report!.recommendations[0]!;
+    const later = summaries('reported', 'reported');
+    expect(recommendationState(task, undefined, later, research, r1).currency).toBe('superseded');
+    // v1 of the report against a task that is not v1 any more.
+    const moved = listAt(hashOf(task));
+    moved.versions = [summary(1, '1'.repeat(16)), summary(2, hashOf(task))];
+    expect(recommendationState(task, moved, later, research, r1).currency).toBe('stale');
+  });
+
+  it('counts the decisions, and names the kind', () => {
+    expect(countsText({ accepted: 1, rejected: 0, undecided: 2 })).toBe(
+      '1 accepted · 0 rejected · 2 undecided',
+    );
+    expect(countsText(undefined)).toBeUndefined();
+    expect(kindLabel('research')).toBe('Research');
+    expect(kindLabel(undefined)).toBe('Actuality check');
+  });
+});
+
+describe('the notice of the launch dialog (D11)', () => {
+  const at = (over: object) => ({
+    taskId: 'T1',
+    number: 1,
+    state: 'reported' as const,
+    version: 1,
+    createdAt: '2026-10-17T10:00:00.000Z',
+    agent: 'claude-code',
+    ...over,
+  });
+
+  it('names a research still working and recommendations still undecided', () => {
+    expect(launchNotice(undefined)).toBeUndefined();
+    expect(launchNotice([])).toBeUndefined();
+    expect(
+      launchNotice([
+        at({ kind: 'research', decisions: { accepted: 1, rejected: 1, undecided: 0 } }),
+      ]),
+    ).toBeUndefined();
+    expect(launchNotice([at({ kind: 'research', state: 'working', number: 2 })])).toBe(
+      'T1-C2 is still researching this task. Starting now does not wait for it.',
+    );
+    expect(
+      launchNotice([
+        at({ kind: 'research', decisions: { accepted: 0, rejected: 0, undecided: 2 } }),
+      ]),
+    ).toBe('T1-C1 has 2 undecided recommendations. Starting now does not decide them.');
+  });
+
+  it('says nothing of an actuality check: D11 is about research', () => {
+    expect(
+      launchNotice([at({ decisions: { accepted: 0, rejected: 0, undecided: 2 } })]),
+    ).toBeUndefined();
   });
 });

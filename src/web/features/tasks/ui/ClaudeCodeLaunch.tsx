@@ -1,13 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import {
-  CLAUDE_MODEL_ALIASES,
   SUPPORTED_LANGUAGES,
   languageName,
   type SupportedLanguage,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
-import { Button, Field, Input, Modal, Select, type SelectOption } from '../../../shared/ui/index';
+import { Button, Field, Modal, Select, type SelectOption } from '../../../shared/ui/index';
 import { setTaskLanguage } from '../../settings/index';
 import type { TargetDialogProps } from '../model/agentTarget';
 import {
@@ -16,18 +15,14 @@ import {
   isWorking,
   resumeBlocked,
   runRequest,
-  type ModelChoice,
   type ModelDraft,
 } from '../model/claudeLaunch';
+import { launchNotice } from '../model/history';
 import { LAUNCH_LABELS as L } from '../model/launchLabels';
 import { settingsRequest } from '../model/taskWorkflow';
 import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
-
-const MODEL_OPTIONS: SelectOption[] = [
-  { value: '', label: L.model.default },
-  ...CLAUDE_MODEL_ALIASES.map((alias) => ({ value: alias, label: alias })),
-  { value: 'other', label: L.model.other },
-];
+import { useTaskHistory } from '../model/useTaskHistory';
+import { ModelField } from './ModelField';
 
 const LANGUAGE_OPTIONS: SelectOption[] = SUPPORTED_LANGUAGES.map((code) => ({
   value: code,
@@ -39,7 +34,8 @@ const LANGUAGE_OPTIONS: SelectOption[] = SUPPORTED_LANGUAGES.map((code) => ({
  * session — three controls and no more. The model is a parameter of this start; the language is
  * a setting of the task, so a change is saved to the task first, and a start whose language could
  * not be saved is not asked for: the session must never read a handoff in the old language.
- * Nothing is shown before the board said it (ADR-0025).
+ * Nothing is shown before the board said it (ADR-0025). A research still working, or
+ * recommendations still undecided, are said and do not keep the run from starting (D11).
  */
 export function ClaudeCodeLaunch({
   task,
@@ -56,6 +52,7 @@ export function ClaudeCodeLaunch({
   const [language, setLanguage] = useState<SupportedLanguage | undefined>(undefined);
   const [session, setSession] = useState<'new' | 'resume'>(initialSession);
   const read = useEffectiveWorkflow(task, true);
+  const research = launchNotice(useTaskHistory(task.id).history?.checks);
 
   const inEffect: SupportedLanguage | undefined =
     read.effective === undefined ? undefined : (read.effective.values.reportLanguage ?? 'en');
@@ -106,37 +103,13 @@ export function ClaudeCodeLaunch({
           </p>
         ) : null}
 
-        <Field label={L.model.label} hint={L.model.hint}>
-          {(id, hintId) => (
-            <Select
-              id={id}
-              aria-describedby={hintId}
-              options={MODEL_OPTIONS}
-              value={model.choice}
-              onChange={(event) =>
-                setModel({ ...model, choice: event.target.value as ModelChoice })
-              }
-            />
-          )}
-        </Field>
-        {model.choice !== 'other' ? null : (
-          <Field
-            label={L.model.name}
-            hint={sent === null && model.name !== '' ? L.model.invalid : L.model.nameHint}
-          >
-            {(id, hintId) => (
-              <Input
-                id={id}
-                aria-describedby={hintId}
-                aria-invalid={sent === null && model.name !== ''}
-                autoComplete="off"
-                spellCheck={false}
-                value={model.name}
-                onChange={(event) => setModel({ ...model, name: event.target.value })}
-              />
-            )}
-          </Field>
+        {research === undefined ? null : (
+          <p className="notice" role="status">
+            {research}
+          </p>
         )}
+
+        <ModelField model={model} onChange={setModel} />
 
         <Field
           label={L.language.label}

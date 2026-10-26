@@ -103,3 +103,34 @@ export function useCheck(
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
 }
+
+/**
+ * The markdown of a research report, read once it is published (ADR-0030 R3). It never changes,
+ * so it is read when asked for and not again; nothing is read for an actuality check.
+ */
+export function useReportMarkdown(
+  taskId: string,
+  number: number,
+  published: boolean,
+): { markdown: string | undefined; error: string | undefined } {
+  const { client } = useBoard();
+  const key = `${taskId}/${number}`;
+  const [read, setRead] = useState<{ key: string; markdown?: string; error?: string }>({ key });
+
+  useEffect(() => {
+    if (!published) return undefined;
+    let alive = true;
+    client.checkReportMarkdown(taskId, number).then(
+      (markdown) => alive && setRead({ key, markdown }),
+      (failure: unknown) => alive && setRead({ key, error: messageOf(failure) }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [client, taskId, number, key, published]);
+
+  // What was read for another report is never shown for this one.
+  return read.key === key
+    ? { markdown: read.markdown, error: read.error }
+    : { markdown: undefined, error: undefined };
+}

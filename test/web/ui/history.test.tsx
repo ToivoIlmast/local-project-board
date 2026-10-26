@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { contentHash } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
-import { aCheck, aTask } from '../support/fixtures';
+import { aCheck, aResearch, aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
 
 /**
@@ -449,7 +449,7 @@ describe('the checks and their reports', () => {
     const rendered = await renderBoard(current());
     await openTask(rendered);
 
-    const checks = await within(panel()).findByRole('region', { name: 'Checks' });
+    const checks = await within(panel()).findByRole('region', { name: 'AI research' });
     const item = await within(checks).findByRole('listitem');
     expect(item).toHaveTextContent('T1-C1');
     expect(item).toHaveTextContent('Reported · Partly outdated · v2');
@@ -481,7 +481,7 @@ describe('the checks and their reports', () => {
     const { user } = rendered;
     await openTask(rendered);
 
-    const checks = await within(panel()).findByRole('region', { name: 'Checks' });
+    const checks = await within(panel()).findByRole('region', { name: 'AI research' });
     expect(await within(checks).findByText('Stale')).toBeInTheDocument();
     await user.click(within(checks).getByRole('button', { name: 'Open T1-C1' }));
 
@@ -584,7 +584,10 @@ describe('the checks and their reports', () => {
     expect(await within(dialog()).findByText('Accepted')).toBeInTheDocument();
 
     await user.click(within(dialog()).getByRole('button', { name: 'Reject r1' }));
+    await user.click(within(dialog()).getByRole('button', { name: 'Confirm rejecting r1' }));
     await waitFor(() => expect(board.checks.get('T1')?.[0]?.decisions).toHaveLength(2));
+    // No reason given: none is sent.
+    expect(board.checks.get('T1')?.[0]?.decisions[1]).not.toHaveProperty('note');
     expect(within(dialog()).getByText('Rejected')).toBeInTheDocument();
     expect(board.tasks[0]).toEqual(before);
     expect(board.calls).not.toContain('updateTask');
@@ -815,5 +818,305 @@ describe('the checks and their reports', () => {
     board.emit({ type: 'check.updated', taskId: 'T1', number: 1 });
 
     expect(await within(dialog()).findByText('Rejected')).toBeInTheDocument();
+  });
+});
+
+describe('AI research (T58)', () => {
+  const MARKDOWN_1 = '# Research one\n\nThe **adapter** moved.\n\n<script>alert(1)</script>\n';
+  const MARKDOWN_2 = '# Research two\n\nNothing else moved.\n';
+  const atV2 = (check: ReturnType<typeof aResearch>) => {
+    check.begin.version = 2;
+    if (check.report) check.report.version = 2;
+    return check;
+  };
+  const researched = (checks = [atV2(aResearch())]) => ({
+    tasks: [aTaskWithHistory()],
+    versions: twoVersions,
+    checks: { T1: checks },
+    researchMarkdown: { 'T1/1': MARKDOWN_1, 'T1/2': MARKDOWN_2 },
+  });
+  const section = () => within(panel()).findByRole('region', { name: 'AI research' });
+  const research = () => screen.getByRole('dialog', { name: 'New research on T1' });
+
+  async function openNewResearch(rendered: Awaited<ReturnType<typeof renderBoard>>) {
+    await openTask(rendered);
+    await rendered.user.click(
+      within(await section()).getByRole('button', { name: 'New research…' }),
+    );
+    return screen.findByRole('dialog', { name: 'New research on T1' });
+  }
+
+  it('keeps Check actuality in the action row of the task (D10)', async () => {
+    const rendered = await renderBoard(researched());
+    await openTask(rendered);
+    expect(
+      within(panel().querySelector('.panel__actions') as HTMLElement).getByRole('button', {
+        name: 'Check actuality',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(await section()).queryByRole('button', { name: 'Check actuality' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sends {agent, kind: research, model, comment}, with no session to choose (INVARIANT)', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openNewResearch(rendered);
+
+    expect(within(research()).queryByLabelText('Session')).not.toBeInTheDocument();
+    expect(within(research()).getByText(/told not to change anything/)).toBeInTheDocument();
+    await user.type(within(research()).getByLabelText('Focus (optional)'), 'Only the adapter.');
+    await user.selectOptions(within(research()).getByLabelText('Model'), 'opus');
+    await user.click(within(research()).getByRole('button', { name: 'Start research' }));
+
+    await waitFor(() => expect(board.runs).toHaveLength(1));
+    expect(board.runs[0]).toEqual({
+      taskId: 'T1',
+      agent: 'claude-code',
+      kind: 'research',
+      model: 'opus',
+      comment: 'Only the adapter.',
+    });
+    expect(
+      await within(panel()).findByText('A research of T1 was handed to Claude Code.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not send an empty or blank focus, nor a model left at the default', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openNewResearch(rendered);
+
+    await user.type(within(research()).getByLabelText('Focus (optional)'), '   ');
+    await user.click(within(research()).getByRole('button', { name: 'Start research' }));
+
+    await waitFor(() => expect(board.runs).toHaveLength(1));
+    expect(board.runs[0]).toEqual({ taskId: 'T1', agent: 'claude-code', kind: 'research' });
+  });
+
+  it('shows the research only once the board has it: nothing is added on the answer (INVARIANT)', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openNewResearch(rendered);
+    await user.click(within(research()).getByRole('button', { name: 'Start research' }));
+    await within(panel()).findByText('A research of T1 was handed to Claude Code.');
+
+    const list = await section();
+    expect(within(list).queryByRole('listitem')).not.toBeInTheDocument();
+
+    // The runner begins it: the board has it, and says so.
+    const begun = aResearch({ state: 'working' }, 'T1', 1, 'Only the adapter.');
+    delete begun.report;
+    board.checks.set('T1', [begun]);
+    board.emit({ type: 'check.updated', taskId: 'T1', number: 1 });
+
+    const item = await within(list).findByRole('listitem');
+    expect(item).toHaveTextContent('Research');
+    expect(item).toHaveTextContent('Working');
+  });
+
+  it('says what the board said, in words, when no runner waits, and keeps the dialog', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openNewResearch(rendered);
+    board.fail(
+      'runTask',
+      new ApiError(409, 'NO_AGENT_RUNNER', 'Nothing is waiting to start Claude Code.'),
+    );
+    await user.type(within(research()).getByLabelText('Focus (optional)'), 'Keep me.');
+    await user.click(within(research()).getByRole('button', { name: 'Start research' }));
+
+    expect(await within(research()).findByRole('alert')).toHaveTextContent('Nothing is waiting');
+    expect(within(research()).getByLabelText('Focus (optional)')).toHaveValue('Keep me.');
+    expect(board.runs).toHaveLength(0);
+  });
+
+  it('starts no implementation: neither a run of the task nor a check (INVARIANT)', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openNewResearch(rendered);
+    await user.click(within(research()).getByRole('button', { name: 'Start research' }));
+    await waitFor(() => expect(board.runs).toHaveLength(1));
+    expect(board.runs.every((run) => run.kind === 'research')).toBe(true);
+    expect(board.calls).not.toContain('updateTask');
+  });
+
+  it('is used from the keyboard: opens on Enter, focuses the focus field, closes on Escape', async () => {
+    const rendered = await renderBoard(researched([]));
+    const { user, board } = rendered;
+    await openTask(rendered);
+    within(await section())
+      .getByRole('button', { name: 'New research…' })
+      .focus();
+    await user.keyboard('{Enter}');
+    const opened = await screen.findByRole('dialog', { name: 'New research on T1' });
+    expect(within(opened).getByLabelText('Focus (optional)')).toHaveFocus();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(board.runs).toHaveLength(0);
+  });
+
+  it('lists each research newest first with kind, focus, state, version, badges and counts', async () => {
+    const first = atV2(
+      aResearch({
+        decisions: [
+          {
+            taskId: 'T1',
+            check: 1,
+            number: 1,
+            recommendation: 'r1',
+            decision: 'accepted',
+            createdAt: '2026-10-17T10:06:00.000Z',
+          },
+        ],
+      }),
+    );
+    const second = atV2(aCheck({}, 'T1', 2));
+    const rendered = await renderBoard(researched([first, second]));
+    await openTask(rendered);
+
+    const items = await within(await section()).findAllByRole('listitem');
+    expect(items.map((item) => item.querySelector('.history__number')?.textContent)).toEqual([
+      'T1-C2',
+      'T1-C1',
+    ]);
+    expect(items[0]).toHaveTextContent('Actuality check · Reported · Partly outdated · v2');
+    expect(items[1]).toHaveTextContent('Research · Reported · v2');
+    expect(items[1]).toHaveTextContent('Look at the git adapter only.');
+    expect(items[1]).toHaveTextContent('1 accepted · 0 rejected · 2 undecided');
+    // No verdict for a research (D9); superseded by the later report.
+    expect(items[1]).not.toHaveTextContent(/Partly outdated|Current ·/);
+    expect(within(items[1]!).getByText('Superseded')).toBeInTheDocument();
+    expect(within(items[0]!).queryByText('Superseded')).not.toBeInTheDocument();
+  });
+
+  it('opens each report as its own: the focus, the markdown without raw HTML, the targets (INVARIANT)', async () => {
+    const second = atV2(aResearch({}, 'T1', 2, 'Second focus.'));
+    if (second.report) second.report.summary = 'Second summary.';
+    const rendered = await renderBoard(researched([atV2(aResearch()), second]));
+    const { user } = rendered;
+    await openTask(rendered);
+
+    await user.click(await within(panel()).findByRole('button', { name: 'Open T1-C2' }));
+    let report = within(screen.getByRole('dialog', { name: 'Research T1-C2' }));
+    expect(await report.findByRole('heading', { name: 'Research two' })).toBeInTheDocument();
+    expect(report.getByRole('region', { name: 'Focus' })).toHaveTextContent('Second focus.');
+    await user.click(report.getAllByRole('button', { name: 'Close' }).at(-1)!);
+
+    await user.click(within(panel()).getByRole('button', { name: 'Open T1-C1' }));
+    report = within(screen.getByRole('dialog', { name: 'Research T1-C1' }));
+    expect(await report.findByRole('heading', { name: 'Research one' })).toBeInTheDocument();
+    expect(report.queryByText('Research two')).not.toBeInTheDocument();
+    expect(report.getByRole('region', { name: 'Focus' })).toHaveTextContent(
+      'Look at the git adapter only.',
+    );
+    expect(report.getByText('The adapter was moved')).toBeInTheDocument();
+    expect(document.querySelector('script')).toBeNull();
+    // A later research reported: a note, which blocks nothing (D6).
+    expect(report.getByText(/A later check or research has reported/)).toBeInTheDocument();
+
+    const recommendations = within(report.getByRole('region', { name: 'Recommendations' }));
+    expect(recommendations.getByText(/document plan\.md/)).toBeInTheDocument();
+    expect(recommendations.getByText(/file src\/server\/git\/reader\.ts/)).toBeInTheDocument();
+    expect(recommendations.getAllByText('Not applicable here')).toHaveLength(2);
+    expect(recommendations.getAllByText('Superseded')).toHaveLength(3);
+  });
+
+  it('puts the sections in the order Focus, Summary, Recommendations, Report, Findings', async () => {
+    const rendered = await renderBoard(researched());
+    const { user } = rendered;
+    await openTask(rendered);
+    await user.click(await within(panel()).findByRole('button', { name: 'Open T1-C1' }));
+    const report = screen.getByRole('dialog', { name: 'Research T1-C1' });
+    await within(report).findByRole('heading', { name: 'Research one' });
+
+    const names = within(report)
+      .getAllByRole('region')
+      .map((region) => region.getAttribute('aria-label'));
+    expect(names).toEqual(['Focus', 'Summary', 'Recommendations', 'Report', 'Findings']);
+    // The report is folded until asked for.
+    expect(report.querySelector('details')).not.toHaveAttribute('open');
+  });
+
+  it('sends the reason of a rejection as its note (INVARIANT)', async () => {
+    const rendered = await renderBoard(researched());
+    const { user, board } = rendered;
+    await openTask(rendered);
+    await user.click(await within(panel()).findByRole('button', { name: 'Open T1-C1' }));
+    const report = within(screen.getByRole('dialog', { name: 'Research T1-C1' }));
+
+    await user.click(await report.findByRole('button', { name: 'Reject r2' }));
+    const reason = report.getByLabelText('Why reject r2? (optional)');
+    expect(reason).toHaveFocus();
+    await user.type(reason, 'The plan is not ours.');
+    await user.click(report.getByRole('button', { name: 'Confirm rejecting r2' }));
+
+    await waitFor(() => expect(board.checks.get('T1')?.[0]?.decisions).toHaveLength(1));
+    expect(board.checks.get('T1')?.[0]?.decisions[0]).toMatchObject({
+      recommendation: 'r2',
+      decision: 'rejected',
+      note: 'The plan is not ours.',
+    });
+    expect(await report.findByText(/The plan is not ours\./)).toBeInTheDocument();
+  });
+
+  it('keeps Apply from a stale research and offers a new research or a manual reconciliation (INVARIANT)', async () => {
+    const accepted = atV2(
+      aResearch({
+        decisions: [
+          {
+            taskId: 'T1',
+            check: 1,
+            number: 1,
+            recommendation: 'r1',
+            decision: 'accepted',
+            createdAt: '2026-10-17T10:06:00.000Z',
+          },
+        ],
+      }),
+    );
+    const rendered = await renderBoard({
+      ...researched([accepted]),
+      tasks: [aTaskWithHistory({ body: 'Edited in an editor.\n' })],
+    });
+    const { user } = rendered;
+    await openTask(rendered);
+    await user.click(await within(panel()).findByRole('button', { name: 'Open T1-C1' }));
+    const report = within(screen.getByRole('dialog', { name: 'Research T1-C1' }));
+
+    expect(await report.findByText(/This report is for v2/)).toBeInTheDocument();
+    expect(report.queryByRole('button', { name: 'Apply accepted' })).not.toBeInTheDocument();
+    expect(report.getByRole('button', { name: 'Reconcile by hand' })).toBeEnabled();
+    await user.click(report.getByRole('button', { name: 'New research…' }));
+    expect(await screen.findByRole('dialog', { name: 'New research on T1' })).toBeInTheDocument();
+  });
+
+  it('applies only what is aimed at the task: a document target is not put in the draft', async () => {
+    const all = atV2(
+      aResearch({
+        decisions: ['r1', 'r2'].map((recommendation, index) => ({
+          taskId: 'T1',
+          check: 1,
+          number: index + 1,
+          recommendation,
+          decision: 'accepted' as const,
+          createdAt: '2026-10-17T10:06:00.000Z',
+        })),
+      }),
+    );
+    // r2 carries an edit, but it is aimed at a document: not applicable here (D4).
+    all.report!.recommendations[1]!.edit = { field: 'title', value: 'Not for the task' };
+    const rendered = await renderBoard(researched([all]));
+    const { user } = rendered;
+    await openTask(rendered);
+    await user.click(await within(panel()).findByRole('button', { name: 'Open T1-C1' }));
+    await user.click(await within(dialog()).findByRole('button', { name: 'Apply accepted' }));
+
+    expect(await within(dialog()).findByLabelText('Title')).toHaveValue('Extract the git adapter');
+    expect(within(dialog()).getByLabelText('Description')).toHaveValue(
+      'See `src/server/git/reader.ts` for the parser.\n',
+    );
   });
 });

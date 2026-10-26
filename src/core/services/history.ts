@@ -1,13 +1,11 @@
 import { BoardError } from '../errors.js';
 import type {
   Check,
-  CheckReport,
   CheckKind,
   CheckReportContent,
   CheckSummary,
   CheckVerdict,
   Decision,
-  DecisionCounts,
   RepoState,
   ResearchReportContent,
   TaskVersion,
@@ -19,11 +17,10 @@ import {
   changedFields,
   contentHash,
   contentOf,
-  latestDecisions,
   reportKindProblems,
   reportProblems,
   sameContent,
-  summarizeComment,
+  summarizeCheck,
 } from '../rules/history.js';
 import { assertContentHash, latestVersion, syncHistory } from './taskHistory.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
@@ -140,31 +137,6 @@ export function createHistoryService({
     }
   };
 
-  const summary = (check: Check): CheckSummary => ({
-    taskId: check.begin.taskId,
-    number: check.begin.number,
-    state: check.state,
-    version: check.begin.version,
-    createdAt: check.begin.createdAt,
-    agent: check.report?.agent ?? check.begin.agent,
-    ...(check.begin.kind === undefined ? {} : { kind: check.begin.kind }),
-    ...(check.begin.comment === undefined
-      ? {}
-      : { comment: summarizeComment(check.begin.comment) }),
-    ...(check.report?.verdict === undefined ? {} : { verdict: check.report.verdict }),
-    ...(check.report === undefined ? {} : { decisions: decisionCounts(check.report, check) }),
-    ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),
-  });
-
-  /** How the recommendations of a report stand: by their latest decision (ADR-0030 §2). */
-  function decisionCounts(report: CheckReport, check: Check): DecisionCounts {
-    const latest = latestDecisions(check.decisions);
-    const counts = { accepted: 0, rejected: 0, undecided: 0 };
-    for (const { id } of report.recommendations)
-      counts[latest.get(id)?.decision ?? 'undecided'] += 1;
-    return counts;
-  }
-
   return {
     async versions(taskId) {
       const task = await requireTask(taskId);
@@ -231,7 +203,9 @@ export function createHistoryService({
 
     async checks(taskId) {
       await requireTask(taskId);
-      return (await storage.listChecks(taskId)).map(summary).sort((a, b) => a.number - b.number);
+      return (await storage.listChecks(taskId))
+        .map(summarizeCheck)
+        .sort((a, b) => a.number - b.number);
     },
 
     check: requireCheck,

@@ -53,6 +53,7 @@ export {
 } from '../../core/model/index.js';
 export {
   CHECK_VERDICTS,
+  COMMENT_MAX_LENGTH,
   CONTENT_FIELDS,
   DECISIONS,
   EVIDENCE_KINDS,
@@ -79,6 +80,7 @@ export type {
   Check,
   CheckBegin,
   CheckEnd,
+  CheckKind,
   CheckReport,
   CheckReportContent,
   CheckState,
@@ -86,6 +88,7 @@ export type {
   CheckVerdict,
   ContentField,
   Decision,
+  DecisionCounts,
   DocumentMeta,
   EffectiveWorkflow,
   GitBranch,
@@ -99,6 +102,7 @@ export type {
   Project,
   Recommendation,
   RecommendationEdit,
+  RecommendationTarget,
   RepoState,
   Report,
   Task,
