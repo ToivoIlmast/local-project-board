@@ -1,4 +1,4 @@
-<!-- Based on README.md @ ed0e52cff6cd1d0af46fb2e6de1302b3acc09460 -->
+<!-- Based on README.md @ 4e79cf2eb779cfaaa9238a25416ad326e2a95fe9 -->
 
 # local-project-board
 
@@ -176,6 +176,36 @@ spara rapporter. Projektet stöder också AI-assisterad uppgiftskörning via Cla
 
 Den fullständiga ruttreferensen — varje rutt, även de som den här texten utelämnar, varje felkod och
 mediatyp — är [docs/api.md](docs/api.md), genererad från samma rutttabell.
+
+## AI-arbetsflöde
+
+Hur en agent arbetar med en uppgift ställs in på tre nivåer; en senare nivå vinner, inställning för
+inställning:
+
+1. **Tavla** — alla inställningar.
+2. **Kolumn** (status) — bara de sex av/på-inställningarna.
+3. **Uppgift** — de sex av/på-inställningarna och rapportspråket.
+
+Av/på-inställningarna och deras standardvärden: ändra filer (`editCode`) på, arbeta i en gren på,
+köra kontrollerna på, commit på, push av, skriva en rapport på. Bara tavlan ställer dessutom in
+statusen som en uppgift flyttas till när arbetet börjar (`in-progress` om tavlan har den) och när
+det slutar (`done` om tavlan har den; annars ingen), basgrenen och kontrollkommandot (båda
+oinställda som standard) samt språket för commit-meddelanden (oinställt). Rapportspråket är
+engelska om inget annat ställs in.
+
+Bara det du ändrar lagras: tavlans och kolumnernas i `.board/workflow.yaml`, en uppgifts i fältet
+`workflow:` i dess `task.md`. Standardvärdena skrivs aldrig. Medan ändra filer är av gäller inte
+gren, kontroller, commit och push; de behåller sina värden och handoff säger det.
+`GET /api/v1/workflow` svarar med tavlans och kolumnernas inställningar tillsammans med
+standardvärdena, och `GET /api/v1/tasks/<ID>/workflow` med en uppgifts inställningar och källan
+till varje värde.
+
+För att skicka en uppgift till en agent använder du **Send to AI** i uppgiften eller i menyn på
+dess kort: **Copy handoff** kopierar uppgiften, dess dokument och de steg inställningarna kräver
+(samma text som `npx local-project-board handoff <ID>`), och **Claude Code** startar en session på
+den; se [Claude Code](#claude-code). Begränsningar: stegen är instruktioner till agenten, inget
+tavlan tvingar fram, och en agent mergar aldrig och skriver aldrig token i en fil. Skälen finns i
+[ADR-0028](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
 
 ## Claude Code
 

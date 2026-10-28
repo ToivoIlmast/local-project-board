@@ -1,4 +1,4 @@
-<!-- Based on README.md @ ed0e52cff6cd1d0af46fb2e6de1302b3acc09460 -->
+<!-- Based on README.md @ 4e79cf2eb779cfaaa9238a25416ad326e2a95fe9 -->
 
 # local-project-board
 
@@ -182,6 +182,36 @@ tehtävien suorittamista Claude Coden kautta ([Claude Code](#claude-code)).
 
 Täydellinen reittiviite — jokainen reitti, myös ne, jotka tämä teksti jättää pois, sekä jokainen
 virhekoodi ja mediatyyppi — on [docs/api.md](docs/api.md), joka luodaan samasta reittitaulusta.
+
+## Tekoälyn työnkulku
+
+Se, miten agentti työskentelee tehtävän parissa, asetetaan kolmella tasolla; myöhempi taso voittaa
+asetus kerrallaan:
+
+1. **Taulu** — kaikki asetukset.
+2. **Sarake** (tila) — vain kuusi päälle/pois-asetusta.
+3. **Tehtävä** — kuusi päälle/pois-asetusta ja raportin kieli.
+
+Päälle/pois-asetukset ja niiden oletukset: tiedostojen muuttaminen (`editCode`) päällä, työ
+haarassa päällä, tarkistusten ajo päällä, commit päällä, push pois, raportin kirjoittaminen päällä.
+Vain taulu asettaa lisäksi tilan, johon tehtävä siirretään työn alkaessa (`in-progress`, jos
+taulussa on se) ja päättyessä (`done`, jos taulussa on se; muuten ei mitään), perushaaran ja
+tarkistuskomennon (oletuksena molemmat asettamatta) sekä commit-viestien kielen (asettamatta).
+Raportin kieli on englanti, ellei toisin aseteta.
+
+Vain muuttamasi tallennetaan: taulun ja sarakkeiden asetukset tiedostoon `.board/workflow.yaml`,
+tehtävän asetukset sen `task.md`-tiedoston `workflow:`-kenttään. Oletuksia ei koskaan kirjoiteta.
+Kun tiedostojen muuttaminen on pois, haara, tarkistukset, commit ja push eivät päde; ne säilyttävät
+arvonsa ja handoff kertoo tämän. `GET /api/v1/workflow` vastaa taulun ja sarakkeiden asetuksilla
+oletusten kanssa ja `GET /api/v1/tasks/<ID>/workflow` yhden tehtävän asetuksilla ja kunkin arvon
+lähteellä.
+
+Tehtävän lähetät agentille kohdalla **Send to AI** tehtävässä tai sen kortin valikossa: **Copy
+handoff** kopioi tehtävän, sen dokumentit ja asetusten vaatimat vaiheet (sama teksti kuin
+`npx local-project-board handoff <ID>`), ja **Claude Code** käynnistää istunnon sillä; katso
+[Claude Code](#claude-code). Rajoitukset: vaiheet ovat ohjeita agentille, joita taulu ei valvo, ja
+agentti ei koskaan yhdistä (merge) eikä kirjoita tunnusta tiedostoon. Perustelut ovat
+[ADR-0028:ssa](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
 
 ## Claude Code
 
