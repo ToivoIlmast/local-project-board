@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createBoardClient, type BoardClient } from './client';
-import { subscribeToBoard } from './events';
+import { subscribeToSharedBoard } from './sharedEvents';
 import { createBoardStore, type BoardState, type BoardStore } from './store';
 
 /**
@@ -34,7 +34,8 @@ export function BoardProvider({ client, connect, children }: BoardProviderProps)
   useEffect(() => {
     void value.store.load();
     if (connect) return connect(value.store);
-    return subscribeToBoard({
+    // One stream for all the tabs of this browser, not one per tab (ADR-0031).
+    return subscribeToSharedBoard({
       url: value.client.eventsUrl(),
       onEvent: (event) => void value.store.handleEvent(event),
       onStatus: (status) => value.store.setConnection(status),

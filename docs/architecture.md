@@ -125,6 +125,12 @@ contract imports only `core` and itself.
 own public API. The page mirrors the board and does not update optimistically (ADR-0025).
 See ADR-0013 for the layering.
 
+All the tabs of a browser share one event stream: a SharedWorker (`api/events.worker.ts`,
+logic in `api/eventHub.ts`) holds it and relays it to every tab (`api/sharedEvents.ts`), and
+tells every tab to read the board again when it comes back after a break. A browser keeps six
+connections per host:port for all its tabs, so a stream per tab starved the seventh. Every
+request of `BoardClient` has a deadline and takes the caller's `AbortSignal` (ADR-0031).
+
 ## Where the boundaries are, and how they are checked
 
 The boundaries are the `elements` and `dependencyPolicies` in

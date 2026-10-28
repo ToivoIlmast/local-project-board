@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src/web', import.meta.url)) },
   },
+  // The board's event stream lives in a SharedWorker (ADR-0031), built as a module of its own.
+  worker: { format: 'es' },
   build: {
     outDir: fileURLToPath(new URL('./dist/web', import.meta.url)),
     emptyOutDir: true,
