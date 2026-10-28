@@ -405,6 +405,34 @@ test('the handoff is copied from the menu of a card, and is the one the board se
   await expect(page.getByRole('complementary')).toHaveCount(0);
 });
 
+test('a task in a column with “Edit code” off is handed over with the step not to change any file', async ({
+  page,
+  board,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await board.api('/api/v1/workflow', {
+    method: 'PUT',
+    body: { board: {}, statuses: { backlog: { editCode: false } } },
+  });
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Plan it', status: 'backlog' },
+  });
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Actions for T1' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Send to AI: Copy handoff' }).focus();
+  await page.keyboard.press('Enter');
+
+  const card = page.getByRole('button', { name: 'Plan it' }).locator('xpath=ancestor::li');
+  await expect(card.getByText('Handoff copied to the clipboard.')).toBeVisible();
+  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  expect(copied).toContain('Do not change any file of the project');
+  expect(copied).toContain('_(source: column "backlog")_');
+});
+
 test('Send to AI → Claude Code: the click starts a session of that task in the runner, and its result comes back to the page (T27)', async ({
   page,
   board,
