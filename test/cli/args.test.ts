@@ -1,4 +1,4 @@
-import { parseCliArgs, UsageError } from '../../src/server/cli/args.js';
+import { parseCliArgs, USAGE, UsageError } from '../../src/server/cli/args.js';
 
 describe('the command line', () => {
   it('starts the board when it is given nothing', () => {
@@ -127,6 +127,11 @@ describe('the command line', () => {
   it('answers --help with the usage, not with an error', () => {
     expect(parseCliArgs(['--help'])).toEqual({ command: 'help' });
     expect(parseCliArgs(['-h'])).toEqual({ command: 'help' });
+  });
+
+  it('answers --version with the version command, and the usage mentions it', () => {
+    expect(parseCliArgs(['--version'])).toEqual({ command: 'version' });
+    expect(USAGE).toContain('--version');
   });
 
   it('refuses a command it does not have', () => {

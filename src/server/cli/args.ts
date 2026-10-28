@@ -1,7 +1,8 @@
 import { parseArgs } from 'node:util';
 import { researchCommentSchema } from '../../contract/v1/index.js';
 
-export type Command = 'serve' | 'instructions' | 'handoff' | 'claude' | 'export' | 'help';
+export type Command =
+  'serve' | 'instructions' | 'handoff' | 'claude' | 'export' | 'help' | 'version';
 
 export interface ParsedArgs {
   command: Command;
@@ -53,6 +54,7 @@ export const USAGE = [
   '  --port <number>        port to listen on (default 7432, or the next free one)',
   '  --no-open              do not open a browser',
   '  --out <file>           write the snapshot to a file (export only)',
+  '      --version          print the version',
   '  -h, --help             show this text',
 ].join('\n');
 
@@ -86,6 +88,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         comment: { type: 'string' },
         'confirm-stopped': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean' },
       },
     });
   } catch (error) {
@@ -96,6 +99,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
 
   const { values, positionals } = parsed;
   if (values.help === true) return { command: 'help' };
+  if (values.version === true) return { command: 'version' };
 
   const [name, ...rest] = positionals;
   const command: Command = name === undefined ? 'serve' : asCommand(name);

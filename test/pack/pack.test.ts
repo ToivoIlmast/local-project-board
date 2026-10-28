@@ -262,6 +262,14 @@ describe('npm package', () => {
       expect(existsSync(runtimeFile)).toBe(false);
       await expect(fetch(`${base}/api/v1/project`)).rejects.toThrow();
 
+      // The installed bin reports the version of this repository's package.json, and nothing
+      // else: one line, no error, and no board started.
+      const versioned = run(bin, ['--version'], project);
+      expect(versioned.status).toBe(0);
+      expect(versioned.stdout).toBe(`${version}\n`);
+      expect(versioned.stderr).toBe('');
+      expect(existsSync(runtimeFile)).toBe(false);
+
       // And now that nothing is running, the CLI still answers, without a token.
       const offline = run(bin, ['instructions'], project);
       expect(offline.status).toBe(0);
