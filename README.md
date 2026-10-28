@@ -34,7 +34,7 @@ in your browser. No sign-up, no account, no database, no network beyond your own
 | `npx local-project-board export`                 | Print a snapshot of the board (`--out <file>` to save it) |
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
-`--no-open` (do not open a browser), `--help`.
+`--no-open` (do not open a browser), `--version` (print the version and exit), `--help`.
 
 ## In the browser
 
