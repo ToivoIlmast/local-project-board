@@ -177,6 +177,33 @@ documents and store reports. The project also supports AI-assisted task executio
 The full route reference — every route, including the ones this text leaves out, every error code
 and media type — is [docs/api.md](docs/api.md), generated from the same route table.
 
+## AI workflow
+
+How an agent works on a task is set at three levels; a later level wins, setting by setting:
+
+1. **Board** — every setting.
+2. **Column** (status) — the six on/off settings only.
+3. **Task** — the six on/off settings and the report language.
+
+The on/off settings and their defaults: change files (`editCode`) on, work in a branch on, run the
+checks on, commit on, push off, write a report on. The board alone also sets the status a task is
+moved to when work starts (`in-progress` if the board has it) and when it ends (`done` if the
+board has it; otherwise none), the base branch and the check command (both unset by default), and
+the language of commit messages (unset). The report language is English unless set.
+
+Only what you change is stored: the board's and the columns' in `.board/workflow.yaml`, a task's in
+the `workflow:` field of its `task.md`. The defaults are never written. While change files is off,
+branch, checks, commit and push do not apply; they keep their values and the handoff says so.
+`GET /api/v1/workflow` answers the board's and columns' settings with the defaults, and
+`GET /api/v1/tasks/<ID>/workflow` the settings of one task with the source of each.
+
+To send a task to an agent, use **Send to AI** in the task or in the menu of its card: **Copy
+handoff** copies the task, its documents and the steps its settings call for (the same text as
+`npx local-project-board handoff <ID>`), and **Claude Code** starts a session on it; see
+[Claude Code](#claude-code). Limits: the steps are instructions to the agent, not something the
+board enforces, and an agent never merges and never writes the token into a file. The reasons are in
+[ADR-0028](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
+
 ## Claude Code
 
 Start a runner once, in a terminal in the project, next to the running board:

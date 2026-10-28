@@ -28,6 +28,9 @@ names, AI rules, workflow settings, the history of a task) and the services (`se
 implement the use cases on top of the ports. `contract/v1` holds the zod route table, the request and response schemas,
 and what is generated from them: [api.md](api.md) and the AI instructions (ADR-0005, ADR-0012).
 
+The AI workflow settings (three levels, overrides only) are decided in
+[ADR-0028](adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
+
 ## The server
 
 | Directory                                 | Role                                                                                             |
