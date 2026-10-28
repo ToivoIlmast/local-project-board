@@ -32,3 +32,4 @@
 | 0028 | [AI workflow settings: three levels, overrides only](0028-ai-workflow-settings-three-levels-overrides-only.md)                                   | proposed           |
 | 0029 | [Claude Code is started by the CLI in the user's terminal, never by the server](0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md) | accepted; Research amendment (T54) proposed |
 | 0030 | [Task history: content versions and actuality checks, append-only](0030-task-history-versions-and-checks-are-append-only.md)                     | accepted; Research amendment (T54) proposed |
+| 0031 | [One event stream per browser, held by a SharedWorker](0031-one-event-stream-per-browser-in-a-shared-worker.md) | accepted |

@@ -29,8 +29,10 @@ export interface SubscribeOptions {
 }
 
 /**
- * The board's live updates. The stream is the only realtime channel there is; the browser
- * reconnects by itself, and this only has to notice that it did.
+ * The board's live updates over a stream of this tab's own. The stream is the only realtime
+ * channel there is; the browser reconnects by itself, and this only has to notice that it did.
+ * The page shares one stream between its tabs (`subscribeToSharedBoard`, ADR-0031); this is what
+ * it falls back to where it cannot.
  */
 export function subscribeToBoard(options: SubscribeOptions): () => void {
   const create = options.create ?? ((url: string) => new EventSource(url) as EventSourceLike);
@@ -64,7 +66,8 @@ export function subscribeToBoard(options: SubscribeOptions): () => void {
   };
 }
 
-function parseEvent(data: string): BoardEvent | undefined {
+/** One frame as a board event, or nothing when it is not one the contract describes. */
+export function parseEvent(data: string): BoardEvent | undefined {
   let json: unknown;
   try {
     json = JSON.parse(data);

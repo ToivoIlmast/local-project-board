@@ -1,5 +1,11 @@
+import { jest } from '@jest/globals';
 import { routes } from '../../../src/contract/v1/index';
-import { ApiError, createBoardClient } from '../../../src/web/api/index';
+import {
+  ApiError,
+  createBoardClient,
+  DEFAULT_TIMEOUT_MS,
+  type FetchLike,
+} from '../../../src/web/api/index';
 import { errorBody, fakeFetch, type Reply } from '../support/fetch';
 import {
   aDocument,
@@ -391,5 +397,133 @@ describe('starting an agent on a task (T27)', () => {
       code: 'NO_AGENT_RUNNER',
       message: 'Nothing is waiting to start Claude Code.',
     });
+  });
+});
+
+describe('a request that does not come back (T62)', () => {
+  /** A transport that never answers, as a request queued behind busy connections never does. */
+  function hanging() {
+    const signals: (AbortSignal | undefined)[] = [];
+    const fetch: FetchLike = (_url, init) => {
+      signals.push(init?.signal);
+      return new Promise(() => undefined);
+    };
+    return { fetch, signals };
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  it('fails with TIMEOUT once its time is up, and aborts the transport', async () => {
+    jest.useFakeTimers();
+    const transport = hanging();
+    const client = createBoardClient({ baseUrl: BASE, fetch: transport.fetch, timeoutMs: 5_000 });
+
+    const failed = client.listTasks().catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(5_000);
+    const error = (await failed) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 0, code: 'TIMEOUT', details: { timeoutMs: 5_000 } });
+    expect(error.message).toContain('GET /tasks');
+    expect(transport.signals[0]?.aborted).toBe(true);
+  });
+
+  it('has a deadline even when the caller gives none', async () => {
+    jest.useFakeTimers();
+    const client = createBoardClient({ baseUrl: BASE, fetch: hanging().fetch });
+
+    const failed = client.project().catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(DEFAULT_TIMEOUT_MS - 1);
+    let settled = false;
+    void failed.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(1);
+    expect(await failed).toMatchObject({ code: 'TIMEOUT' });
+  });
+
+  it('takes a deadline of one call over the client’s', async () => {
+    jest.useFakeTimers();
+    const client = createBoardClient({ baseUrl: BASE, fetch: hanging().fetch, timeoutMs: 60_000 });
+
+    const failed = client.gitStatus({ timeoutMs: 100 }).catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(100);
+
+    expect(await failed).toMatchObject({ code: 'TIMEOUT', details: { timeoutMs: 100 } });
+  });
+
+  it('is cancelled by the caller’s own signal, with ABORTED and not TIMEOUT', async () => {
+    jest.useFakeTimers();
+    const transport = hanging();
+    const client = createBoardClient({ baseUrl: BASE, fetch: transport.fetch });
+    const caller = new AbortController();
+
+    const failed = client.listDocuments('T1', { signal: caller.signal }).catch((e: unknown) => e);
+    await Promise.resolve();
+    caller.abort();
+    const error = (await failed) as ApiError;
+
+    expect(error).toMatchObject({ status: 0, code: 'ABORTED' });
+    expect(error.code).not.toBe('TIMEOUT');
+    expect(transport.signals[0]?.aborted).toBe(true);
+  });
+
+  it('is not sent at all when the caller has already cancelled it', async () => {
+    const transport = hanging();
+    const client = createBoardClient({ baseUrl: BASE, fetch: transport.fetch });
+    const caller = new AbortController();
+    caller.abort();
+
+    await expect(client.project({ signal: caller.signal })).rejects.toMatchObject({
+      code: 'ABORTED',
+    });
+    expect(transport.signals).toEqual([]);
+  });
+
+  it('cancels a change and the session read before it with the same signal', async () => {
+    jest.useFakeTimers();
+    const transport = hanging();
+    const client = createBoardClient({ baseUrl: BASE, fetch: transport.fetch });
+    const caller = new AbortController();
+
+    const failed = client
+      .updateTask('T1', { title: 'x' }, { signal: caller.signal })
+      .catch((e: unknown) => e);
+    await Promise.resolve();
+    caller.abort();
+
+    expect(await failed).toMatchObject({ code: 'ABORTED' });
+    // Only the session was asked for: the change itself was never sent.
+    expect(transport.signals).toHaveLength(1);
+  });
+
+  it('leaves no timer and no listener behind, whichever way it ends', async () => {
+    jest.useFakeTimers();
+    const { client } = board(() => ({ json: [aTask()] }));
+    const caller = new AbortController();
+    const added = jest.spyOn(caller.signal, 'addEventListener');
+    const removed = jest.spyOn(caller.signal, 'removeEventListener');
+
+    await client.listTasks({ signal: caller.signal });
+    expect(jest.getTimerCount()).toBe(0);
+
+    const hangingClient = createBoardClient({ baseUrl: BASE, fetch: hanging().fetch });
+    const timedOut = hangingClient.listTasks({ timeoutMs: 10 }).catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(10);
+    await timedOut;
+    expect(jest.getTimerCount()).toBe(0);
+
+    expect(added).toHaveBeenCalledTimes(1);
+    expect(removed).toHaveBeenCalledWith('abort', added.mock.calls[0]?.[1]);
+  });
+
+  it('still says the board is not answering when the transport fails before the deadline', async () => {
+    const client = createBoardClient({
+      baseUrl: BASE,
+      fetch: () => Promise.reject(new TypeError('Failed to fetch')),
+    });
+
+    await expect(client.project()).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
   });
 });

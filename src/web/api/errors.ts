@@ -1,8 +1,9 @@
 import { errorResponseSchema, type ErrorCode } from '../../contract/v1/index';
 import type { HttpResponse } from './http';
 
-/** Board error codes, plus the two failures that happen before a board error can exist. */
-export type ApiErrorCode = ErrorCode | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE';
+/** Board error codes, plus the failures that happen before a board error can exist. */
+export type ApiErrorCode =
+  ErrorCode | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'TIMEOUT' | 'ABORTED';
 
 /**
  * Everything the UI is allowed to know about a failed request. The message is the board's
@@ -57,4 +58,23 @@ export function networkError(): ApiError {
     'NETWORK_ERROR',
     'The board is not answering. It may have been stopped in the terminal it was started from.',
   );
+}
+
+/**
+ * No answer in time. A request the browser never sends — queued behind connections that are
+ * all taken — looks exactly like this, and must end in an error the page can show, not in a
+ * spinner that never stops (T62).
+ */
+export function timeoutError(what: string, ms: number): ApiError {
+  return new ApiError(
+    0,
+    'TIMEOUT',
+    `The board did not answer ${what} within ${Math.round(ms / 1000)} s. Try again.`,
+    { timeoutMs: ms },
+  );
+}
+
+/** The caller withdrew the request itself; nothing went wrong on the board's side. */
+export function abortedError(what: string): ApiError {
+  return new ApiError(0, 'ABORTED', `${what} was cancelled.`);
 }
