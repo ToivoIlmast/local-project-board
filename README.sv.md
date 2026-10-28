@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 5941654ed6c3736ab44f7b243863ecf8638d1c04 -->
+<!-- Based on README.md @ 1da0fe08a1c47400e161bbafa241c2d561d2a5bd -->
 
 # local-project-board
 
@@ -24,15 +24,16 @@ npx local-project-board
 Tavlan startar på `http://127.0.0.1:7432/` (nästa lediga port om den är upptagen) och öppnas i
 webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk utanför din egen dator.
 
-| Kommando                                        | Vad det gör                                                               |
-| ----------------------------------------------- | ------------------------------------------------------------------------- |
-| `npx local-project-board`                       | Startar tavlan                                                            |
-| `npx local-project-board instructions`          | Skriver ut API-instruktionerna att ge till en AI-agent                    |
-| `npx local-project-board claude <ID>`           | Startar Claude Code på en uppgift, i den här terminalen                   |
-| `npx local-project-board claude <ID> --check`   | Startar Claude Code på en kontroll av om uppgiften är aktuell             |
-| `npx local-project-board claude --wait`         | Startar Claude Code här på varje uppgift som skickas från tavlan          |
-| `npx local-project-board claude --recover <ID>` | Kontrollerar en körning vars väntare dog; markerar den förlorad vid bevis |
-| `npx local-project-board export`                | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)                   |
+| Kommando                                         | Vad det gör                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------- |
+| `npx local-project-board`                        | Startar tavlan                                                            |
+| `npx local-project-board instructions`           | Skriver ut API-instruktionerna att ge till en AI-agent                    |
+| `npx local-project-board claude <ID>`            | Startar Claude Code på en uppgift, i den här terminalen                   |
+| `npx local-project-board claude <ID> --check`    | Startar Claude Code på en kontroll av om uppgiften är aktuell             |
+| `npx local-project-board claude <ID> --research` | Startar Claude Code på en undersökning av hur uppgiften ska angripas      |
+| `npx local-project-board claude --wait`          | Startar Claude Code här på varje uppgift som skickas från tavlan          |
+| `npx local-project-board claude --recover <ID>`  | Kontrollerar en körning vars väntare dog; markerar den förlorad vid bevis |
+| `npx local-project-board export`                 | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)                   |
 
 Flaggor: `--port <nummer>` (porten du anger måste vara ledig, annars stannar tavlan med ett fel),
 `--no-open` (öppna ingen webbläsare), `--help`.
@@ -65,6 +66,23 @@ på.
   lämnat markeras som föråldrad och tillämpas inte åt dig. Kontrollen ändrar ingen fil och inget
   git-tillstånd; tavlan tvingar inte det, den visar repositoriet före och efter. Se
   [Claude Code](#claude-code).
+- **AI-undersökning.** Bredvid kontrollerna ber **Ny undersökning…** Claude Code (genom samma
+  väntare) att ta reda på hur uppgiften ska angripas: vad den begär, vad repositoriet redan har,
+  hur arbetet kan göras och vad som kan gå fel. Du kan ge den ett fokus och en modell.
+  Undersökningen läser den version av uppgiften som gällde när den började, och skriver en
+  Markdown-rapport med iakttagelser och rekommendationer som sparas en gång och aldrig skrivs om.
+  Den ger inget utlåtande och säger inte om uppgiften är redo att genomföras — det avgör du. Du
+  godkänner eller avvisar varje rekommendation, en avvisning med skäl om du vill. En som ändrar
+  titeln, etiketterna eller beskrivningen tillämpas genom redigeraren, som vid en kontroll; en som
+  gäller ett dokument eller en fil i projektet förs över för hand. Nästa undersökning av uppgiften
+  får se de tidigare med dina beslut och skäl, och uppmanas att inte föreslå det du avvisat igen
+  utan nya belägg. En undersökning startar aldrig arbetet och rör aldrig uppgiftens
+  **AI-körning**: arbetet är ett separat **Skicka till AI → Claude Code**, vars dialog nämner en
+  undersökning som fortfarande pågår eller har obeslutade rekommendationer, och startar ändå.
+  Undersökningen uppmanas att inte ändra något; tavlan visar om något ändrades: grenen, committen
+  och om arbetskatalogen var ren vid starten, vid rapporten och vid slutet, filerna som ändrades
+  under tiden, uppgiftens dokument som ändrats sedan dess, och ett repositorium som gått vidare
+  efter rapporten. Vem som ändrade, det säger tavlan inte. Se [Claude Code](#claude-code).
 - **Dokument.** Läs dem som Markdown, skriv och ändra dem på sidan, ta bort dem. Ett
   `.html`-dokument öppnas i en egen ram som servern isolerar.
 - **Rapporter.** Det en agent har sparat, HTML eller Markdown, öppnat lika säkert.
@@ -240,6 +258,16 @@ Bra att veta:
   grenen, committen och om arbetskatalogen var ren när kontrollen började och när den rapporterade.
   Dess slut sparas i `.board/runner/<ID>-check-<n>.json` tills tavlan tar emot det, skilt från
   körningarnas journaler.
+- **Ny undersökning…** i en uppgift startar samma väntare på en undersökning, och
+  `npx local-project-board claude <ID> --research --comment "<fokus>"` startar en direkt
+  (`--comment` är valfri, högst 4000 tecken). En undersökning är en kontroll av eget slag: den
+  numreras tillsammans med uppgiftens kontroller (`T13-C2`), har samma slags journal, nekas inte
+  medan en körning pågår och ändrar ingenting i uppgiften förrän du tillämpar en rekommendation.
+  Fokuset går till tavlan med starten av undersökningen och når Claude genom dess handoff, aldrig
+  genom kommandoraden. Dess rapport, dina beslut och slutet på dess session överlever en omstart
+  av tavlan. En undersökning vars session dog förblir **working**, hindrar inget och återställs
+  inte: starta en ny. En väntare av en tidigare version får aldrig en undersökning; sidan säger då
+  att den ska uppdateras.
 
 ## Principer
 

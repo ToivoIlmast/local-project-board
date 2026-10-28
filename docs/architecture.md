@@ -55,12 +55,14 @@ the board is only told the verdict (ADR-0029, amended by T45).
 ## The history of a task
 
 Every task has a history beside it (ADR-0030, T46): **versions** of its content (`title`, `body`
-and `labels`, nothing else) and **actuality checks**, an agent's comparison of the task with the
-repository. Both are append-only: a record is created once and never rewritten or removed, except
-together with the task.
+and `labels`, nothing else) and **checks** of two kinds, the **actuality check**, an agent's
+comparison of the task with the repository, and the **research** (ADR-0030 R1–R10), an agent's
+study of how to approach the task. All are append-only: a record is created once and never
+rewritten or removed, except together with the task.
 
 - **Where.** `.board/tasks/<id>/history/versions/<n>.json` and
-  `.board/tasks/<id>/history/checks/<n>.{begin,report,end}.json` with `<n>.decisions/<k>.json`.
+  `.board/tasks/<id>/history/checks/<n>.{begin,report,end}.json` with `<n>.decisions/<k>.json`,
+  and for a research `<n>.report.md`, written before `<n>.report.json` (R3).
   `Storage` has methods that add and read (`appendVersion`, `beginCheck`, `writeCheckReport`,
   `endCheck`, `appendDecision`, …) and none that change or delete, so no route can. The markdown
   adapter creates each file with `wx` (`server/storage/markdown/history.ts`); a file it cannot
@@ -78,12 +80,27 @@ together with the task.
   `.board/runner/<ID>-check-<n>.json` (`cli/checkJournal.ts`, `checkEnd.ts`, `checkSession.ts`),
   which the journals, the delivery of ends and `claude --recover` of work runs never read. The
   process is spawned by `cli/spawnSession.ts`, shared with `claude <ID>`.
+- **The research.** A check with `kind: 'research'` in its begin, so it shares the numbers, the
+  routes, the lock, the decisions, `fromCheck` and the runner journal of a check; nothing of it is
+  apart but what it says. It is requested with `POST /tasks/:id/run` and `kind: 'research'` and
+  handed only to a runner that said `GET /runs?accepts=…research` (ADR-0029 T54). The person's
+  focus (`comment`) travels in the request, the begin and the handoff, never in the argv of
+  `claude` (`cli/checkSession.ts`, `researchPrompt` in `contract/v1/claudeCode.ts`). Its handoff
+  (`generateCheckHandoff`, research branch) holds the pinned snapshot, the documents, the rules
+  before the focus, and an index of the earlier checks with the person's decisions, notes and the
+  versions that applied them; it never calls `renderWorkflowSteps`. Its report is a Markdown text
+  served by `GET …/checks/:n/report.md` and never given to an agent, with recommendations that
+  may name `targets`. Read-only is detection, not prevention (R6): `repo` with `changes`
+  (`repoChanges`) at begin, report and end, from the read-only `GitReader`; the page compares
+  them, and `begin.documents` with the documents now. It never reads or writes `aiRun`.
 - **Pure functions** in `core/rules/history.ts`, re-exported by `contract/v1/history.ts` so that
-  the page runs the very ones the server does: `contentHash`, `diffContent`, `diffLines` and
-  `applyRecommendations`.
+  the page runs the very ones the server does: `contentHash`, `diffContent`, `diffLines`,
+  `applyRecommendations` and `recommendationAxes` (decision, application and currency of a
+  recommendation, each derived on its own, R5).
 - **On the page** (`web/features/tasks`): the version select and the historical view in
-  `TaskDetails`, the versions and their comparison, the checks and a report with a decision per
-  recommendation, and an edit that shows a diff before it saves. Applying a recommendation is the
+  `TaskDetails`, the versions and their comparison, the **AI research** section (`TaskChecks`,
+  `NewResearchDialog`) with a report and a decision per recommendation (`CheckReportDialog`),
+  and an edit that shows a diff before it saves. Applying a recommendation is the
   ordinary editor with a draft; the save sends only the changed fields, `ifContentHash` and
   `fromCheck`, and a refusal (409) keeps the draft.
 

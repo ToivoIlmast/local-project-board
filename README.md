@@ -22,15 +22,16 @@ npx local-project-board
 The board starts on `http://127.0.0.1:7432/` (the next free port if that one is taken) and opens
 in your browser. No sign-up, no account, no database, no network beyond your own machine.
 
-| Command                                         | What it does                                              |
-| ----------------------------------------------- | --------------------------------------------------------- |
-| `npx local-project-board`                       | Start the board                                           |
-| `npx local-project-board instructions`          | Print the API instructions to hand to an AI agent         |
-| `npx local-project-board claude <ID>`           | Start Claude Code on a task, in this terminal             |
-| `npx local-project-board claude <ID> --check`   | Start Claude Code on a check of whether a task is current |
-| `npx local-project-board claude --wait`         | Start Claude Code here on each task sent from the board   |
-| `npx local-project-board claude --recover <ID>` | Check a run whose runner died; mark it lost on proof      |
-| `npx local-project-board export`                | Print a snapshot of the board (`--out <file>` to save it) |
+| Command                                          | What it does                                              |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| `npx local-project-board`                        | Start the board                                           |
+| `npx local-project-board instructions`           | Print the API instructions to hand to an AI agent         |
+| `npx local-project-board claude <ID>`            | Start Claude Code on a task, in this terminal             |
+| `npx local-project-board claude <ID> --check`    | Start Claude Code on a check of whether a task is current |
+| `npx local-project-board claude <ID> --research` | Start Claude Code on a research of how to approach a task |
+| `npx local-project-board claude --wait`          | Start Claude Code here on each task sent from the board   |
+| `npx local-project-board claude --recover <ID>`  | Check a run whose runner died; mark it lost on proof      |
+| `npx local-project-board export`                 | Print a snapshot of the board (`--out <file>` to save it) |
 
 Options: `--port <number>` (a port you name must be free, or the board stops with an error),
 `--no-open` (do not open a browser), `--help`.
@@ -62,6 +63,23 @@ whatever you are looking at.
   changes until you save. A report for a version the task has left is marked stale and is not
   applied for you. The check changes no file and no git state; the board does not enforce that,
   it shows the repository before and after. See [Claude Code](#claude-code).
+- **AI research.** Next to the checks, **New research…** asks Claude Code (through the same
+  runner) how to approach the task: what it asks for, what the repository already has, how the
+  work could be done and what could go wrong. You may give it a focus and a model. The research
+  reads the version of the task that was current when it began, and writes a Markdown report with
+  findings and recommendations that is stored once and never rewritten; it gives no verdict and
+  does not say whether the task is ready — that stays with you. You accept or reject each
+  recommendation, a rejection with a reason if you like. One that edits the title, labels or
+  description is applied through the editor, as with a check; one aimed at a document or a file
+  of the project is carried over by hand. The next research of the task is shown the earlier ones
+  with your decisions and reasons, and is told not to propose again what you rejected without new
+  evidence. A research never starts the work and never touches the task's **AI run**: the work is
+  a separate **Send to AI → Claude Code**, whose dialog mentions a research still working or with
+  undecided recommendations, and starts anyway. Research is told not to change anything; the board
+  shows whether anything changed: the branch, the commit and whether the tree was clean at the
+  start, at the report and at the end, the files that changed meanwhile, the documents of the task
+  changed since, and a repository that moved on after the report. Who changed it, the board does
+  not say. See [Claude Code](#claude-code).
 - **Documents.** Read them as markdown, write and change them in the page, delete them. An
   `.html` document opens in a frame of its own, sandboxed by the server.
 - **Reports.** Whatever an agent has stored, HTML or markdown, opened the same safe way.
@@ -239,6 +257,16 @@ What to know:
   Claude Code, not something the board can enforce, so the report shows the branch, the commit and
   whether the tree was clean when the check began and when it reported. Its end is kept in
   `.board/runner/<ID>-check-<n>.json` until the board takes it, apart from the journals of runs.
+- **New research…** in a task starts the same runner on a research, and
+  `npx local-project-board claude <ID> --research --comment "<focus>"` starts one directly
+  (`--comment` is optional, at most 4000 characters). A research is a check of its own kind: it
+  is numbered with the checks of the task (`T13-C2`), kept in the same kind of journal, not
+  refused while a run works, and changes nothing on the task until you apply a recommendation.
+  The focus goes to the board with the start of the research and reaches Claude through its
+  handoff, never through the command line. Its report, your decisions and the end of its session
+  survive a restart of the board. A research whose session died stays **working**, blocks
+  nothing and is not recovered: start a new one. A runner of an earlier version is never handed a
+  research; the page then says to update it.
 
 ## Principles
 
