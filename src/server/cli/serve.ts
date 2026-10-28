@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import {
@@ -21,6 +20,7 @@ import type { ParsedArgs } from './args.js';
 import type { ResolvedBoard } from './board.js';
 import { closeServer, listen } from './listen.js';
 import { isBoardAlive, readRuntime, removeRuntime, writeRuntime } from './runtime.js';
+import { readPackageVersion } from './version.js';
 
 // The board is a personal tool on this machine: there is no flag to listen anywhere else.
 const HOST = '127.0.0.1';
@@ -75,7 +75,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
         storage,
         git,
         root,
-        version: await readVersion(),
+        version: await readPackageVersion(),
         config: {
           name: config.project.name,
           statuses: config.statuses,
@@ -158,15 +158,4 @@ function once(action: () => Promise<void>): () => Promise<void> {
 
 function webRoot(): string {
   return fileURLToPath(new URL('../../../web/', import.meta.url));
-}
-
-/** The published package's version; the core is told it, it never reads a file. */
-async function readVersion(): Promise<string> {
-  try {
-    const file = fileURLToPath(new URL('../../../../package.json', import.meta.url));
-    const parsed = JSON.parse(await readFile(file, 'utf8')) as { version?: string };
-    return parsed.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
 }

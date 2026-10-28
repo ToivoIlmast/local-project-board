@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 1da0fe08a1c47400e161bbafa241c2d561d2a5bd -->
+<!-- Based on README.md @ ed0e52cff6cd1d0af46fb2e6de1302b3acc09460 -->
 
 # local-project-board
 
@@ -37,7 +37,7 @@ koneen ulkopuolelle.
 | `npx local-project-board export`                 | Tulostaa taulun tilannevedoksen (`--out <tiedosto>` tallentaa sen)                    |
 
 Valitsimet: `--port <numero>` (nimeämäsi portin on oltava vapaa, muuten taulu pysähtyy virheeseen),
-`--no-open` (älä avaa selainta), `--help`.
+`--no-open` (älä avaa selainta), `--version` (tulosta versio ja lopeta), `--help`.
 
 ## Selaimessa
 

@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 1da0fe08a1c47400e161bbafa241c2d561d2a5bd -->
+<!-- Based on README.md @ ed0e52cff6cd1d0af46fb2e6de1302b3acc09460 -->
 
 # local-project-board
 
@@ -36,7 +36,7 @@ webbläsaren. Ingen registrering, inget konto, ingen databas, inget nätverk uta
 | `npx local-project-board export`                 | Skriver ut en ögonblicksbild (`--out <fil>` sparar den)                   |
 
 Flaggor: `--port <nummer>` (porten du anger måste vara ledig, annars stannar tavlan med ett fel),
-`--no-open` (öppna ingen webbläsare), `--help`.
+`--no-open` (öppna ingen webbläsare), `--version` (skriv ut versionen och avsluta), `--help`.
 
 ## I webbläsaren
 

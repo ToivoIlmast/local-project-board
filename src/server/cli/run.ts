@@ -9,6 +9,7 @@ import { openBrowser as spawnBrowser } from './openBrowser.js';
 import { procProbe, type ProcessProbe } from './processProbe.js';
 import { recoverRun } from './recover.js';
 import { startBoard } from './serve.js';
+import { readPackageVersion } from './version.js';
 
 export interface CliEnvironment {
   cwd: string;
@@ -40,6 +41,11 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
     const args = parseCliArgs(argv);
     if (args.command === 'help') {
       environment.write(USAGE);
+      return { exitCode: 0 };
+    }
+
+    if (args.command === 'version') {
+      environment.write(await readPackageVersion());
       return { exitCode: 0 };
     }
 

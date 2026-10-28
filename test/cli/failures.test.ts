@@ -1,9 +1,17 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readRuntime, runtimePath } from '../../src/server/cli/runtime.js';
 import { cli, deadPid, stopBoards } from '../support/cli.js';
 import { boardAnswersAt, freePort, occupyPort, releasePorts } from '../support/ports.js';
 import { cleanTmpDirs, tmpDir, writeYaml } from '../support/tmp.js';
+
+const packageVersion = (): string =>
+  (
+    JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    }
+  ).version;
 
 afterEach(async () => {
   await stopBoards();
@@ -259,5 +267,16 @@ describe('a board that cannot start', () => {
     expect(run.exitCode).toBe(0);
     expect(run.out.join('\n')).toContain('instructions');
     expect(run.err).toEqual([]);
+  });
+
+  it('answers --version outside a repository with the bare version and starts nothing', async () => {
+    const dir = await tmpDir();
+    const run = await cli(['--version'], { cwd: dir });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.out).toEqual([packageVersion()]);
+    expect(run.err).toEqual([]);
+    expect(run.stop).toBeUndefined();
+    expect(existsSync(runtimePath(dir))).toBe(false);
   });
 });
