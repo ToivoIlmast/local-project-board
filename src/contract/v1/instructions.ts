@@ -1,5 +1,6 @@
 import { API_BASE_PATH, routeList, type Route } from './routes.js';
 import { errorCodeSchema } from './schemas.js';
+import { TOKEN_RULE } from './tokenRule.js';
 
 /**
  * What an agent must not violate about the mechanics of the API: facts about the contract, so
@@ -33,8 +34,6 @@ export interface BoardFacts {
 export interface InstructionsOptions {
   /** Origin the server is listening on, e.g. http://127.0.0.1:7432 */
   baseUrl: string;
-  /** Session token; mutations require it. Without one the text points at the session route. */
-  token?: string | undefined;
   /** The live board, so an agent does not have to guess a status or an id. */
   board?: BoardFacts | undefined;
   /**
@@ -73,7 +72,6 @@ const ERROR_EXAMPLE = {
  */
 export function generateInstructions({
   baseUrl,
-  token,
   board,
   projectRules,
 }: InstructionsOptions): string {
@@ -93,15 +91,14 @@ export function generateInstructions({
     'Reading needs nothing. Every request that changes something must carry this header:',
     '',
     '```text',
-    `Authorization: Bearer ${token ?? TOKEN_PLACEHOLDER}`,
+    `Authorization: Bearer ${TOKEN_PLACEHOLDER}`,
     '```',
     '',
-    token === undefined
-      ? `Ask for the current token first: GET ${api}/session answers with it.`
-      : 'That token belongs to this run of the board and a restart replaces it;' +
-        ` GET ${api}/session always answers with the current one.`,
-    'The board reads the token from that header only: never put it in a URL and never write it',
-    'into a task, a document or a report.',
+    `These instructions never hold the token. GET ${api}/session answers with the current one,`,
+    'and it is the only route that does; a restart of the board replaces it.',
+    'The board reads the token from that header only.',
+    '',
+    TOKEN_RULE,
   ];
 
   if (board) {

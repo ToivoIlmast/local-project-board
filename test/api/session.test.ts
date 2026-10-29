@@ -145,7 +145,7 @@ describe('the token on the wire', () => {
 
     for (const [id, path] of Object.entries(paths)) {
       const response = await board.get(`${API}${path}`).expect(200);
-      const carriesToken = id === 'session.get' || id === 'instructions.get';
+      const carriesToken = id === 'session.get';
       expect([id, response.text.includes(board.token)]).toEqual([id, carriesToken]);
       expect(JSON.stringify(response.headers)).not.toContain(board.token);
     }

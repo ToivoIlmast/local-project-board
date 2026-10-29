@@ -68,7 +68,6 @@ export const handlers: Handlers = {
     return {
       text: generateInstructions({
         baseUrl: context.session.baseUrl,
-        token: context.session.token,
         board: boardFacts(project),
         projectRules: context.ai.rules,
       }),

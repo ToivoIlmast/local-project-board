@@ -9,12 +9,12 @@ import {
   type Route,
 } from '../../src/contract/v1/index.js';
 import { defaultWorkflow, resolveWorkflow } from '../../src/core/index.js';
+import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const BOARD = { name: 'dep-health', statuses: ['backlog', 'todo', 'done'], idPrefix: 'T' };
 
 const instructions = generateInstructions({
   baseUrl: 'http://127.0.0.1:7432',
-  token: 'secret-1',
   board: BOARD,
 });
 
@@ -141,9 +141,15 @@ describe('generated AI instructions', () => {
     }
   });
 
-  it('gives the agent the base URL and the token it must send', () => {
+  it('gives the agent the base URL and the header it must send, with a placeholder for the token', () => {
     expect(instructions).toContain('Base URL: http://127.0.0.1:7432/api/v1');
-    expect(instructions).toContain('Authorization: Bearer secret-1');
+    expect(instructions).toContain('Authorization: Bearer <session token>');
+  });
+
+  it('says how the token is taken and kept, in the words of the shared rule (T70, INVARIANT)', () => {
+    expect(instructions).toContain(TOKEN_RULE);
+    for (const part of TOKEN_RULE_PARTS) expect(instructions).toContain(part);
+    expect(instructions).not.toContain('never write it\ninto a task, a document or a report');
   });
 
   it('tells the agent what this very board calls its statuses and ids', () => {
@@ -287,6 +293,8 @@ describe('generated AI instructions', () => {
         for (const step of steps) {
           // Without the "(source: ...)" note that the handoff adds to each step.
           const text = step.text.replace(/ _\(.*\)_$/, '');
+          // The rule about the token is the one thing both say, as one constant (T70).
+          if (text === TOKEN_RULE) continue;
           expect(own).not.toContain(text);
         }
       });
@@ -306,12 +314,14 @@ describe('generated AI instructions', () => {
     expect(instructions.endsWith('\n')).toBe(true);
   });
 
-  it('carries no token of its own when it is generated without one', () => {
-    const anonymous = generateInstructions({ baseUrl: 'http://127.0.0.1:7432', board: BOARD });
-    expect(anonymous).not.toContain('secret-1');
-    expect(anonymous).toContain('<session token>');
-    // Without a token the agent is told where to get one, and that route is in the contract.
-    expect(anonymous).toContain(`${API_BASE_PATH}/session`);
+  it('carries no token, because the generator has no way to be given one (INVARIANT)', () => {
+    // A token handed over anyway, from outside the type, is still not printed.
+    const given = { baseUrl: 'http://127.0.0.1:7432', board: BOARD, token: 'secret-1' };
+    const text = generateInstructions(given);
+    expect(text).not.toContain('secret-1');
+    expect(text).toContain('<session token>');
+    // The agent is told where to get it, and that route is in the contract.
+    expect(text).toContain(`${API_BASE_PATH}/session`);
   });
 
   it('describes no board facts when it is generated without a board', () => {

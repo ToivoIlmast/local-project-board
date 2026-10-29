@@ -4,8 +4,9 @@ import { askRunningBoard } from './running.js';
 
 /**
  * The instructions an agent needs, from the board itself when it is running — then they carry
- * the live URL and this run's token — and generated from the configuration when it is not.
- * There is one generator and one text; a stopped board simply knows no token (§16).
+ * the live URL — and generated from the configuration when it is not. There is one generator
+ * and one text, and the text never holds a token, whether the board runs or not: the token is
+ * given by `GET /session` only (ADR-0008, §16).
  */
 export async function printInstructions(
   board: ResolvedBoard,

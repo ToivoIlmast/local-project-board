@@ -168,10 +168,12 @@ page or addressed to another host are refused.
 npx local-project-board instructions
 ```
 
-prints everything an agent needs to use the board through its API: the base URL, the token (when
-the board is running), the statuses of this board and every route with its examples. Hand that
-text to Claude, ChatGPT or your own tool, and it can read the board, create and move tasks, write
-documents and store reports. The project also supports AI-assisted task execution through
+prints everything an agent needs to use the board through its API: the base URL, the placeholder
+`<session token>` and the route `GET /api/v1/session` that gives the real one, the statuses of this
+board and every route with its examples. The text never contains the token itself, whether the
+board is running or not, so it is safe to paste into a chat. Hand that text to Claude, ChatGPT or
+your own tool, and it can read the board, create and move tasks, write documents and store
+reports. The project also supports AI-assisted task execution through
 [Claude Code](#claude-code).
 
 The full route reference — every route, including the ones this text leaves out, every error code
@@ -201,7 +203,9 @@ To send a task to an agent, use **Send to AI** in the task or in the menu of its
 handoff** copies the task, its documents and the steps its settings call for (the same text as
 `npx local-project-board handoff <ID>`), and **Claude Code** starts a session on it; see
 [Claude Code](#claude-code). Limits: the steps are instructions to the agent, not something the
-board enforces, and an agent never merges and never writes the token into a file. The reasons are in
+board enforces, and an agent never merges and never keeps the token: it does not print it, write it to a file or
+type it into a command, and it sends the header through stdin so that it stays out of the argv of
+any process. The reasons are in
 [ADR-0028](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
 
 ## Claude Code

@@ -6,4 +6,5 @@ export * from './history.js';
 export * from './instructions.js';
 export * from './routes.js';
 export * from './schemas.js';
+export * from './tokenRule.js';
 export * from './validate.js';

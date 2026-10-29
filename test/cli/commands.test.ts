@@ -24,7 +24,7 @@ async function createTask(url: string, token: string, title: string): Promise<vo
 }
 
 describe('local-project-board instructions', () => {
-  it('hands out what the running board itself answers, token and all (INVARIANT)', async () => {
+  it('hands out what the running board itself answers, and that carries no token (INVARIANT)', async () => {
     const root = await tmpDir();
     await cli(['--no-open'], { cwd: root });
     const runtime = await readRuntime(root);
@@ -35,7 +35,10 @@ describe('local-project-board instructions', () => {
     expect(run.exitCode).toBe(0);
     const served = await (await fetch(`${runtime.state.url}api/v1/instructions`)).text();
     expect(run.out.join('\n').trim()).toBe(served.trim());
-    expect(run.out.join('\n')).toContain(`Authorization: Bearer ${runtime.state.token}`);
+    expect(run.out.join('\n')).not.toContain(runtime.state.token);
+    expect(run.out.join('\n')).toContain('Authorization: Bearer <session token>');
+    expect(run.out.join('\n')).toContain('<session token>');
+    expect(run.out.join('\n')).toContain('/api/v1/session');
     expect(run.out.join('\n')).toContain(`Base URL: http://127.0.0.1:${runtime.state.port}/api/v1`);
   });
 

@@ -116,7 +116,7 @@ test('what another process does to the board shows up without a reload', async (
   );
 });
 
-test('the board hands over the instructions an agent needs, token and all', async ({
+test('the board hands over the instructions an agent needs, without the token', async ({
   page,
   board,
 }) => {
@@ -126,9 +126,11 @@ test('the board hands over the instructions an agent needs, token and all', asyn
   const panel = page.getByRole('complementary', { name: 'AI instructions' });
 
   await expect(panel.getByText('GET /api/v1/tasks')).toBeVisible();
-  await expect(panel.getByText(/Authorization: Bearer/)).toBeVisible();
-  // The board never printed the token in the terminal, though (ADR-0008).
+  await expect(panel.getByText(/Authorization: Bearer <session token>/)).toBeVisible();
+  // The token is given by GET /session only: not in the panel, and not in the terminal (ADR-0008).
   const token = (await board.api('/api/v1/session')) as { token: string };
+  expect(await panel.innerText()).not.toContain(token.token);
+  expect(await panel.innerText()).not.toMatch(/contains this run.s token/);
   expect(board.output()).not.toContain(token.token);
 });
 

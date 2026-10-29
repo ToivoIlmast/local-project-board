@@ -3,6 +3,7 @@ import type { DocumentMeta } from '../../core/model/document.js';
 import type { Check, CheckKind, TaskVersion } from '../../core/model/history.js';
 import { recommendationAxes, summarizeComment } from '../../core/rules/history.js';
 import { API_BASE_PATH } from './routes.js';
+import { TOKEN_RULE } from './tokenRule.js';
 
 export interface CheckHandoffOptions {
   /** Where the board answers, e.g. http://127.0.0.1:7432 */
@@ -74,7 +75,7 @@ function commonRules(api: string, taskId: string): string[] {
       ` such as \`GET ${api}/git/commits\`.`,
     `Write nothing to the board except the report below: do not \`PATCH\` task ${taskId}, do not` +
       ' move it, do not write a document, a report or the run of the task.',
-    'Never write the session token into a file of the project, a task, a document or a report.',
+    TOKEN_RULE,
     'Do not apply your recommendations yourself. A person decides on each of them, one by one.',
   ];
 }

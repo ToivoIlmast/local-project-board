@@ -144,17 +144,16 @@ describe('a developer’s session on a real board', () => {
     expect({ ...window.sessionStorage }).toEqual({});
   });
 
-  it('shows the instructions the board generates, token and all', async () => {
+  it('shows the instructions the board generates, with a placeholder and never the token', async () => {
     board = await renderAgainstRealBoard();
 
     await board.user.click(screen.getByRole('button', { name: 'AI instructions' }));
 
     const panel = await screen.findByRole('complementary', { name: 'AI instructions' });
     // The panel appears before the board has answered, so the text is what to wait for.
-    // These are for an agent to take away, so here — and only here — the token is on screen.
-    const token = board.server.token;
-    await waitFor(() => expect(panel.textContent).toContain(token));
-    expect(panel.textContent).toContain('GET /api/v1/tasks');
+    await waitFor(() => expect(panel.textContent).toContain('GET /api/v1/tasks'));
+    expect(panel.textContent).toContain('<session token>');
+    expect(panel.textContent).not.toContain(board.server.token);
   });
 
   it('says the board is gone when it is, and does not pretend otherwise', async () => {
