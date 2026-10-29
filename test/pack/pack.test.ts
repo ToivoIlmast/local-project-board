@@ -191,13 +191,17 @@ describe('npm package', () => {
       expect(await (await fetch(`${base}/api/v1/tasks`)).json()).toEqual([]);
 
       // The agent handoff works on the package as installed: the instructions name the URL the
-      // board really answers on, carry this run's token, and that token opens the API.
+      // board really answers on, hold a placeholder instead of the token, and the token that
+      // `GET /session` gives opens the API.
       const instructions = await (await fetch(`${base}/api/v1/instructions`)).text();
       expect(instructions).toContain(`Base URL: ${base}/api/v1`);
-      const token = /^Authorization: Bearer (\S+)$/m.exec(instructions)?.[1] ?? '';
+      expect(instructions).toContain('Authorization: Bearer <session token>');
+      const { token } = (await (await fetch(`${base}/api/v1/session`)).json()) as {
+        token: string;
+      };
       expect(token.length).toBeGreaterThanOrEqual(40);
       expect(html).not.toContain(token);
-      expect(await (await fetch(`${base}/api/v1/session`)).json()).toEqual({ token });
+      expect(instructions).not.toContain(token);
 
       const created = await fetch(`${base}/api/v1/tasks`, {
         method: 'POST',
@@ -248,7 +252,8 @@ describe('npm package', () => {
       // The CLI of the installed package reaches the running board.
       const cliInstructions = run(bin, ['instructions'], project);
       expect(cliInstructions.status).toBe(0);
-      expect(cliInstructions.stdout).toContain(`Authorization: Bearer ${token}`);
+      expect(cliInstructions.stdout).toContain('Authorization: Bearer <session token>');
+      expect(cliInstructions.stdout).not.toContain(token);
 
       const exported = run(bin, ['export'], project);
       expect(exported.status).toBe(0);
