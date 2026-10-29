@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 4e79cf2eb779cfaaa9238a25416ad326e2a95fe9 -->
+<!-- Based on README.md @ 5d76690c7aeda449a51f3b7ac7e86c75bbbb9226 -->
 
 # local-project-board
 
@@ -174,8 +174,10 @@ sivulta tai toiselle isännälle torjutaan.
 npx local-project-board instructions
 ```
 
-tulostaa kaiken, mitä agentti tarvitsee käyttääkseen taulua API:n kautta: perus-URL:n, tunnuksen
-(kun taulu on käynnissä), tämän taulun tilat ja jokaisen reitin esimerkkeineen. Anna teksti
+tulostaa kaiken, mitä agentti tarvitsee käyttääkseen taulua API:n kautta: perus-URL:n,
+paikkamerkin `<session token>` ja reitin `GET /api/v1/session`, joka antaa oikean tunnuksen,
+tämän taulun tilat ja jokaisen reitin esimerkkeineen. Teksti ei koskaan sisällä itse tunnusta,
+oli taulu käynnissä tai ei, joten sen voi liittää keskusteluun turvallisesti. Anna teksti
 Claudelle, ChatGPT:lle tai omalle työkalullesi, niin se voi lukea taulua, luoda ja siirtää
 tehtäviä, kirjoittaa dokumentteja ja tallentaa raportteja. Projekti tukee myös tekoälyavusteista
 tehtävien suorittamista Claude Coden kautta ([Claude Code](#claude-code)).
@@ -210,7 +212,7 @@ Tehtävän lähetät agentille kohdalla **Send to AI** tehtävässä tai sen kor
 handoff** kopioi tehtävän, sen dokumentit ja asetusten vaatimat vaiheet (sama teksti kuin
 `npx local-project-board handoff <ID>`), ja **Claude Code** käynnistää istunnon sillä; katso
 [Claude Code](#claude-code). Rajoitukset: vaiheet ovat ohjeita agentille, joita taulu ei valvo, ja
-agentti ei koskaan yhdistä (merge) eikä kirjoita tunnusta tiedostoon. Perustelut ovat
+agentti ei koskaan yhdistä (merge) eikä säilytä tunnusta: se ei tulosta sitä, kirjoita sitä tiedostoon tai kirjoita sitä komentoon, vaan lähettää otsakkeen stdinin kautta, jotta se ei päädy minkään prosessin argv:hen. Perustelut ovat
 [ADR-0028:ssa](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
 
 ## Claude Code

@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 4e79cf2eb779cfaaa9238a25416ad326e2a95fe9 -->
+<!-- Based on README.md @ 5d76690c7aeda449a51f3b7ac7e86c75bbbb9226 -->
 
 # local-project-board
 
@@ -168,8 +168,10 @@ förfrågningar från en annan sida eller till en annan värd nekas.
 npx local-project-board instructions
 ```
 
-skriver ut allt en agent behöver för att använda tavlan genom dess API: bas-URL:en, token (när
-tavlan kör), den här tavlans statusar och varje rutt med exempel. Ge texten till Claude, ChatGPT
+skriver ut allt en agent behöver för att använda tavlan genom dess API: bas-URL:en,
+platshållaren `<session token>` och rutten `GET /api/v1/session` som ger den riktiga token, den här
+tavlans statusar och varje rutt med exempel. Texten innehåller aldrig själva token, vare sig tavlan
+kör eller inte, så den kan klistras in i en chatt utan risk. Ge texten till Claude, ChatGPT
 eller ditt eget verktyg, så kan den läsa tavlan, skapa och flytta uppgifter, skriva dokument och
 spara rapporter. Projektet stöder också AI-assisterad uppgiftskörning via Claude Code
 ([Claude Code](#claude-code)).
@@ -204,7 +206,7 @@ För att skicka en uppgift till en agent använder du **Send to AI** i uppgiften
 dess kort: **Copy handoff** kopierar uppgiften, dess dokument och de steg inställningarna kräver
 (samma text som `npx local-project-board handoff <ID>`), och **Claude Code** startar en session på
 den; se [Claude Code](#claude-code). Begränsningar: stegen är instruktioner till agenten, inget
-tavlan tvingar fram, och en agent mergar aldrig och skriver aldrig token i en fil. Skälen finns i
+tavlan tvingar fram, och en agent mergar aldrig och behåller aldrig token: den skriver inte ut den, skriver den inte i en fil och skriver den inte in i ett kommando, och den skickar headern via stdin så att den inte hamnar i argv hos någon process. Skälen finns i
 [ADR-0028](docs/adr/0028-ai-workflow-settings-three-levels-overrides-only.md).
 
 ## Claude Code
