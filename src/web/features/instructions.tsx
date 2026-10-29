@@ -9,8 +9,8 @@ export interface InstructionsPanelProps {
 
 /**
  * The instructions the board generates for an agent, taken from the board itself — the page
- * keeps no copy of them (§16). They contain this run's token on purpose: handing them to an
- * agent is what gives it the right to change the board.
+ * keeps no copy of them (§16). They hold no token: an agent asks `GET /session` for it, and the
+ * instructions say how to do that without leaving it anywhere (ADR-0008).
  */
 export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
   const { client } = useBoard();
@@ -39,8 +39,8 @@ export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
       </header>
 
       <Text tone="muted">
-        Everything an agent needs to use this board through its API. It contains this run’s token,
-        so hand it only to a tool you trust.
+        Everything an agent needs to use this board through its API. It holds no token, only a
+        placeholder: the agent gets the token from the board itself, as the text explains.
       </Text>
 
       {error !== undefined ? (

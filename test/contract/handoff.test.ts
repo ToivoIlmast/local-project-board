@@ -1,3 +1,4 @@
+import * as contract from '../../src/contract/v1/index.js';
 import {
   API_BASE_PATH,
   WORKFLOW_STEP_PARAMETERS,
@@ -21,6 +22,7 @@ import {
   type WorkflowFlagOverrides,
   type WorkflowFlag,
 } from '../../src/core/index.js';
+import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const STATUSES = ['backlog', 'todo', 'in-progress', 'done'];
 
@@ -406,9 +408,21 @@ describe('renderWorkflowSteps', () => {
       const text = renderWorkflowSteps(effective(levels), FACTS);
 
       expect(text).toContain('Never merge a branch');
-      expect(text).toContain('Never write the session token into a file of the project');
+      expect(text).toContain(TOKEN_RULE);
+      for (const part of TOKEN_RULE_PARTS) expect(text).toContain(part);
       expect(text).toContain('report your run to the board');
       expect(text).toContain('stop and wait for the review');
+    });
+
+    it('say the rule about the token with the one shared constant, in these very words (T70)', () => {
+      expect(contract.TOKEN_RULE).toBe(TOKEN_RULE);
+      expect(renderWorkflowSteps(effective(), FACTS)).toContain(`11. ${contract.TOKEN_RULE}\n`);
+    });
+
+    it('no longer limit the rule to the files of the project, a task, a document or a report (T70)', () => {
+      expect(renderWorkflowSteps(effective(), FACTS)).not.toContain(
+        'Never write the session token into a file of the project',
+      );
     });
 
     it('are the last steps and carry no source, because no setting decides them', () => {
@@ -435,7 +449,7 @@ describe('renderWorkflowSteps', () => {
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
-          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          `11. ${TOKEN_RULE}`,
           '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
@@ -459,7 +473,7 @@ describe('renderWorkflowSteps', () => {
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
-          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          `11. ${TOKEN_RULE}`,
           '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
@@ -490,7 +504,7 @@ describe('renderWorkflowSteps', () => {
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
-          '11. Never write the session token into a file of the project, a task, a document or a report.',
+          `11. ${TOKEN_RULE}`,
           '12. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
@@ -555,7 +569,8 @@ describe('renderWorkflowSteps', () => {
   it('says nothing that could be taken for a token or another task', () => {
     const text = renderWorkflowSteps(effective({ board: { push: true } }), FACTS);
 
-    expect(text).not.toMatch(/Bearer|Authorization/);
+    // The one rule about the token shows how to send a header; that is no token (T70).
+    expect(text.replace(TOKEN_RULE, '')).not.toMatch(/Bearer|Authorization/);
     expect(text).not.toContain('undefined');
     expect(text).not.toContain('null');
     expect(text.match(/\bT\d+\b/g)?.every((id) => id === 'T13')).toBe(true);

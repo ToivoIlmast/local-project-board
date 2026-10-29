@@ -55,10 +55,11 @@ class Agent {
     const instructions = await response.text();
 
     const api = /^Base URL: (\S+)$/m.exec(instructions)?.[1];
-    const token = /^Authorization: Bearer (\S+)$/m.exec(instructions)?.[1];
+    // The instructions hold a placeholder; the token itself comes from the session route.
+    expect(instructions).toMatch(/^Authorization: Bearer <session token>$/m);
     expect(typeof api).toBe('string');
-    expect(typeof token).toBe('string');
-    return new Agent(api as string, token as string, instructions);
+    const session = (await (await fetch(`${api}/session`)).json()) as { token: string };
+    return new Agent(api as string, session.token, instructions);
   }
 
   /** What the agent was handed: the instructions, or the handoff that carries them. */

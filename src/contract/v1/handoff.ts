@@ -10,6 +10,7 @@ import type {
 } from '../../core/model/workflow.js';
 import { taskBranchName } from '../../core/rules/branch.js';
 import { API_BASE_PATH } from './routes.js';
+import { TOKEN_RULE } from './tokenRule.js';
 
 /** What the steps need to know about the task besides the settings. */
 export interface WorkflowFacts {
@@ -242,7 +243,7 @@ const RULES: readonly ((facts: WorkflowFacts) => string)[] = [
     );
   },
   () => 'Never merge a branch, into any branch.',
-  () => 'Never write the session token into a file of the project, a task, a document or a report.',
+  () => TOKEN_RULE,
   () => 'When you are done, stop and wait for the review; do not start another task.',
 ];
 

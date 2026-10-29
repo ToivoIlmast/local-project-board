@@ -146,7 +146,6 @@ describe('POST /tasks/:id/ai-run/:runId/abandon (T45)', () => {
     expect(routes['ai-run.abandon'].ai.include).toBe(false);
     const instructions = generateInstructions({
       baseUrl: 'http://127.0.0.1:7432/api/v1',
-      token: 'tok',
       board: { name: 'board', statuses: ['backlog', 'done'], idPrefix: 'T' },
     });
     expect(instructions).not.toContain('abandon');

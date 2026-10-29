@@ -123,7 +123,6 @@ describe('routes absent from generateInstructions (INVARIANT)', () => {
   it('ai-run begin, end and report routes are not in the generated instructions', () => {
     const instructions = generateInstructions({
       baseUrl: 'http://127.0.0.1:7432/api/v1',
-      token: 'tok',
       board: { name: 'board', statuses: ['backlog', 'done'], idPrefix: 'T' },
     });
     expect(instructions).not.toContain('/ai-run');

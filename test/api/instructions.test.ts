@@ -42,10 +42,12 @@ describe('GET /api/v1/instructions', () => {
     await board.agent().post(`${API}/tasks`).send({ title: 'x' }).expect(401);
   });
 
-  it('carries this run token and the live base URL (INVARIANT)', async () => {
+  it('never carries the token, only the placeholder and the route that gives it (INVARIANT)', async () => {
     const response = await board.get(`${API}/instructions`).expect(200);
 
-    expect(response.text).toContain(`Authorization: Bearer ${board.token}`);
+    expect(response.text).not.toContain(board.token);
+    expect(response.text).toContain('Authorization: Bearer <session token>');
+    expect(response.text).toContain(`${API}/session`);
     expect(response.text).toContain(`Base URL: http://127.0.0.1:${board.port}${API}`);
   });
 

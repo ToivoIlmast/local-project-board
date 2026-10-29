@@ -1,3 +1,4 @@
+import * as contract from '../../src/contract/v1/index.js';
 import {
   claudeCheckPrompt,
   generateCheckHandoff,
@@ -6,6 +7,7 @@ import {
   type CheckHandoffOptions,
 } from '../../src/contract/v1/index.js';
 import { defaultWorkflow, resolveWorkflow, type Check } from '../../src/core/index.js';
+import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const options = (over: Partial<CheckHandoffOptions> = {}): CheckHandoffOptions => ({
   baseUrl: 'http://127.0.0.1:7432',
@@ -39,8 +41,15 @@ describe('the handoff of a check (ADR-0030 §6)', () => {
     expect(text).toContain('Do not change any file of the project.');
     expect(text).toMatch(/no commit, add, checkout, switch, reset, merge/);
     expect(text).toContain('Write nothing to the board except the report');
-    expect(text).toContain('Never write the session token');
+    expect(text).toContain(TOKEN_RULE);
+    for (const part of TOKEN_RULE_PARTS) expect(text).toContain(part);
     expect(text).toContain('Do not apply your recommendations yourself.');
+  });
+
+  it('says the rule about the token with the one shared constant, as every handoff does (T70)', () => {
+    expect(contract.TOKEN_RULE).toBe(TOKEN_RULE);
+    expect(generateCheckHandoff(options())).toContain(contract.TOKEN_RULE);
+    expect(generateCheckHandoff(options())).not.toContain('into a file of the project, a task');
   });
 
   it('names the report route with the number of the check, and asks for the token, never holds one', () => {
@@ -265,7 +274,8 @@ describe('the handoff of a research (ADR-0030 R7)', () => {
     expect(text).toContain('Do not change any file of the project.');
     expect(text).toMatch(/no commit, add, checkout, switch, reset, merge/);
     expect(text).toContain('Write nothing to the board except the report');
-    expect(text).toContain('Never write the session token');
+    expect(text).toContain(TOKEN_RULE);
+    for (const part of TOKEN_RULE_PARTS) expect(text).toContain(part);
     expect(text).not.toMatch(/Bearer [0-9a-f]{20,}/);
   });
 
