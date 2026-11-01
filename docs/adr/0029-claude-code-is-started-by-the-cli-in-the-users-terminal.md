@@ -275,3 +275,67 @@ owner's decision in a closed Decision task (in brackets). No ADR-0031 is created
 What this costs: a runner of an earlier version has to be updated before the first research. What
 it does not change: the server has no module that can start a process, and a research does not
 touch the work-run lifecycle.
+
+## Amendment (T78, 2026-11-01, accepted): a blocked task is not started
+
+Status of this amendment: **accepted**. What makes a task blocked —
+`readiness` and its reasons — is ADR-0032; this amendment holds only where a work run on a
+blocked task is refused. The server still starts no agent. The rules are numbered L1–L6, apart
+from the V-rules of the later amendment for the trigger of a check (T95). The codes in brackets
+are the owner's decisions, as in ADR-0032.
+
+- **L1. `POST /tasks/:id/run` with `kind: work` refuses a blocked task in every mode: New, Resume
+  and Restart** (G1). Restart (T37: `mode: 'restart'`, `409 NO_RUN_TO_RESTART`) is in the code
+  but has no amendment of its own in this ADR; it is named here, not described. The refusals come
+  in the order of the code, and the gate takes one place in it (F4):
+  1. `400 INVALID_REQUEST` for the body, and `404 TASK_NOT_FOUND`;
+  2. `409 AI_RUN_IN_PROGRESS` while a run works, for every mode (T45);
+  3. `409 NO_SESSION_TO_RESUME` for Resume (T36), `409 NO_RUN_TO_RESTART` for Restart (T37);
+  4. **`409 TASK_BLOCKED`**, with the reasons of ADR-0032;
+  5. `409 NO_AGENT_RUNNER`.
+
+  `TASK_BLOCKED` comes before `NO_AGENT_RUNNER` because the board learns that no runner waits only
+  by handing the request: the dispatcher looks for a waiting runner and, if one waits, sends it
+  `run.requested` in the same step. A refusal after it would come after a runner had been told. On
+  `TASK_BLOCKED` nothing is written, no runner is asked and no `runId` is allocated; for Resume
+  the session stays the last run's, and Resume continues it once the task is ready (G1).
+- **L2. Begin (`POST /tasks/:id/ai-run`) refuses a blocked task too: it is the last guard on the
+  server** (Q4-P). Every work run passes begin, `local-project-board claude <ID>` included, which
+  does not go through `/run`. The check runs under the lock of the task (T45), after the checks
+  begin already makes (`400 INVALID_REQUEST` for the body, `404`, `AI_RUN_IN_PROGRESS`,
+  `NO_RUN_TO_RESTART`, `NO_SESSION_TO_RESUME` for a session that is not the last run's) and
+  before anything is written: `409 TASK_BLOCKED`, no `runId` allocated, `aiRun` unchanged. A task
+  that became blocked between `/run` and begin is refused at begin. Readiness is computed from
+  what begin reads at that moment; the lock is only this task's, so a change of another task at
+  the same moment is not ordered with it (ADR-0032 §9).
+- **L3. A check and a research are not gated** (Q4b), so a blocked task can still be checked or
+  researched. Their operations are unchanged:
+  - the request: `POST /tasks/:id/run` with `kind: 'check'` or `kind: 'research'`;
+  - the begin: `POST /tasks/:id/checks`. This is one route for both, told apart by `kind` in its
+    body (absent for a check, `'research'` for a research; T46, T54). It never touches `aiRun`;
+  - the end, `POST /tasks/:id/checks/:n/end`, and the report, `POST /tasks/:id/checks/:n/report`.
+- **L4. A run that has started is not stopped** (Q4c). A task that becomes blocked while its run
+  works keeps that run: `end`, `report` and `abandon` are accepted as before, and the run keeps
+  its handoff (ADR-0032 §8).
+- **L5. In the protocol between the board and the runner, the only change is `409 TASK_BLOCKED`
+  as an answer of begin.** That protocol is `GET /runs` with its `accepts` query, the
+  `run.requested` event, and the lifecycle routes the CLI calls: begin, end and abandon of a work
+  run, and begin and end of a check. No field is added to any of them.
+  - `/run` is the page's route, not the runner's, so its new answer is not part of this protocol.
+    A refusal of `/run` is seen on the page.
+  - For Resume the CLI also reads `GET /tasks/:id`. That answer gains `readiness` and the
+    optional fields of ADR-0032, but the CLI uses only `aiRun` from it, so it stays compatible.
+  - A runner of an earlier version fails before it spawns `claude` when begin is not 2xx (T33),
+    so `claude` is not started. Until T94 (T76-B3/C1), that refusal is seen only in the runner's
+    terminal.
+- **L6. Everything else in this ADR stands**:
+  - the server starts no agent;
+  - a request is handed to exactly one runner, and `NO_AGENT_RUNNER` is answered when none can
+    take it;
+  - the lifecycle of runs (T31, T45), Resume (T36), the check (T46) and the research (T54).
+
+What this costs: nothing new to run or configure. What it does not give:
+
+- An earlier version of the board applies no gate.
+- The gate is on the start of a run, not on the task. An agent that holds the token can still
+  read the task, work on it and change tasks through the API (ADR-0008, ADR-0032 §9).
