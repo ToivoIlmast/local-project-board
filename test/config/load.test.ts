@@ -196,6 +196,8 @@ describe('strict validation', () => {
     ['server:\n  open: "yes"\n', 'config.server.open'],
     ['tasks:\n  idPrefix: f\n', 'config.tasks.idPrefix'],
     ['tasks:\n  idPrefix: T1\n', 'config.tasks.idPrefix'],
+    ['tasks:\n  idPrefix: P\n', 'config.tasks.idPrefix'],
+    ['tasks:\n  idPrefix: K\n', 'config.tasks.idPrefix'],
     ['statuses: []\n', 'config.statuses'],
     ['statuses: [todo, todo]\n', 'config.statuses'],
     ['statuses: [todo, ""]\n', 'config.statuses.1'],
@@ -208,6 +210,33 @@ describe('strict validation', () => {
     const root = await tmpDir();
     await writeYaml(root, 'board.config.yaml', yaml);
     await expectIssue({ root }, { path });
+  });
+
+  describe('the id prefixes of topics and blocks (ADR-0032 §2)', () => {
+    it.each(['P', 'K'])('refuses %p and says why', async (prefix) => {
+      const root = await tmpDir();
+      await writeYaml(root, 'board.config.yaml', `tasks:\n  idPrefix: ${prefix}\n`);
+      const error = await expectIssue(
+        { root },
+        { path: 'config.tasks.idPrefix', source: 'board.config.yaml' },
+      );
+      expect(error.message).toContain(`"${prefix}"`);
+      expect(error.message).toMatch(/topic/i);
+      expect(error.message).toMatch(/block/i);
+    });
+
+    it('refuses it from the environment too', async () => {
+      await expectIssue(
+        { env: { BOARD_ID_PREFIX: 'K' } },
+        { path: 'config.tasks.idPrefix', source: 'BOARD_ID_PREFIX' },
+      );
+    });
+
+    it.each(['PK', 'KP', 'T'])('accepts %p', async (prefix) => {
+      const root = await tmpDir();
+      await writeYaml(root, 'board.config.yaml', `tasks:\n  idPrefix: ${prefix}\n`);
+      expect((await load({ root })).tasks.idPrefix).toBe(prefix);
+    });
   });
 
   describe('the removed ai.allowSourceEdits (T16)', () => {

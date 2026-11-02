@@ -81,6 +81,19 @@ describe('a board that cannot start', () => {
     expect(await readRuntime(root)).toEqual({ kind: 'missing' });
   });
 
+  it('does not start with a task id prefix of topics or blocks (ADR-0032 §2, INVARIANT)', async () => {
+    const root = await tmpDir();
+    await writeYaml(root, 'board.config.yaml', 'tasks: { idPrefix: K }\n');
+
+    const run = await cli([], { cwd: root });
+
+    expect(run.exitCode).toBe(1);
+    expect(run.err.join('\n')).toContain('config.tasks.idPrefix');
+    expect(run.err.join('\n')).toMatch(/block/i);
+    expect(await readRuntime(root)).toEqual({ kind: 'missing' });
+    expect(run.opened).toEqual([]);
+  });
+
   it('refuses to hide tasks whose status was removed from the config (INVARIANT)', async () => {
     const root = await tmpDir();
     const first = await cli(['--no-open'], { cwd: root });

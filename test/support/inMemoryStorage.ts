@@ -8,12 +8,20 @@ import type {
   Report,
   Task,
   TaskVersion,
+  Topic,
   WorkflowOverrides,
 } from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
 import { assembleCheck, storedCheckReport } from '../../src/core/rules/history.js';
-import { REPORT_ID_PREFIX, allocateId } from '../../src/core/rules/ids.js';
+import {
+  BLOCK_ID_PREFIX,
+  REPORT_ID_PREFIX,
+  TOPIC_ID_PREFIX,
+  allocateId,
+  allocateRecoverableId,
+  highestIdNumber,
+} from '../../src/core/rules/ids.js';
 
 /**
  * The second implementation of the Storage port: it proves the port is an abstraction and
@@ -28,6 +36,10 @@ export interface MemoryStore {
   workflow: WorkflowOverrides;
   taskSequence: number;
   reportSequence: number;
+  /** null is a topic that cannot be read, as a broken topic.md would be. */
+  topics: Map<string, Topic | null>;
+  /** null is counters that are missing or invalid (ADR-0032 §2, O-1). */
+  topicSequence: { topicSequence: number; blockSequence: number } | null;
 }
 
 export interface MemoryHistory {
@@ -54,6 +66,8 @@ export function createMemoryStore(): MemoryStore {
     workflow: { board: {}, statuses: {} },
     taskSequence: 0,
     reportSequence: 0,
+    topics: new Map(),
+    topicSequence: { topicSequence: 0, blockSequence: 0 },
   };
 }
 
@@ -121,6 +135,34 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     size: Buffer.byteLength(content, 'utf8'),
     updatedAt,
   });
+
+  /** The same rule as the markdown provider's: recover a lost counter only from what was read. */
+  function allocateTopicOrBlockId(prefix: string, check: () => void = () => {}): string {
+    const topics = [...store.topics.values()].filter((topic): topic is Topic => topic !== null);
+    const topicIds = [...store.topics.keys()];
+    const blockIds = topics.flatMap((topic) => topic.blocks.map((block) => block.id));
+    const unreadable = topicIds
+      .filter((id) => store.topics.get(id) === null)
+      .map((id) => `topics/${id}/topic.md`);
+    const stored = store.topicSequence;
+    const isTopic = prefix === TOPIC_ID_PREFIX;
+    const { id, sequence } = allocateRecoverableId(
+      prefix,
+      (isTopic ? stored?.topicSequence : stored?.blockSequence) ?? null,
+      isTopic ? topicIds : blockIds,
+      unreadable,
+    );
+    check();
+    store.topicSequence = {
+      topicSequence: isTopic
+        ? sequence
+        : Math.max(stored?.topicSequence ?? 0, highestIdNumber(TOPIC_ID_PREFIX, topicIds)),
+      blockSequence: isTopic
+        ? Math.max(stored?.blockSequence ?? 0, highestIdNumber(BLOCK_ID_PREFIX, blockIds))
+        : sequence,
+    };
+    return id;
+  }
 
   return {
     init: async () => {},
@@ -295,6 +337,28 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
       if (!documents.delete(requireName(name))) {
         throw new BoardError('DOCUMENT_NOT_FOUND', `Document "${name}" does not exist.`, { name });
       }
+    },
+
+    getTopic: async (id) => structuredClone(store.topics.get(id) ?? null),
+
+    createTopic: async (input) => {
+      const id = allocateTopicOrBlockId(TOPIC_ID_PREFIX);
+      const topic: Topic = { id, title: input.title, body: input.body, blocks: [] };
+      store.topics.set(id, topic);
+      return structuredClone(topic);
+    },
+
+    createBlock: async (topicId, input) => {
+      const id = allocateTopicOrBlockId(BLOCK_ID_PREFIX, () => {
+        if (!store.topics.get(topicId)) {
+          throw new BoardError('TOPIC_NOT_FOUND', `Topic "${topicId}" does not exist.`, {
+            id: topicId,
+          });
+        }
+      });
+      const block = { id, title: input.title };
+      store.topics.get(topicId)?.blocks.push(block);
+      return { ...block };
     },
 
     listReports: async () => [...store.reports.values()].map((entry) => entry.report),

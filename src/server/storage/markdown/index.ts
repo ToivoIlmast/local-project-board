@@ -1,14 +1,32 @@
 import { mkdir, readFile, readdir, rm, stat, watch, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BoardError } from '../../../core/errors.js';
-import type { DocumentMeta, Report, Task, WorkflowOverrides } from '../../../core/model/index.js';
+import type {
+  Block,
+  DocumentMeta,
+  Report,
+  Task,
+  Topic,
+  WorkflowOverrides,
+} from '../../../core/model/index.js';
 import type { NewReport, NewTask, ReadIssue, Storage, TaskPatch } from '../../../core/ports.js';
 import { documentFormat, isDocumentName } from '../../../core/rules/documentName.js';
-import { REPORT_ID_PREFIX, allocateId, isReportId, isTaskId } from '../../../core/rules/ids.js';
+import {
+  BLOCK_ID_PREFIX,
+  REPORT_ID_PREFIX,
+  TOPIC_ID_PREFIX,
+  allocateId,
+  allocateRecoverableId,
+  highestIdNumber,
+  isReportId,
+  isTaskId,
+  isTopicId,
+} from '../../../core/rules/ids.js';
 import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
 import { historyFiles } from './history.js';
 import { parseTask, serializeTask } from './taskFile.js';
+import { parseTopic, serializeTopic } from './topicFile.js';
 import { parseWorkflow, serializeWorkflow } from './workflowFile.js';
 
 export interface MarkdownStorageOptions {
@@ -30,8 +48,28 @@ interface BoardState {
   reportSequence: number;
 }
 
+/**
+ * The counters of topics and blocks. Not in board.json: an earlier board writes that file with
+ * the keys it knows and would drop these (ADR-0032 §2).
+ */
+interface TopicSequence {
+  formatVersion: 1;
+  topicSequence: number;
+  blockSequence: number;
+}
+
+/** What a scan of the topics found: every id in use, and the files it could not read. */
+interface TopicScan {
+  topics: Map<string, Topic>;
+  topicIds: string[];
+  blockIds: string[];
+  unreadable: string[];
+}
+
 const STATE_FILE = 'board.json';
+const SEQUENCE_FILE = 'sequence.json';
 const TASK_FILE = 'task.md';
+const TOPIC_FILE = 'topic.md';
 const WORKFLOW_FILE = 'workflow.yaml';
 const NO_WORKFLOW: WorkflowOverrides = { board: {}, statuses: {} };
 
@@ -43,6 +81,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
   const boardDir = join(options.root, '.board');
   const tasksDir = join(boardDir, 'tasks');
   const reportsDir = join(boardDir, 'reports');
+  const topicsDir = join(boardDir, 'topics');
   const idPrefix = options.idPrefix ?? 'T';
   const now = (): string => new Date().toISOString();
 
@@ -95,6 +134,94 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
 
   async function writeState(state: BoardState): Promise<void> {
     await writeFileAtomic(join(boardDir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`);
+  }
+
+  /** Null when the file is missing or invalid: the counters are then recovered (O-1). */
+  async function readTopicSequence(): Promise<TopicSequence | null> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readFile(join(topicsDir, SEQUENCE_FILE), 'utf8'));
+    } catch {
+      return null;
+    }
+    const value = parsed as Partial<TopicSequence> | null;
+    const valid =
+      typeof value === 'object' &&
+      value !== null &&
+      value.formatVersion === 1 &&
+      isCounter(value.topicSequence) &&
+      isCounter(value.blockSequence);
+    return valid ? (value as TopicSequence) : null;
+  }
+
+  async function readTopicFile(id: string): Promise<{ topic: Topic } | { error: string }> {
+    try {
+      return parseTopic(id, await readFile(join(topicsDir, id, TOPIC_FILE), 'utf8'));
+    } catch (error) {
+      return { error: `The file cannot be read: ${(error as Error).message}` };
+    }
+  }
+
+  async function scanTopics(): Promise<TopicScan> {
+    // A board of an earlier version has no topics directory: it has no topics, not a problem.
+    const entries = await readdir(topicsDir, { withFileTypes: true }).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    });
+    const scan: TopicScan = { topics: new Map(), topicIds: [], blockIds: [], unreadable: [] };
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !isTopicId(entry.name)) continue;
+      // A directory holds its id even when its file cannot be read.
+      scan.topicIds.push(entry.name);
+      const result = await readTopicFile(entry.name);
+      if ('topic' in result) {
+        scan.topics.set(entry.name, result.topic);
+        scan.blockIds.push(...result.topic.blocks.map((block) => block.id));
+      } else {
+        scan.unreadable.push(`topics/${entry.name}/${TOPIC_FILE}`);
+      }
+    }
+    return scan;
+  }
+
+  /**
+   * Allocates an id of `prefix` and returns the counters to write once the topic is written.
+   * Both counters are carried forward, so a recovered one is persisted with the other.
+   */
+  async function allocateTopicOrBlockId(
+    prefix: typeof TOPIC_ID_PREFIX | typeof BLOCK_ID_PREFIX,
+    scan: TopicScan,
+  ): Promise<{ id: string; next: TopicSequence }> {
+    const stored = await readTopicSequence();
+    const isTopic = prefix === TOPIC_ID_PREFIX;
+    const { id, sequence } = allocateRecoverableId(
+      prefix,
+      (isTopic ? stored?.topicSequence : stored?.blockSequence) ?? null,
+      isTopic ? scan.topicIds : scan.blockIds,
+      scan.unreadable,
+    );
+    const carried = (other: string, value: number | undefined, ids: string[]): number =>
+      Math.max(value ?? 0, highestIdNumber(other, ids));
+    return {
+      id,
+      next: {
+        formatVersion: 1,
+        topicSequence: isTopic
+          ? sequence
+          : carried(TOPIC_ID_PREFIX, stored?.topicSequence, scan.topicIds),
+        blockSequence: isTopic
+          ? carried(BLOCK_ID_PREFIX, stored?.blockSequence, scan.blockIds)
+          : sequence,
+      },
+    };
+  }
+
+  async function writeTopicSequence(sequence: TopicSequence): Promise<void> {
+    await writeFileAtomic(join(topicsDir, SEQUENCE_FILE), `${JSON.stringify(sequence, null, 2)}\n`);
+  }
+
+  async function saveTopic(topic: Topic): Promise<void> {
+    await writeFileAtomic(join(topicsDir, topic.id, TOPIC_FILE), serializeTopic(topic));
   }
 
   async function taskIds(): Promise<string[]> {
@@ -369,6 +496,40 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       });
     },
 
+    async getTopic(id) {
+      if (!isTopicId(id)) return null;
+      const result = await readTopicFile(id);
+      return 'topic' in result ? result.topic : null;
+    },
+
+    createTopic(input) {
+      return exclusive(async () => {
+        const { id, next } = await allocateTopicOrBlockId(TOPIC_ID_PREFIX, await scanTopics());
+        const topic: Topic = { id, title: input.title, body: input.body, blocks: [] };
+        await mkdir(join(topicsDir, id), { recursive: true });
+        await saveTopic(topic);
+        await writeTopicSequence(next);
+        return topic;
+      });
+    },
+
+    createBlock(topicId, input) {
+      return exclusive(async () => {
+        const scan = await scanTopics();
+        const { id, next } = await allocateTopicOrBlockId(BLOCK_ID_PREFIX, scan);
+        const topic = scan.topics.get(topicId);
+        if (!topic) {
+          throw new BoardError('TOPIC_NOT_FOUND', `Topic "${topicId}" does not exist.`, {
+            id: topicId,
+          });
+        }
+        const block: Block = { id, title: input.title };
+        await saveTopic({ ...topic, blocks: [...topic.blocks, block] });
+        await writeTopicSequence(next);
+        return block;
+      });
+    },
+
     async listReports() {
       const entries = await readdir(reportsDir, { withFileTypes: true });
       const ids = entries
@@ -445,6 +606,10 @@ function startWatching(boardDir: string, options: MarkdownStorageOptions): Abort
     }
   })();
   return controller;
+}
+
+function isCounter(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function byNumber(a: string, b: string): number {

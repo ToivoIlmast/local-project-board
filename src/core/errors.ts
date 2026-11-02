@@ -4,7 +4,14 @@ export const BOARD_ERROR_CODES = [
   'ORPHANED_STATUSES',
   'INVALID_ID_PREFIX',
   'INVALID_ID_SEQUENCE',
+  /**
+   * The counters of topics and blocks are missing or invalid and a topic cannot be read, so a
+   * new id could repeat one: nothing is created until either is fixed (ADR-0032 §2, O-1).
+   */
+  'ID_SEQUENCE_UNRECOVERABLE',
   'TASK_NOT_FOUND',
+  /** A topic that does not exist, or whose topic.md cannot be read (ADR-0032). */
+  'TOPIC_NOT_FOUND',
   'DOCUMENT_NOT_FOUND',
   'REPORT_NOT_FOUND',
   'INVALID_DOCUMENT_NAME',

@@ -1,8 +1,10 @@
 import { BoardError } from '../../../src/core/errors.js';
 import {
+  DONE_STATUS,
   assertKnownStatus,
   assertNoOrphanedStatuses,
   findOrphanedStatuses,
+  isDone,
   isKnownStatus,
 } from '../../../src/core/rules/status.js';
 
@@ -88,4 +90,18 @@ describe('orphaned statuses', () => {
     expect(message).toContain('12 tasks');
     expect(message.split('\n').length).toBeLessThanOrEqual(4);
   });
+});
+
+describe('a task is done when its status is literally done (ADR-0032 §5, Q7)', () => {
+  it('is the status done', () => {
+    expect(DONE_STATUS).toBe('done');
+    expect(isDone({ status: 'done' })).toBe(true);
+  });
+
+  it.each(['Done', 'DONE', ' done', 'done ', 'closed', 'shipped', 'cancelled', 'in-progress', ''])(
+    'is not %p: no other status counts as done',
+    (status) => {
+      expect(isDone({ status })).toBe(false);
+    },
+  );
 });

@@ -2,6 +2,10 @@ import { BoardError } from '../../src/core/errors.js';
 import { taskSchema } from '../../src/core/model/index.js';
 import type { NewTask, Storage } from '../../src/core/ports.js';
 
+/** The counters of topics and blocks as a person could leave them, or a stored value. */
+export type SequenceState =
+  'missing' | 'invalid' | { topicSequence: number; blockSequence: number };
+
 /**
  * One suite, every provider. It describes the behaviour of the Storage port and knows
  * nothing about files, YAML or memory. A new provider must pass it unchanged.
@@ -18,6 +22,13 @@ export interface StorageHarness {
    * between the two writes (ADR-0030 R3). Only the provider knows what that looks like.
    */
   strandMarkdown(storage: Storage, taskId: string, number: number, markdown: string): Promise<void>;
+  /**
+   * What a person can do to topics by hand, and no method of the port does (ADR-0032 §2): delete
+   * one, make one unreadable (and repair it again), and lose or rewind the counters.
+   */
+  removeTopic(storage: Storage, topicId: string): Promise<void>;
+  breakTopic(storage: Storage, topicId: string): Promise<() => Promise<void>>;
+  setSequence(storage: Storage, state: SequenceState): Promise<void>;
 }
 
 const newTask = (over: Partial<NewTask> = {}): NewTask => ({
@@ -187,6 +198,234 @@ export function runStorageConformance(harness: StorageHarness): void {
         const created = await storage.createTask(newTask());
         await storage.init();
         expect(await storage.listTasks()).toEqual([created]);
+      });
+    });
+
+    describe('topic and block ids (ADR-0032 §2)', () => {
+      const topic = (title = 'M1 Core'): { title: string; body: string } => ({ title, body: '' });
+
+      /** P1 with K1, K2 and P2 with K3: the highest topic and the highest block are in P2. */
+      async function twoTopics(provider: Storage = storage): Promise<void> {
+        const first = await provider.createTopic(topic('first'));
+        await provider.createBlock(first.id, { title: 'one' });
+        await provider.createBlock(first.id, { title: 'two' });
+        const second = await provider.createTopic(topic('second'));
+        await provider.createBlock(second.id, { title: 'three' });
+      }
+
+      it('numbers topics P1, P2 and blocks K1, K2, globally and each on its own', async () => {
+        const first = await storage.createTopic(topic());
+        const k1 = await storage.createBlock(first.id, { title: 'A' });
+        const k2 = await storage.createBlock(first.id, { title: 'B' });
+        const second = await storage.createTopic(topic('Revalidation'));
+        const k3 = await storage.createBlock(second.id, { title: 'C' });
+        expect([first.id, second.id]).toEqual(['P1', 'P2']);
+        expect([k1.id, k2.id, k3.id]).toEqual(['K1', 'K2', 'K3']);
+        expect(first).toEqual({ id: 'P1', title: 'M1 Core', body: '', blocks: [] });
+        expect(k1).toEqual({ id: 'K1', title: 'A' });
+      });
+
+      it('does not use the task id prefix or the task sequence', async () => {
+        const provider = await open({ idPrefix: 'F' });
+        await provider.createTask(newTask());
+        await provider.createTask(newTask());
+        expect((await provider.createTopic(topic())).id).toBe('P1');
+        expect((await provider.createTask(newTask())).id).toBe('F3');
+      });
+
+      it('never reuses the id of the highest topic and block once deleted (INVARIANT)', async () => {
+        await twoTopics();
+        await harness.removeTopic(storage, 'P2');
+        const next = await storage.createTopic(topic());
+        expect(next.id).toBe('P3');
+        expect((await storage.createBlock('P1', { title: 'four' })).id).toBe('K4');
+      });
+
+      it('keeps the counters across a reopen (INVARIANT)', async () => {
+        await twoTopics();
+        await harness.removeTopic(storage, 'P2');
+        const reopened = await reopen(storage);
+        expect((await reopened.createTopic(topic())).id).toBe('P3');
+        expect((await reopened.createBlock('P1', { title: 'four' })).id).toBe('K4');
+      });
+
+      it.each(['missing', 'invalid'] as const)(
+        'recovers %s counters from the topics and blocks that exist',
+        async (state) => {
+          await twoTopics();
+          await harness.setSequence(storage, state);
+          const reopened = await reopen(storage);
+          expect((await reopened.createBlock('P1', { title: 'four' })).id).toBe('K4');
+          expect((await reopened.createTopic(topic())).id).toBe('P3');
+        },
+      );
+
+      it('goes on from the highest existing id when the counters are behind it', async () => {
+        await twoTopics();
+        await harness.setSequence(storage, { topicSequence: 1, blockSequence: 0 });
+        expect((await storage.createTopic(topic())).id).toBe('P3');
+        expect((await storage.createBlock('P1', { title: 'four' })).id).toBe('K4');
+      });
+
+      it('writes the counters back after recovering them: a later delete reuses nothing', async () => {
+        await twoTopics();
+        await harness.setSequence(storage, 'missing');
+        expect((await storage.createTopic(topic())).id).toBe('P3');
+        await harness.removeTopic(storage, 'P3');
+        await harness.removeTopic(storage, 'P2');
+        expect((await storage.createTopic(topic())).id).toBe('P4');
+        expect((await storage.createBlock('P1', { title: 'four' })).id).toBe('K4');
+      });
+
+      it('gives concurrent creates different ids and loses no block (INVARIANT)', async () => {
+        const topics = await Promise.all(
+          Array.from({ length: 10 }, (_, i) => storage.createTopic(topic(`T${i}`))),
+        );
+        expect(new Set(topics.map((t) => t.id)).size).toBe(10);
+
+        const blocks = await Promise.all(
+          Array.from({ length: 20 }, (_, i) =>
+            storage.createBlock(i % 2 === 0 ? 'P1' : 'P2', { title: `B${i}` }),
+          ),
+        );
+        const ids = blocks.map((block) => block.id);
+        expect(new Set(ids).size).toBe(20);
+        // Every block was appended to its topic: none was written over by another.
+        const held = [
+          ...((await storage.getTopic('P1'))?.blocks ?? []),
+          ...((await storage.getTopic('P2'))?.blocks ?? []),
+        ];
+        expect(held.map((block) => block.id).sort()).toEqual([...ids].sort());
+        expect((await storage.createBlock('P1', { title: 'last' })).id).toBe('K21');
+      });
+
+      it('appends a block to the end of its topic, in order', async () => {
+        const created = await storage.createTopic(topic());
+        await storage.createBlock(created.id, { title: 'first' });
+        await storage.createBlock(created.id, { title: 'second' });
+        const other = await storage.createTopic(topic('other'));
+        expect(await storage.createBlock(other.id, { title: 'x' })).toEqual({
+          id: 'K3',
+          title: 'x',
+        });
+        expect(await storage.getTopic(created.id)).toEqual({
+          id: 'P1',
+          title: 'M1 Core',
+          body: '',
+          blocks: [
+            { id: 'K1', title: 'first' },
+            { id: 'K2', title: 'second' },
+          ],
+        });
+        expect((await storage.getTopic(other.id))?.blocks).toEqual([{ id: 'K3', title: 'x' }]);
+      });
+
+      it('keeps a topic and its blocks across a reopen', async () => {
+        const created = await storage.createTopic({ title: 'M1', body: '## Goal\n\nShip it.\n' });
+        await storage.createBlock(created.id, { title: 'A' });
+        const reopened = await reopen(storage);
+        expect(await reopened.getTopic(created.id)).toEqual({
+          id: 'P1',
+          title: 'M1',
+          body: '## Goal\n\nShip it.\n',
+          blocks: [{ id: 'K1', title: 'A' }],
+        });
+      });
+
+      it('returns null for a topic that does not exist or is not a topic id', async () => {
+        expect(await storage.getTopic('P1')).toBeNull();
+        expect(await storage.getTopic('T1')).toBeNull();
+        expect(await storage.getTopic('../P1')).toBeNull();
+      });
+
+      it('refuses a block for a topic that does not exist, and allocates nothing', async () => {
+        await expectCode(storage.createBlock('P9', { title: 'x' }), 'TOPIC_NOT_FOUND');
+        await expectCode(storage.createBlock('T1', { title: 'x' }), 'TOPIC_NOT_FOUND');
+        await expectCode(storage.createBlock('../P1', { title: 'x' }), 'TOPIC_NOT_FOUND');
+        const created = await storage.createTopic(topic());
+        expect((await storage.createBlock(created.id, { title: 'x' })).id).toBe('K1');
+      });
+
+      describe('fail-closed when the counters are lost (O-1, INVARIANT)', () => {
+        beforeEach(async () => {
+          await twoTopics();
+          await storage.createTask(newTask());
+        });
+
+        it.each(['missing', 'invalid'] as const)(
+          'refuses to create a topic or a block when the counters are %s and a topic cannot be read',
+          async (state) => {
+            await harness.breakTopic(storage, 'P2');
+            await harness.setSequence(storage, state);
+            await expectCode(storage.createTopic(topic()), 'ID_SEQUENCE_UNRECOVERABLE');
+            await expectCode(
+              storage.createBlock('P1', { title: 'four' }),
+              'ID_SEQUENCE_UNRECOVERABLE',
+            );
+          },
+        );
+
+        it('says which file is the reason', async () => {
+          await harness.breakTopic(storage, 'P2');
+          await harness.setSequence(storage, 'missing');
+          const error = await storage.createTopic(topic()).catch((e: unknown) => e);
+          expect(error).toBeInstanceOf(BoardError);
+          expect((error as BoardError).details).toMatchObject({
+            files: [expect.stringContaining('P2')],
+          });
+        });
+
+        it('keeps the rest of the board working', async () => {
+          await harness.breakTopic(storage, 'P2');
+          await harness.setSequence(storage, 'missing');
+          await expectCode(storage.createTopic(topic()), 'ID_SEQUENCE_UNRECOVERABLE');
+          expect((await storage.getTopic('P1'))?.blocks.map((b) => b.id)).toEqual(['K1', 'K2']);
+          expect(await storage.getTopic('P2')).toBeNull();
+          expect((await storage.listTasks()).map((t) => t.id)).toEqual(['T1']);
+          expect(await storage.getTask('T1')).not.toBeNull();
+          await expect(storage.readIssues()).resolves.toBeInstanceOf(Array);
+          const task = await storage.createTask(newTask());
+          expect(task.id).toBe('T2');
+          await storage.updateTask(task.id, { status: 'done' });
+          await storage.writeDocument(task.id, 'plan.md', '# Plan\n');
+          expect(await storage.readDocument(task.id, 'plan.md')).toBe('# Plan\n');
+        });
+
+        it('creates again once the topic can be read, and reuses no id', async () => {
+          const repair = await harness.breakTopic(storage, 'P2');
+          await harness.setSequence(storage, 'missing');
+          await expectCode(storage.createTopic(topic()), 'ID_SEQUENCE_UNRECOVERABLE');
+          await repair();
+          expect((await storage.createTopic(topic())).id).toBe('P3');
+          expect((await storage.createBlock('P1', { title: 'four' })).id).toBe('K4');
+        });
+
+        it('does not stop creation when the counters are valid', async () => {
+          await harness.breakTopic(storage, 'P2');
+          expect((await storage.createTopic(topic())).id).toBe('P3');
+          expect((await storage.createBlock('P1', { title: 'four' })).id).toBe('K4');
+        });
+
+        it('does not stop creation when the counters are lost but every topic can be read', async () => {
+          await harness.setSequence(storage, 'missing');
+          expect((await storage.createTopic(topic())).id).toBe('P3');
+        });
+
+        it('does not write a block into a topic it cannot read', async () => {
+          const repair = await harness.breakTopic(storage, 'P2');
+          await expectCode(storage.createBlock('P2', { title: 'x' }), 'TOPIC_NOT_FOUND');
+          await repair();
+          expect((await storage.getTopic('P2'))?.blocks.map((b) => b.id)).toEqual(['K3']);
+        });
+
+        it('writes nothing when it refuses', async () => {
+          await harness.breakTopic(storage, 'P2');
+          await harness.setSequence(storage, 'missing');
+          await expectCode(storage.createBlock('P1', { title: 'x' }), 'ID_SEQUENCE_UNRECOVERABLE');
+          await expectCode(storage.createTopic(topic()), 'ID_SEQUENCE_UNRECOVERABLE');
+          expect((await storage.getTopic('P1'))?.blocks.map((b) => b.id)).toEqual(['K1', 'K2']);
+          expect(await storage.getTopic('P3')).toBeNull();
+        });
       });
     });
 

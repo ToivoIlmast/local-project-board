@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isTaskIdPrefix } from '../rules/ids.js';
+import { isReservedTaskIdPrefix, isTaskIdPrefix } from '../rules/ids.js';
 
 export const statusesSchema = z
   .array(z.string().min(1))
@@ -8,7 +8,12 @@ export const statusesSchema = z
 
 export const taskIdPrefixSchema = z
   .string()
-  .refine(isTaskIdPrefix, 'Must be 1–10 upper-case letters, e.g. "T"');
+  .refine(isTaskIdPrefix, 'Must be 1–10 upper-case letters, e.g. "T"')
+  .refine((prefix) => !isReservedTaskIdPrefix(prefix), {
+    error: ({ input }) =>
+      `"${String(input)}" is the prefix of topic (P) or block (K) ids: a task id like ` +
+      `${String(input)}3 could not be told from one of them. Choose another prefix, e.g. "T".`,
+  });
 
 export const projectSchema = z.strictObject({
   name: z.string().min(1),

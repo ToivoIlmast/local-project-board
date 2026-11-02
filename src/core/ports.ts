@@ -1,6 +1,7 @@
 import type { BoardEvent } from './events.js';
 import type {
   AiRun,
+  Block,
   Check,
   CheckBegin,
   CheckEnd,
@@ -18,6 +19,7 @@ import type {
   Task,
   TaskVersion,
   TaskWorkflowOverrides,
+  Topic,
   WorkflowOverrides,
 } from './model/index.js';
 
@@ -77,6 +79,16 @@ export type NewCheckEnd = Omit<CheckEnd, 'taskId' | 'check' | 'endedAt'> & {
 export type NewDecision = Omit<Decision, 'taskId' | 'check' | 'number' | 'createdAt'> & {
   createdAt?: string | undefined;
 };
+
+/** A topic as the caller describes it; the provider assigns the id, and it has no blocks yet. */
+export interface NewTopic {
+  title: string;
+  body: string;
+}
+
+export interface NewBlock {
+  title: string;
+}
 
 export interface NewReport {
   title: string;
@@ -156,6 +168,18 @@ export interface Storage {
   readCheckMarkdown(taskId: string, number: number): Promise<string | null>;
   /** Refuses with `CHECK_NOT_FOUND`; whether it may be decided on is the caller's rule. */
   appendDecision(taskId: string, number: number, input: NewDecision): Promise<Decision>;
+
+  /**
+   * Topics and blocks (ADR-0032 §2–3). Their ids are global, monotonic and never reused, each
+   * kind with a counter of its own, kept apart from the tasks'. A lost counter is recovered from
+   * the ids that exist; when a topic cannot be read as well, creating a topic or a block refuses
+   * with `ID_SEQUENCE_UNRECOVERABLE` and writes nothing (O-1). A topic that does not exist or
+   * cannot be read is null, and a block for it is `TOPIC_NOT_FOUND`.
+   */
+  getTopic(id: string): Promise<Topic | null>;
+  createTopic(input: NewTopic): Promise<Topic>;
+  /** Appends the block to the end of its topic's blocks. */
+  createBlock(topicId: string, input: NewBlock): Promise<Block>;
 
   listReports(): Promise<Report[]>;
   readReport(id: string): Promise<string | null>;

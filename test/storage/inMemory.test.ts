@@ -8,6 +8,12 @@ import {
 
 const stores = new Map<Storage, MemoryStore>();
 
+function storeOf(storage: Storage): MemoryStore {
+  const store = stores.get(storage);
+  if (!store) throw new Error('Unknown storage instance');
+  return store;
+}
+
 describe('in-memory storage', () => {
   it('drops the documents of a deleted task', async () => {
     const store = createMemoryStore();
@@ -45,6 +51,21 @@ runStorageConformance({
     const check = stores.get(storage)?.history.get(taskId)?.checks.get(number);
     if (check === undefined) throw new Error('Unknown check');
     check.markdown = markdown;
+  },
+  removeTopic: async (storage, topicId) => {
+    storeOf(storage).topics.delete(topicId);
+  },
+  breakTopic: async (storage, topicId) => {
+    const store = storeOf(storage);
+    const topic = store.topics.get(topicId);
+    if (!topic) throw new Error('Unknown topic');
+    store.topics.set(topicId, null);
+    return async () => {
+      store.topics.set(topicId, topic);
+    };
+  },
+  setSequence: async (storage, state) => {
+    storeOf(storage).topicSequence = typeof state === 'string' ? null : { ...state };
   },
   cleanup: async () => {
     stores.clear();
