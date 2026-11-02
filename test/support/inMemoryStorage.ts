@@ -170,7 +170,10 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
 
     listTasks: async () => [...store.tasks.values()],
     /** Memory cannot hold an unreadable task; the board it backs never has read problems. */
-    readIssues: async () => [],
+    readIssues: async () =>
+      [...store.topics]
+        .filter(([, topic]) => topic === null)
+        .map(([id]) => ({ file: `topics/${id}/topic.md`, message: 'The file cannot be read.' })),
     getTask: async (id) => store.tasks.get(id) ?? null,
 
     createTask: async (input: NewTask) => {

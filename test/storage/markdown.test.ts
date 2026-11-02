@@ -45,6 +45,12 @@ runStorageConformance({
     await writeFile(file, 'A topic.md without frontmatter.\n', 'utf8');
     return () => writeFile(file, text, 'utf8');
   },
+  addTopicField: async (storage, topicId, key, value) => {
+    const file = join(topicsDirOf(storage), topicId, 'topic.md');
+    const text = await readFile(file, 'utf8');
+    const line = `${key}: ${JSON.stringify(value)}\n`;
+    await writeFile(file, text.replace(/\n---\n/, `\n${line}---\n`), 'utf8');
+  },
   setSequence: async (storage, state) => {
     const file = join(topicsDirOf(storage), 'sequence.json');
     if (state === 'missing') await rm(file, { force: true });
@@ -1106,13 +1112,29 @@ describe('markdown storage: topics, blocks and their counters (ADR-0032 §2–3)
     expect((await storage.getTopic('P1'))?.id).toBe('P1');
   });
 
-  it('refuses a topic.md with a field it does not know, rather than drop it on a write', async () => {
-    const topic = await storage.createTopic({ title: 'M1', body: '' });
+  it('keeps a field it does not know in topic.md through a write, as written (INVARIANT)', async () => {
+    const topic = await storage.createTopic({ title: 'M1', body: 'Body.\n' });
     const file = join(topicsDir(), 'P1', 'topic.md');
-    const text = (await readFile(file, 'utf8')).replace('title: M1', 'title: M1\nowner: me');
+    const text = (await readFile(file, 'utf8')).replace(
+      'title: M1',
+      'title: M1\nowner: me\nlinks:\n  - a\n  - b',
+    );
     await writeFile(file, text, 'utf8');
-    expect(await storage.getTopic(topic.id)).toBeNull();
-    expect(await refusal(storage.createBlock(topic.id, { title: 'A' }))).toBe('TOPIC_NOT_FOUND');
-    expect(await readFile(file, 'utf8')).toBe(text);
+    expect((await storage.getTopic(topic.id))?.extra).toEqual({ owner: 'me', links: ['a', 'b'] });
+    await storage.createBlock(topic.id, { title: 'A' });
+    const written = await readFile(file, 'utf8');
+    expect(written).toContain('owner: me');
+    expect(written).toContain('links:\n  - a\n  - b');
+    expect(written).toContain('Body.\n');
+    expect(await storage.readIssues()).toEqual([]);
+  });
+
+  it('reads an id, title or blocks of the wrong shape as unreadable, not as extra', async () => {
+    await storage.createTopic({ title: 'M1', body: '' });
+    const file = join(topicsDir(), 'P1', 'topic.md');
+    await writeFile(file, '---\ntitle: M1\nblocks: nope\nowner: me\n---\n', 'utf8');
+    expect(await storage.getTopic('P1')).toBeNull();
+    expect((await storage.readIssues()).map((issue) => issue.file)).toEqual(['topics/P1/topic.md']);
+    expect(await readFile(file, 'utf8')).toBe('---\ntitle: M1\nblocks: nope\nowner: me\n---\n');
   });
 });

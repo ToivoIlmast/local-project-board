@@ -28,6 +28,8 @@ export interface StorageHarness {
    */
   removeTopic(storage: Storage, topicId: string): Promise<void>;
   breakTopic(storage: Storage, topicId: string): Promise<() => Promise<void>>;
+  /** Adds a field of the person's own to a topic, as editing topic.md by hand would. */
+  addTopicField(storage: Storage, topicId: string, key: string, value: unknown): Promise<void>;
   setSequence(storage: Storage, state: SequenceState): Promise<void>;
 }
 
@@ -344,6 +346,62 @@ export function runStorageConformance(harness: StorageHarness): void {
         await expectCode(storage.createBlock('../P1', { title: 'x' }), 'TOPIC_NOT_FOUND');
         const created = await storage.createTopic(topic());
         expect((await storage.createBlock(created.id, { title: 'x' })).id).toBe('K1');
+      });
+
+      describe('reading a topic back (T81)', () => {
+        it('keeps a field of its own that the board does not know, whole (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          const value = { team: ['a', 'b'], n: 3 };
+          await harness.addTopicField(storage, created.id, 'owner', value);
+          expect((await storage.getTopic(created.id))?.extra).toEqual({ owner: value });
+        });
+
+        it('does not drop an unknown field when a block is added (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          await harness.addTopicField(storage, created.id, 'owner', 'me');
+          await storage.createBlock(created.id, { title: 'A' });
+          const reopened = await reopen(storage);
+          const read = await reopened.getTopic(created.id);
+          expect(read?.extra).toEqual({ owner: 'me' });
+          expect(read?.blocks).toEqual([{ id: 'K1', title: 'A' }]);
+          expect(read?.title).toBe('M1 Core');
+        });
+
+        it('has no extra for a topic without unknown fields', async () => {
+          const created = await storage.createTopic(topic());
+          expect(created).not.toHaveProperty('extra');
+          expect(await storage.getTopic(created.id)).not.toHaveProperty('extra');
+        });
+
+        it('gives every block of every topic an id of its own (INVARIANT)', async () => {
+          await twoTopics();
+          const third = await storage.createTopic(topic('third'));
+          await storage.createBlock(third.id, { title: 'x' });
+          const blocks = await Promise.all(
+            ['P1', 'P2', 'P3'].map(async (id) => (await storage.getTopic(id))?.blocks ?? []),
+          );
+          const all = blocks.flat().map((block) => block.id);
+          expect(all).toEqual(['K1', 'K2', 'K3', 'K4']);
+          expect(new Set(all).size).toBe(all.length);
+        });
+
+        it('reports a topic it cannot read in readIssues, and stops when it is repaired', async () => {
+          await twoTopics();
+          expect(await storage.readIssues()).toEqual([]);
+          const repair = await harness.breakTopic(storage, 'P2');
+          const issues = await storage.readIssues();
+          expect(issues.map((issue) => issue.file)).toEqual(['topics/P2/topic.md']);
+          expect(issues[0]?.message).not.toBe('');
+          await repair();
+          expect(await storage.readIssues()).toEqual([]);
+        });
+
+        it('leaves the other topics readable beside one it cannot read', async () => {
+          await twoTopics();
+          await harness.breakTopic(storage, 'P2');
+          expect((await storage.getTopic('P1'))?.blocks.map((b) => b.id)).toEqual(['K1', 'K2']);
+          expect(await storage.getTopic('P2')).toBeNull();
+        });
       });
 
       describe('fail-closed when the counters are lost (O-1, INVARIANT)', () => {

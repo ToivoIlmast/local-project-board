@@ -63,7 +63,7 @@ interface TopicScan {
   topics: Map<string, Topic>;
   topicIds: string[];
   blockIds: string[];
-  unreadable: string[];
+  unreadable: ReadIssue[];
 }
 
 const STATE_FILE = 'board.json';
@@ -178,7 +178,10 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
         scan.topics.set(entry.name, result.topic);
         scan.blockIds.push(...result.topic.blocks.map((block) => block.id));
       } else {
-        scan.unreadable.push(`topics/${entry.name}/${TOPIC_FILE}`);
+        scan.unreadable.push({
+          file: `topics/${entry.name}/${TOPIC_FILE}`,
+          message: result.error,
+        });
       }
     }
     return scan;
@@ -198,7 +201,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       prefix,
       (isTopic ? stored?.topicSequence : stored?.blockSequence) ?? null,
       isTopic ? scan.topicIds : scan.blockIds,
-      scan.unreadable,
+      scan.unreadable.map((issue) => issue.file),
     );
     const carried = (other: string, value: number | undefined, ids: string[]): number =>
       Math.max(value ?? 0, highestIdNumber(other, ids));
@@ -318,6 +321,8 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
         }
         issues.push(...(await history.issues(id)));
       }
+      const unreadableTopics = (await scanTopics()).unreadable;
+      for (const { file, message } of unreadableTopics) issues.push({ file, message });
       const workflow = await readWorkflowFile();
       if (workflow !== null && 'error' in workflow) {
         issues.push({ file: WORKFLOW_FILE, message: workflow.error });
