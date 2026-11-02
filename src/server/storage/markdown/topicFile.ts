@@ -1,16 +1,19 @@
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { topicSchema, type Topic } from '../../../core/model/index.js';
 
+/** Fields the board owns; anything else in the frontmatter is the user's and is kept as `extra`. */
+const KNOWN = ['id', 'title', 'blocks'];
+
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
 export function serializeTopic(topic: Topic): string {
-  const { body, ...fields } = topic;
-  return `---\n${stringifyYaml(fields, { lineWidth: 0 })}---\n${body}`;
+  const { body, extra, ...fields } = topic;
+  return `---\n${stringifyYaml({ ...fields, ...extra }, { lineWidth: 0 })}---\n${body}`;
 }
 
 /**
  * Returns the topic, or a reason why the file cannot be read as one (never throws). A field the
- * board does not know makes the file unreadable for now, so a write never drops it.
+ * board does not know is kept in `extra`, so a write never drops it.
  */
 export function parseTopic(id: string, text: string): { topic: Topic } | { error: string } {
   const match = FRONTMATTER.exec(text);
@@ -27,7 +30,14 @@ export function parseTopic(id: string, text: string): { topic: Topic } | { error
   }
 
   // The directory name is the id: the file may disagree, the layout may not.
-  const candidate = { ...frontmatter, id, body: text.slice(match[0].length) };
+  const fields = frontmatter as Record<string, unknown>;
+  const extra = Object.fromEntries(Object.entries(fields).filter(([key]) => !KNOWN.includes(key)));
+  const candidate = {
+    ...Object.fromEntries(Object.entries(fields).filter(([key]) => KNOWN.includes(key))),
+    id,
+    body: text.slice(match[0].length),
+    ...(Object.keys(extra).length > 0 ? { extra } : {}),
+  };
   const result = topicSchema.safeParse(candidate);
   if (!result.success) {
     const issue = result.error.issues[0];

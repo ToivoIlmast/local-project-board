@@ -17,6 +17,8 @@ export const topicSchema = z.strictObject({
   /** Markdown. */
   body: z.string(),
   blocks: z.array(blockSchema),
+  /** Frontmatter fields the board does not know: the user's, kept and written back as they were. */
+  extra: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type Block = z.infer<typeof blockSchema>;

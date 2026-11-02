@@ -64,6 +64,11 @@ runStorageConformance({
       store.topics.set(topicId, topic);
     };
   },
+  addTopicField: async (storage, topicId, key, value) => {
+    const topic = storeOf(storage).topics.get(topicId);
+    if (!topic) throw new Error('Unknown topic');
+    topic.extra = { ...topic.extra, [key]: value };
+  },
   setSequence: async (storage, state) => {
     storeOf(storage).topicSequence = typeof state === 'string' ? null : { ...state };
   },
