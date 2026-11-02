@@ -5,3 +5,4 @@ coverage/
 .board/
 test-results/
 playwright-report/
+docs/notes/
