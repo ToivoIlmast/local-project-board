@@ -1,5 +1,12 @@
 import { BoardError } from '../errors.js';
 
+/** The one status that means done; no other counts, however it is named (ADR-0032 §5, Q7). */
+export const DONE_STATUS = 'done';
+
+export function isDone(task: { status: string }): boolean {
+  return task.status === DONE_STATUS;
+}
+
 export function isKnownStatus(status: string, statuses: readonly string[]): boolean {
   return statuses.includes(status);
 }

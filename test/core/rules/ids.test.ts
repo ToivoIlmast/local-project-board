@@ -1,12 +1,18 @@
 import { BoardError } from '../../../src/core/errors.js';
 import {
+  BLOCK_ID_PREFIX,
   REPORT_ID_PREFIX,
+  TOPIC_ID_PREFIX,
   allocateId as allocate,
+  allocateRecoverableId,
   highestIdNumber,
   idNumber,
+  isBlockId,
   isReportId,
+  isReservedTaskIdPrefix,
   isTaskId,
   isTaskIdPrefix,
+  isTopicId,
   nextIdAfter,
 } from '../../../src/core/rules/ids.js';
 
@@ -116,5 +122,114 @@ describe('report ids', () => {
     expect(isReportId('R3')).toBe(true);
     expect(isReportId('T3')).toBe(false);
     expect(isReportId('R0')).toBe(false);
+  });
+});
+
+describe('topic and block ids (ADR-0032 §2)', () => {
+  it('use the fixed prefixes P and K', () => {
+    expect(TOPIC_ID_PREFIX).toBe('P');
+    expect(BLOCK_ID_PREFIX).toBe('K');
+    expect(nextIdAfter(TOPIC_ID_PREFIX, 0)).toBe('P1');
+    expect(nextIdAfter(BLOCK_ID_PREFIX, 41)).toBe('K42');
+  });
+
+  it.each(['P1', 'P42', 'P999999999'])('accepts topic id %p', (id) => {
+    expect(isTopicId(id)).toBe(true);
+    expect(isBlockId(id)).toBe(false);
+  });
+
+  it.each(['K1', 'K42', 'K999999999'])('accepts block id %p', (id) => {
+    expect(isBlockId(id)).toBe(true);
+    expect(isTopicId(id)).toBe(false);
+  });
+
+  it.each(['', 'P', 'P0', 'P01', 'p1', 'PK1', 'T1', 'P1 ', '../P1', 'P1234567890'])(
+    'rejects %p as a topic id (ids are directory names)',
+    (id) => {
+      expect(isTopicId(id)).toBe(false);
+    },
+  );
+
+  it.each(['', 'K', 'K0', 'K01', 'k1', 'KP1', 'T1', 'K1/x', 'K1234567890'])(
+    'rejects %p as a block id',
+    (id) => {
+      expect(isBlockId(id)).toBe(false);
+    },
+  );
+});
+
+describe('reserved task id prefixes (ADR-0032 §2, INVARIANT)', () => {
+  it.each(['P', 'K'])('reserves %p: a task id would look like a topic or a block id', (prefix) => {
+    expect(isReservedTaskIdPrefix(prefix)).toBe(true);
+    // The reason: the task id pattern cannot tell them apart.
+    expect(isTaskId(`${prefix}3`)).toBe(true);
+  });
+
+  it.each(['T', 'F', 'R', 'PK', 'KP', 'PP', 'KK', 'p', 'k'])('does not reserve %p', (prefix) => {
+    expect(isReservedTaskIdPrefix(prefix)).toBe(false);
+  });
+});
+
+describe('allocateRecoverableId: counters that can be lost (ADR-0032 §2, O-1)', () => {
+  it('continues the stored counter', () => {
+    expect(allocateRecoverableId('P', 3, ['P1'], [])).toEqual({ id: 'P4', sequence: 4 });
+  });
+
+  it('does not reuse the highest id after it was deleted (INVARIANT)', () => {
+    const first = allocateRecoverableId('K', 2, ['K1', 'K2'], []);
+    expect(first.id).toBe('K3');
+    // K3 is deleted; the counter remembers it.
+    expect(allocateRecoverableId('K', first.sequence, ['K1', 'K2'], []).id).toBe('K4');
+  });
+
+  it('is monotonic over a long run of creates and deletes', () => {
+    const seen = new Set<string>();
+    let state = { sequence: 0, ids: [] as string[] };
+    for (let i = 0; i < 50; i++) {
+      const { id, sequence } = allocateRecoverableId('P', state.sequence, state.ids, []);
+      expect(seen.has(id)).toBe(false);
+      expect(sequence).toBeGreaterThan(state.sequence);
+      seen.add(id);
+      const ids = [...state.ids, id];
+      state = { sequence, ids: i % 2 === 0 ? ids.slice(0, -1) : ids };
+    }
+  });
+
+  it('takes the highest existing id when the counter is behind it', () => {
+    expect(allocateRecoverableId('P', 1, ['P1', 'P7'], []).id).toBe('P8');
+  });
+
+  it('recovers a missing counter from the ids that exist', () => {
+    expect(allocateRecoverableId('K', null, ['K2', 'K5', 'T9', 'P6'], [])).toEqual({
+      id: 'K6',
+      sequence: 6,
+    });
+    expect(allocateRecoverableId('P', null, [], []).id).toBe('P1');
+  });
+
+  it('refuses when the counter is lost and a topic cannot be read (fail-closed, INVARIANT)', () => {
+    const unreadable = ['topics/P2/topic.md'];
+    const attempt = (): unknown => allocateRecoverableId('K', null, ['K1'], unreadable);
+    expect(attempt).toThrow(BoardError);
+    try {
+      attempt();
+    } catch (error) {
+      expect((error as BoardError).code).toBe('ID_SEQUENCE_UNRECOVERABLE');
+      expect((error as BoardError).details).toMatchObject({ files: unreadable });
+      // The message says what is wrong and what to do about it.
+      expect((error as BoardError).message).toContain('topics/P2/topic.md');
+      expect((error as BoardError).message).toContain('sequence.json');
+    }
+  });
+
+  it('refuses for topics as for blocks: either id could repeat', () => {
+    expect(() => allocateRecoverableId('P', null, ['P1'], ['topics/P1/topic.md'])).toThrow(
+      BoardError,
+    );
+  });
+
+  it('does not refuse an unreadable topic when the counter is there', () => {
+    expect(allocateRecoverableId('K', 4, ['K1'], ['topics/P2/topic.md']).id).toBe('K5');
+    expect(allocateRecoverableId('P', 0, [], ['topics/P2/topic.md']).id).toBe('P1');
   });
 });

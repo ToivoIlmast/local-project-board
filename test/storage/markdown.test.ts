@@ -36,8 +36,29 @@ runStorageConformance({
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, `${number}.report.md`), markdown, { encoding: 'utf8', flag: 'wx' });
   },
+  removeTopic: async (storage, topicId) => {
+    await rm(join(topicsDirOf(storage), topicId), { recursive: true, force: true });
+  },
+  breakTopic: async (storage, topicId) => {
+    const file = join(topicsDirOf(storage), topicId, 'topic.md');
+    const text = await readFile(file, 'utf8');
+    await writeFile(file, 'A topic.md without frontmatter.\n', 'utf8');
+    return () => writeFile(file, text, 'utf8');
+  },
+  setSequence: async (storage, state) => {
+    const file = join(topicsDirOf(storage), 'sequence.json');
+    if (state === 'missing') await rm(file, { force: true });
+    else if (state === 'invalid') await writeFile(file, '{ "topicSequence": ', 'utf8');
+    else await writeFile(file, JSON.stringify({ formatVersion: 1, ...state }), 'utf8');
+  },
   cleanup: cleanTmpDirs,
 });
+
+function topicsDirOf(storage: Storage): string {
+  const options = roots.get(storage);
+  if (!options) throw new Error('Unknown storage instance');
+  return join(options.root, '.board', 'topics');
+}
 
 describe('markdown storage on disk', () => {
   let root: string;
@@ -928,5 +949,170 @@ describe('markdown storage: the history of a task (ADR-0030)', () => {
       'plan.md',
       'task.md',
     ]);
+  });
+});
+
+describe('markdown storage: topics, blocks and their counters (ADR-0032 §2–3)', () => {
+  let root: string;
+  let storage: Storage;
+  const topicsDir = (): string => join(root, '.board', 'topics');
+  const sequenceFile = (): string => join(topicsDir(), 'sequence.json');
+
+  beforeEach(async () => {
+    root = await tmpDir();
+    storage = markdownStorage({ root });
+    await storage.init();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await cleanTmpDirs();
+  });
+
+  async function exists(file: string): Promise<boolean> {
+    return stat(file).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  async function refusal(action: Promise<unknown>): Promise<string | undefined> {
+    return action.then(
+      () => undefined,
+      (error: unknown) => (error as { code?: string }).code,
+    );
+  }
+
+  it('keeps the counters in topics/sequence.json, apart from board.json (INVARIANT)', async () => {
+    await storage.createTask({ title: 't', status: 'todo', rank: 'a0', body: '', labels: [] });
+    const topic = await storage.createTopic({ title: 'M1', body: '' });
+    await storage.createBlock(topic.id, { title: 'A' });
+    await storage.createBlock(topic.id, { title: 'B' });
+
+    expect(JSON.parse(await readFile(sequenceFile(), 'utf8'))).toEqual({
+      formatVersion: 1,
+      topicSequence: 1,
+      blockSequence: 2,
+    });
+    const state = JSON.parse(await readFile(join(root, '.board', 'board.json'), 'utf8'));
+    expect(Object.keys(state).sort()).toEqual(['formatVersion', 'reportSequence', 'taskSequence']);
+  });
+
+  it('writes a topic as topics/P<n>/topic.md with its ordered blocks', async () => {
+    const topic = await storage.createTopic({ title: 'M1 Core', body: '## Goal\n' });
+    await storage.createBlock(topic.id, { title: 'Storage' });
+    await storage.createBlock(topic.id, { title: 'API' });
+    const text = await readFile(join(topicsDir(), 'P1', 'topic.md'), 'utf8');
+    expect(text.startsWith('---\n')).toBe(true);
+    expect(text).toContain('title: M1 Core');
+    expect(text.indexOf('K1')).toBeLessThan(text.indexOf('K2'));
+    expect(text).not.toMatch(/^status:/m);
+    expect(text.endsWith('---\n## Goal\n')).toBe(true);
+  });
+
+  it('leaves no temporary file behind', async () => {
+    const topic = await storage.createTopic({ title: 'M1', body: '' });
+    await Promise.all(
+      Array.from({ length: 5 }, (_, i) => storage.createBlock(topic.id, { title: `B${i}` })),
+    );
+    expect((await readdir(topicsDir())).sort()).toEqual(['P1', 'sequence.json']);
+    expect(await readdir(join(topicsDir(), 'P1'))).toEqual(['topic.md']);
+  });
+
+  it('reads a board of an earlier version as it was, and adds topics beside it', async () => {
+    const task = await storage.createTask({
+      title: 't',
+      status: 'todo',
+      rank: 'a0',
+      body: 'Body.\n',
+      labels: [],
+    });
+    const taskFile = join(root, '.board', 'tasks', task.id, 'task.md');
+    const stateFile = join(root, '.board', 'board.json');
+    const before = [await readFile(taskFile, 'utf8'), await readFile(stateFile, 'utf8')];
+    await storage.close();
+    storage = markdownStorage({ root });
+    await storage.init();
+
+    expect(await exists(topicsDir())).toBe(false);
+    expect(await storage.getTopic('P1')).toBeNull();
+    expect(await storage.getTask(task.id)).toEqual(task);
+    expect((await storage.createTopic({ title: 'M1', body: '' })).id).toBe('P1');
+    expect([await readFile(taskFile, 'utf8'), await readFile(stateFile, 'utf8')]).toEqual(before);
+  });
+
+  it('counts a topic directory without topic.md as a topic it cannot read (O-1)', async () => {
+    await storage.createTopic({ title: 'M1', body: '' });
+    await mkdir(join(topicsDir(), 'P7'));
+    await rm(sequenceFile());
+    expect(await refusal(storage.createTopic({ title: 'x', body: '' }))).toBe(
+      'ID_SEQUENCE_UNRECOVERABLE',
+    );
+    expect(await refusal(storage.createBlock('P1', { title: 'x' }))).toBe(
+      'ID_SEQUENCE_UNRECOVERABLE',
+    );
+  });
+
+  it('writes nothing at all when it refuses (O-1)', async () => {
+    const topic = await storage.createTopic({ title: 'M1', body: '' });
+    await storage.createBlock(topic.id, { title: 'A' });
+    const topicFile = join(topicsDir(), 'P1', 'topic.md');
+    await writeFile(join(topicsDir(), 'P1', 'topic.md'), 'broken\n', 'utf8');
+    await rm(sequenceFile());
+
+    expect(await refusal(storage.createTopic({ title: 'x', body: '' }))).toBe(
+      'ID_SEQUENCE_UNRECOVERABLE',
+    );
+    expect(await exists(sequenceFile())).toBe(false);
+    expect(await readdir(topicsDir())).toEqual(['P1']);
+    expect(await readFile(topicFile, 'utf8')).toBe('broken\n');
+  });
+
+  it.each([
+    ['not JSON', '{'],
+    ['not an object', '[1, 2]'],
+    ['a counter missing', '{"formatVersion":1,"topicSequence":3}'],
+    ['a negative counter', '{"formatVersion":1,"topicSequence":-1,"blockSequence":2}'],
+    ['a fraction', '{"formatVersion":1,"topicSequence":1.5,"blockSequence":2}'],
+    ['a string', '{"formatVersion":1,"topicSequence":"3","blockSequence":2}'],
+    ['another format', '{"formatVersion":2,"topicSequence":3,"blockSequence":2}'],
+  ])('treats a sequence.json with %s as invalid (O-1)', async (_name, content) => {
+    const topic = await storage.createTopic({ title: 'M1', body: '' });
+    await storage.createBlock(topic.id, { title: 'A' });
+    await storage.createTopic({ title: 'M2', body: '' });
+    await writeFile(sequenceFile(), content, 'utf8');
+    await writeFile(join(topicsDir(), 'P2', 'topic.md'), 'broken\n', 'utf8');
+
+    expect(await refusal(storage.createTopic({ title: 'x', body: '' }))).toBe(
+      'ID_SEQUENCE_UNRECOVERABLE',
+    );
+    await rm(join(topicsDir(), 'P2'), { recursive: true });
+    // With every topic readable, the same file is recovered from the ids, not refused.
+    expect((await storage.createTopic({ title: 'x', body: '' })).id).toBe('P2');
+    expect((await storage.createBlock('P1', { title: 'B' })).id).toBe('K2');
+  });
+
+  it('ignores what is not a topic in the topics directory', async () => {
+    await mkdir(join(topicsDir(), 'notes'), { recursive: true });
+    await writeFile(join(topicsDir(), 'README.md'), '# Notes\n', 'utf8');
+    await writeFile(join(topicsDir(), 'notes', 'topic.md'), 'not a topic\n', 'utf8');
+    expect((await storage.createTopic({ title: 'M1', body: '' })).id).toBe('P1');
+  });
+
+  it('takes the directory name as the id, whatever the file says', async () => {
+    await storage.createTopic({ title: 'M1', body: '' });
+    const file = join(topicsDir(), 'P1', 'topic.md');
+    await writeFile(file, (await readFile(file, 'utf8')).replace('id: P1', 'id: P9'), 'utf8');
+    expect((await storage.getTopic('P1'))?.id).toBe('P1');
+  });
+
+  it('refuses a topic.md with a field it does not know, rather than drop it on a write', async () => {
+    const topic = await storage.createTopic({ title: 'M1', body: '' });
+    const file = join(topicsDir(), 'P1', 'topic.md');
+    const text = (await readFile(file, 'utf8')).replace('title: M1', 'title: M1\nowner: me');
+    await writeFile(file, text, 'utf8');
+    expect(await storage.getTopic(topic.id)).toBeNull();
+    expect(await refusal(storage.createBlock(topic.id, { title: 'A' }))).toBe('TOPIC_NOT_FOUND');
+    expect(await readFile(file, 'utf8')).toBe(text);
   });
 });

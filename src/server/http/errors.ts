@@ -8,6 +8,7 @@ import { BoardError, type BoardErrorCode } from '../../core/errors.js';
  */
 const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   TASK_NOT_FOUND: 404,
+  TOPIC_NOT_FOUND: 404,
   DOCUMENT_NOT_FOUND: 404,
   REPORT_NOT_FOUND: 404,
   UNKNOWN_STATUS: 422,
@@ -18,6 +19,7 @@ const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   INVALID_ID_PREFIX: 422,
   ORPHANED_STATUSES: 409,
   INVALID_ID_SEQUENCE: 500,
+  ID_SEQUENCE_UNRECOVERABLE: 409,
   STALE_AI_RUN: 409,
   AI_RUN_IN_PROGRESS: 409,
   NO_SESSION_TO_RESUME: 409,
