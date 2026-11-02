@@ -217,12 +217,63 @@ The agent reads `GET /tasks/:id/checks/:n/handoff`, which pins one version of th
 forbids writes, and reports through `…/checks/:n/report`. A check never reads or writes `aiRun`.
 Details in ADR-0030 §6.
 
-## Amendment (T54, 2026-10-24, proposed): Research is a run of its own kind
+## Amendment (T54, 2026-10-24, partly accepted 2026-11-02): Research is a run of its own kind
 
-Status of this amendment: **proposed**; the owner sets `accepted`. The rules of what a Research is,
-how it is stored and what it promises about read-only are in ADR-0030 (amendment of T54); this one
-holds only how it is requested and started. The server still starts nothing. Each rule is the
-owner's decision in a closed Decision task (in brackets). No ADR-0031 is created (D5, T54).
+Status of this amendment: **partly accepted** (2026-11-02): set A of the partial acceptance below
+is **accepted**; every other rule is **proposed**, and the owner sets `accepted`. The rules of what
+a Research is, how it is stored and what it promises about read-only are in ADR-0030 (amendment of
+T54); this one holds only how it is requested and started. The server still starts nothing. Each
+rule is the owner's decision in a closed Decision task (in brackets). No ADR-0031 is created (D5,
+T54).
+
+**Partial acceptance (owner, 2026-11-02).** The owner accepted set A below by a separate decision,
+taken before the audit of T54 (T79) is finished. Every rule of this amendment not named in set A
+stays proposed. The text of the rules further down is unchanged.
+
+- **Set A, accepted:**
+  1. `kind: 'research'` in `POST /tasks/:id/run`: the lead of the first rule.
+  2. The sub-rule "Like a check, a research is not refused…", whole: a research is not refused
+     while a work run is `working`, nor while another check or research is; it never reads or
+     writes `aiRun`, and it never reaches the path that starts a work run.
+  3. In the sub-rule on `run.requested`: the event carries `kind: 'research'` for a research. The
+     field `comment?` of the same sub-rule is in set B.
+  4. The rule on D13 (T53), whole: the closed form of `accepts`; a runner without `accepts` is
+     taken to accept `work` only; a request is handed only to a waiting runner that accepts its
+     `kind`; `409 NO_AGENT_RUNNER` when there is none, and nothing on the board changes; no
+     acknowledgement; the gap for `kind: 'check'` is closed.
+- **Set B, still proposed:**
+  - `comment?` and its limits;
+  - the rule that a research takes no `mode` but `new`;
+  - the passage of the comment through the runner into `begin`, and its absence from `argv` and
+    the environment of `claude`;
+  - `researchPrompt`;
+  - the CLI `claude <ID> --research [--comment …]`;
+  - what the rule on the runner's journal adds to §6 of ADR-0030: the journal records no comment,
+    and no `abandon` route is added;
+  - the flags of access rights;
+  - "Not given to agents";
+  - the line "What this costs".
+- **The journal of checks and research.** The shared mechanism is accepted through the first point
+  of R1 of ADR-0030 (set A there), not through this amendment: a research uses the check journal
+  `.board/runner/<ID>-check-<n>.json` of T46 with the rules of ADR-0030 §6, and has no journal
+  namespace of its own. What §6 says of a check therefore holds for a research, as a consequence of
+  that point and not as a rule of this amendment: `claude --recover` reads only the journal of a
+  work run, by its integer name, so it does not read the journal of a research; and a research
+  that never ends stays `working` and is shown as having no report. The rule on
+  the runner's journal below repeats this in its first sentence and in its sentences on
+  `claude --recover` and on a research whose runner died; those hold through ADR-0030 R1 and §6.
+  What the rule adds beyond §6 is in set B: the journal records no comment, and no `abandon` route
+  is added. Set A changes neither the schema nor the rules of the journal.
+- **What set A changes for a check.** D13 applies to every kind, not to research alone. A runner
+  that sends no `accepts` is taken to accept `work` only, so it is no longer handed a check; while
+  no waiting runner accepts `check`, a check request is answered `409 NO_AGENT_RUNNER`. A runner
+  that is to take checks has to send `accepts` with `check`, and existing runners may need an
+  update.
+- **T78, L6.** "Everything else in this ADR stands" in L6 says that T78 does not change the rules
+  of the research; it does not accept the amendment of T54, and it does not change the status of
+  any of its rules. What of T54 is accepted is set A, by this decision.
+- **If the code differs.** If the audit of T79 finds that the code differs from set A, the code
+  is corrected to set A; set A is not changed to fit the code.
 
 - **`POST /tasks/:id/run` gains `kind: 'research'`** beside `work` and `check` (D1, T49).
   - **`comment?` is allowed only with `kind: 'research'`**; with another kind it is refused with

@@ -1,7 +1,8 @@
 # ADR-0030: Task history: content versions and actuality checks, append-only
 
 Status: accepted (2026-10-17, owner's decision; implemented by T46). Amendment for Research (T54):
-proposed, see the end.
+partly accepted on 2026-11-02 (set A: the first two points of R1 and what follows from them alone);
+the rest is proposed. See the end.
 
 ## Context
 
@@ -359,14 +360,66 @@ diff between two versions, or between a draft and the current content, is a pure
 - The core keeps its purity (ADR-0006): `contentHash`, the diff and `applyRecommendations` are
   pure, and the page reaches them only through `contract` (ADR-0013).
 
-## Amendment (T54, 2026-10-24, proposed): Research is a kind of check
+## Amendment (T54, 2026-10-24, partly accepted 2026-11-02): Research is a kind of check
 
-Status of this amendment: **proposed**. The owner sets `accepted`. Every rule below is the owner's
-decision recorded in a closed Decision task (named in brackets); nothing is decided here that
-those tasks did not decide. What is not decided is listed at the end of the amendment.
+Status of this amendment: **partly accepted** (2026-11-02): set A of the partial acceptance below
+is **accepted**; every other rule is **proposed**, and the owner sets `accepted`. Every rule below
+is the owner's decision recorded in a closed Decision task (named in brackets); nothing is decided
+here that those tasks did not decide. What is not decided is listed at the end of the amendment.
 
 ADR-0029 carries the other half (how a Research is requested, started and handed to the runner).
 ADR-0028 and ADR-0009 are not changed. No ADR-0031 is created (D5, T54).
+
+**Partial acceptance (owner, 2026-11-02).** The owner accepted set A below by a separate decision,
+taken before the audit of T54 (T79) is finished, together with set A of the amendment of T54 to
+ADR-0029. Every rule of this amendment not named in set A stays proposed. The text of the rules
+further down is unchanged.
+
+- **Set A, accepted:** the first two points of R1, whole, and the parts of "Consequences of the
+  amendment" that follow from them alone.
+  1. Research is a kind of check, with the same history, numbers, routes, runner journal, lock,
+     decisions and `fromCheck`, and nothing of its own.
+  2. The kind is `kind?: 'research'` in `begin`; a `begin` without it is an actuality check.
+  3. From "Consequences of the amendment":
+     - in the storage conformance suite, "a begin with and without `kind` reads" (point 2) and
+       "numbers run through both kinds" (point 1);
+     - in the API, "research and check of one task are numbered in turn and the second does not
+       replace the first" (point 1).
+  4. What §6 says of a check then holds for a research, as a consequence of point 1 and not as a
+     rule of this amendment: see "The journal" below.
+- **Set B, still proposed:**
+  - the third and fourth points of R1: a Research report has no `verdict` and no `readiness`
+    (D9, T49), and a research is not a board report;
+  - R2, whole;
+  - R3–R10;
+  - the rest of "Consequences of the amendment":
+    - in the storage conformance suite, everything on `report.md`: it is written before
+      `report.json`, the same bytes continue and other bytes are `409`, a `report.md` without
+      metadata is not a report, it is absent from `listDocuments`, `deleteTask` removes it (R3);
+    - in the API, "a comment stays with its own begin" (R2) and "the limits answer as above" (R2
+      and the `comment?` of ADR-0029);
+    - "A research that is never ended stays in the list as `working`" (R8);
+    - "Read-only is as strong as the instruction and the person's reading of the evidence" (R6);
+  - "Not decided in this amendment".
+- **Repetitions.** Some rules of set B repeat a rule of set A: the `kind` of R2 and the `kind?`
+  of `begin` in R9 repeat R1; the last point of R6 and the earlier runner of R10 repeat set A of
+  ADR-0029; R8 and the consequence "A research that is never ended stays in the list as
+  `working`" repeat in part what the first point of R1 and §6 give (see "The journal"). The
+  repeated rule holds through set A. The rule of set B that repeats it stays proposed as a whole.
+- **The journal.** Through the first point of R1, a research uses the runner journal of checks,
+  `.board/runner/<ID>-check-<n>.json`, with the rules of §6, and has no journal namespace of its
+  own. So what §6 says of a check holds for a research, as a consequence of that point and not
+  as a rule of this amendment: `claude --recover` does not read the journal of a research (it
+  reads the journal of a work run by its integer name only), and a research that never ends stays
+  `working` and is shown as having no report. That is all of the journal that set
+  A accepts; it changes neither the schema nor the rules of the journal. What the amendment of T54
+  to ADR-0029 adds beyond §6 (no comment in the journal, no `abandon` route) stays proposed, and
+  so does R8 (see "Repetitions").
+- **T78.** L3 of ADR-0029 (T78) relies on the first two points of R1, now accepted. L6 does not
+  accept the rest of this amendment, and does not change its status (see the partial acceptance
+  in ADR-0029).
+- **If the code differs.** If the audit of T79 finds that the code differs from set A, the code
+  is corrected to set A; set A is not changed to fit the code.
 
 ### R1. One entity, one numbering (D1, T49)
 
