@@ -619,6 +619,426 @@ export function runStorageConformance(harness: StorageHarness): void {
       });
     });
 
+    describe('topic and block writes (ADR-0032 §4, T84)', () => {
+      const topic = (title = 'M1 Core'): { title: string; body: string } => ({ title, body: '' });
+      const ids = (blocks: readonly { id: string }[] | undefined): string[] =>
+        (blocks ?? []).map((block) => block.id);
+
+      /** P1 with K1, K2, K3 and P2 with K4, all empty; no tasks. */
+      async function twoTopics(provider: Storage = storage): Promise<void> {
+        const first = await provider.createTopic(topic('first'));
+        for (const title of ['one', 'two', 'three']) {
+          await provider.createBlock(first.id, { title });
+        }
+        const second = await provider.createTopic(topic('second'));
+        await provider.createBlock(second.id, { title: 'four' });
+      }
+
+      /** Everything a refused write must leave as it was, read through the port. */
+      async function boardState(provider: Storage = storage): Promise<unknown> {
+        const topics = await Promise.all(
+          Array.from({ length: 6 }, (_, i) => provider.getTopic(`P${i + 1}`)),
+        );
+        return {
+          topics,
+          tasks: await provider.listTasks(),
+          issues: await provider.readIssues(),
+        };
+      }
+
+      /** A refused write: the code, and the board exactly as it was (INVARIANT). */
+      async function expectRefused(action: Promise<unknown>, code: string): Promise<void> {
+        const before = await boardState();
+        await expectCode(action, code);
+        expect(await boardState()).toEqual(before);
+      }
+
+      describe('updateTopic', () => {
+        it('changes the title and the body, and nothing else', async () => {
+          await twoTopics();
+          const updated = await storage.updateTopic('P1', { title: 'Renamed', body: '## New\n' });
+          expect(updated).toEqual({
+            id: 'P1',
+            title: 'Renamed',
+            body: '## New\n',
+            blocks: [
+              { id: 'K1', title: 'one' },
+              { id: 'K2', title: 'two' },
+              { id: 'K3', title: 'three' },
+            ],
+          });
+          expect(await storage.getTopic('P1')).toEqual(updated);
+          expect((await storage.getTopic('P2'))?.title).toBe('second');
+        });
+
+        it('changes only the fields it is given', async () => {
+          const created = await storage.createTopic({ title: 'Keep', body: 'Body\n' });
+          expect(await storage.updateTopic(created.id, { title: 'New' })).toMatchObject({
+            title: 'New',
+            body: 'Body\n',
+          });
+          expect(await storage.updateTopic(created.id, { body: 'Other\n' })).toMatchObject({
+            title: 'New',
+            body: 'Other\n',
+          });
+        });
+
+        it('keeps a field of its own that the board does not know (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          await harness.addTopicField(storage, created.id, 'owner', { team: ['a'] });
+          await storage.updateTopic(created.id, { title: 'Renamed' });
+          const reopened = await reopen(storage);
+          expect((await reopened.getTopic(created.id))?.extra).toEqual({ owner: { team: ['a'] } });
+        });
+
+        it('keeps the change across a reopen', async () => {
+          await twoTopics();
+          await storage.updateTopic('P2', { title: 'Renamed' });
+          const reopened = await reopen(storage);
+          expect((await reopened.getTopic('P2'))?.title).toBe('Renamed');
+        });
+
+        it('refuses a topic that does not exist or cannot be read, and writes nothing', async () => {
+          await twoTopics();
+          await expectRefused(storage.updateTopic('P9', { title: 'x' }), 'TOPIC_NOT_FOUND');
+          await expectRefused(storage.updateTopic('T1', { title: 'x' }), 'TOPIC_NOT_FOUND');
+          await harness.breakTopic(storage, 'P2');
+          await expectRefused(storage.updateTopic('P2', { title: 'x' }), 'TOPIC_NOT_FOUND');
+        });
+      });
+
+      describe('deleteTopic', () => {
+        it('deletes a topic that has no blocks and no tasks', async () => {
+          await twoTopics();
+          const empty = await storage.createTopic(topic('empty'));
+          await storage.deleteTopic(empty.id);
+          expect(await storage.getTopic(empty.id)).toBeNull();
+          expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K1', 'K2', 'K3']);
+          const reopened = await reopen(storage);
+          expect(await reopened.getTopic(empty.id)).toBeNull();
+        });
+
+        it('refuses a topic that does not exist, and writes nothing', async () => {
+          await twoTopics();
+          await expectRefused(storage.deleteTopic('P9'), 'TOPIC_NOT_FOUND');
+          await expectRefused(storage.deleteTopic('../P1'), 'TOPIC_NOT_FOUND');
+        });
+
+        it('refuses a topic that has tasks (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          await storage.createTask(newTask({ topic: created.id }));
+          await expectRefused(storage.deleteTopic(created.id), 'TOPIC_NOT_EMPTY');
+        });
+
+        it('refuses a topic that has only an empty block: an empty block makes it non-empty (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          await storage.createBlock(created.id, { title: 'empty' });
+          await expectRefused(storage.deleteTopic(created.id), 'TOPIC_NOT_EMPTY');
+        });
+
+        it('refuses a topic that has a block with tasks (INVARIANT)', async () => {
+          const created = await storage.createTopic(topic());
+          const block = await storage.createBlock(created.id, { title: 'busy' });
+          await storage.createTask(newTask({ topic: created.id, block: block.id }));
+          await expectRefused(storage.deleteTopic(created.id), 'TOPIC_NOT_EMPTY');
+        });
+
+        it('names the reason in the error', async () => {
+          const created = await storage.createTopic(topic());
+          await storage.createBlock(created.id, { title: 'empty' });
+          await storage.createTask(newTask({ topic: created.id }));
+          const error = await storage.deleteTopic(created.id).catch((e: unknown) => e);
+          expect((error as BoardError).details).toMatchObject({
+            id: created.id,
+            blocks: ['K1'],
+            tasks: ['T1'],
+          });
+        });
+
+        it('deletes it once its tasks and blocks are gone', async () => {
+          const created = await storage.createTopic(topic());
+          const block = await storage.createBlock(created.id, { title: 'b' });
+          const placed = await storage.createTask(newTask({ topic: created.id, block: block.id }));
+          await expectCode(storage.deleteTopic(created.id), 'TOPIC_NOT_EMPTY');
+          await storage.deleteTask(placed.id);
+          await expectCode(storage.deleteTopic(created.id), 'TOPIC_NOT_EMPTY');
+          await storage.deleteBlock(created.id, block.id);
+          await storage.deleteTopic(created.id);
+          expect(await storage.getTopic(created.id)).toBeNull();
+        });
+
+        it('does not look at the tasks of other topics', async () => {
+          await twoTopics();
+          const empty = await storage.createTopic(topic('empty'));
+          await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+          await storage.deleteTopic(empty.id);
+          expect(await storage.getTopic(empty.id)).toBeNull();
+          expect(await storage.listTasks()).toHaveLength(1);
+        });
+
+        it('never reuses its id, or the ids of its blocks, once deleted (INVARIANT)', async () => {
+          await twoTopics();
+          await storage.deleteBlock('P2', 'K4');
+          await storage.deleteTopic('P2');
+          expect((await storage.createTopic(topic())).id).toBe('P3');
+          expect((await storage.createBlock('P3', { title: 'x' })).id).toBe('K5');
+        });
+
+        it.each(['missing', 'invalid'] as const)(
+          'never reuses an id when the counters are %s at the time of the delete (INVARIANT)',
+          async (state) => {
+            await twoTopics();
+            await harness.setSequence(storage, state);
+            await storage.deleteBlock('P2', 'K4');
+            await storage.deleteTopic('P2');
+            const reopened = await reopen(storage);
+            expect((await reopened.createTopic(topic())).id).toBe('P3');
+            expect((await reopened.createBlock('P3', { title: 'x' })).id).toBe('K5');
+          },
+        );
+      });
+
+      describe('createBlock, updateBlock', () => {
+        it('renames a block in place: its id and its place stay', async () => {
+          await twoTopics();
+          const renamed = await storage.updateBlock('P1', 'K2', { title: 'Renamed' });
+          expect(renamed).toEqual({ id: 'K2', title: 'Renamed' });
+          expect((await storage.getTopic('P1'))?.blocks).toEqual([
+            { id: 'K1', title: 'one' },
+            { id: 'K2', title: 'Renamed' },
+            { id: 'K3', title: 'three' },
+          ]);
+          const reopened = await reopen(storage);
+          expect((await reopened.getTopic('P1'))?.blocks[1]).toEqual({
+            id: 'K2',
+            title: 'Renamed',
+          });
+        });
+
+        it('keeps the tasks of a renamed block where they are', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          await storage.updateBlock('P1', 'K2', { title: 'Renamed' });
+          expect(await storage.getTask('T1')).toMatchObject({ topic: 'P1', block: 'K2' });
+        });
+
+        it('refuses a topic or a block that does not exist, and writes nothing', async () => {
+          await twoTopics();
+          await expectRefused(storage.updateBlock('P9', 'K1', { title: 'x' }), 'TOPIC_NOT_FOUND');
+          await expectRefused(storage.updateBlock('P1', 'K9', { title: 'x' }), 'BLOCK_NOT_FOUND');
+          await expectRefused(storage.updateBlock('P1', 'T1', { title: 'x' }), 'BLOCK_NOT_FOUND');
+        });
+
+        it('refuses a block of another topic: there is no move between topics', async () => {
+          await twoTopics();
+          await expectRefused(storage.updateBlock('P1', 'K4', { title: 'x' }), 'BLOCK_NOT_FOUND');
+          await expectRefused(storage.updateBlock('P2', 'K1', { title: 'x' }), 'BLOCK_NOT_FOUND');
+        });
+
+        it('gives a block the next global id whichever topic it is in (INVARIANT)', async () => {
+          await twoTopics();
+          const a = await storage.createBlock('P2', { title: 'five' });
+          const b = await storage.createBlock('P1', { title: 'six' });
+          expect([a.id, b.id]).toEqual(['K5', 'K6']);
+          const all = [
+            ...ids((await storage.getTopic('P1'))?.blocks),
+            ...ids((await storage.getTopic('P2'))?.blocks),
+          ];
+          expect(new Set(all).size).toBe(all.length);
+        });
+      });
+
+      describe('reorderBlocks', () => {
+        it('puts the blocks in the order given, and returns the topic', async () => {
+          await twoTopics();
+          const reordered = await storage.reorderBlocks('P1', ['K3', 'K1', 'K2']);
+          expect(ids(reordered.blocks)).toEqual(['K3', 'K1', 'K2']);
+          expect(reordered.blocks[0]).toEqual({ id: 'K3', title: 'three' });
+          expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K3', 'K1', 'K2']);
+        });
+
+        it('keeps the order after a reopen, and a block added later goes last (INVARIANT)', async () => {
+          await twoTopics();
+          await storage.reorderBlocks('P1', ['K2', 'K3', 'K1']);
+          const reopened = await reopen(storage);
+          expect(ids((await reopened.getTopic('P1'))?.blocks)).toEqual(['K2', 'K3', 'K1']);
+          await reopened.createBlock('P1', { title: 'five' });
+          expect(ids((await reopened.getTopic('P1'))?.blocks)).toEqual(['K2', 'K3', 'K1', 'K5']);
+        });
+
+        it('leaves the other topics, the title and the body alone', async () => {
+          await twoTopics();
+          await storage.updateTopic('P1', { title: 'T', body: 'B\n' });
+          const other = await storage.getTopic('P2');
+          await storage.reorderBlocks('P1', ['K3', 'K2', 'K1']);
+          expect(await storage.getTopic('P2')).toEqual(other);
+          expect(await storage.getTopic('P1')).toMatchObject({ title: 'T', body: 'B\n' });
+        });
+
+        it('accepts the order it already has', async () => {
+          await twoTopics();
+          const same = await storage.reorderBlocks('P1', ['K1', 'K2', 'K3']);
+          expect(ids(same.blocks)).toEqual(['K1', 'K2', 'K3']);
+        });
+
+        it.each([
+          ['a block left out', ['K1', 'K2']],
+          ['a block twice', ['K1', 'K2', 'K2']],
+          ['a block of another topic', ['K1', 'K2', 'K4']],
+          ['a block that does not exist', ['K1', 'K2', 'K9']],
+          ['one block too many', ['K1', 'K2', 'K3', 'K4']],
+          ['no blocks', []],
+        ])('refuses an order with %s, and writes nothing', async (_name, order) => {
+          await twoTopics();
+          await expectRefused(storage.reorderBlocks('P1', order), 'INVALID_REQUEST');
+        });
+
+        it('refuses a topic that does not exist, and writes nothing', async () => {
+          await twoTopics();
+          await expectRefused(storage.reorderBlocks('P9', ['K1']), 'TOPIC_NOT_FOUND');
+        });
+
+        it('does not change the place of any task', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          await storage.reorderBlocks('P1', ['K3', 'K2', 'K1']);
+          expect(await storage.getTask('T1')).toMatchObject({ topic: 'P1', block: 'K2' });
+        });
+      });
+
+      describe('deleteBlock', () => {
+        it('deletes a block that has no tasks, and keeps the order of the others', async () => {
+          await twoTopics();
+          await storage.deleteBlock('P1', 'K2');
+          expect((await storage.getTopic('P1'))?.blocks).toEqual([
+            { id: 'K1', title: 'one' },
+            { id: 'K3', title: 'three' },
+          ]);
+          const reopened = await reopen(storage);
+          expect(ids((await reopened.getTopic('P1'))?.blocks)).toEqual(['K1', 'K3']);
+          expect(ids((await reopened.getTopic('P2'))?.blocks)).toEqual(['K4']);
+        });
+
+        it('refuses a block that has tasks (INVARIANT)', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          await expectRefused(storage.deleteBlock('P1', 'K2'), 'BLOCK_NOT_EMPTY');
+        });
+
+        it('names the tasks in the error', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          const error = await storage.deleteBlock('P1', 'K2').catch((e: unknown) => e);
+          expect((error as BoardError).details).toMatchObject({
+            topic: 'P1',
+            block: 'K2',
+            tasks: ['T1'],
+          });
+        });
+
+        it('deletes it once its tasks are gone or placed elsewhere', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          await storage.createTask(newTask({ topic: 'P1', block: 'K2' }));
+          await storage.deleteTask('T1');
+          await expectCode(storage.deleteBlock('P1', 'K2'), 'BLOCK_NOT_EMPTY');
+          await storage.updateTask('T2', { block: 'K1' });
+          await storage.deleteBlock('P1', 'K2');
+          expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K1', 'K3']);
+        });
+
+        it('does not look at the tasks of other blocks', async () => {
+          await twoTopics();
+          await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+          await storage.createTask(newTask({ topic: 'P1' }));
+          await storage.deleteBlock('P1', 'K2');
+          expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K1', 'K3']);
+        });
+
+        it('refuses a topic or a block that does not exist, and writes nothing', async () => {
+          await twoTopics();
+          await expectRefused(storage.deleteBlock('P9', 'K1'), 'TOPIC_NOT_FOUND');
+          await expectRefused(storage.deleteBlock('P1', 'K9'), 'BLOCK_NOT_FOUND');
+          await expectRefused(storage.deleteBlock('P1', 'K4'), 'BLOCK_NOT_FOUND');
+        });
+
+        it('never reuses its id once deleted (INVARIANT)', async () => {
+          await twoTopics();
+          await storage.deleteBlock('P2', 'K4');
+          expect((await storage.createBlock('P2', { title: 'x' })).id).toBe('K5');
+        });
+
+        it.each(['missing', 'invalid'] as const)(
+          'never reuses an id when the counters are %s at the time of the delete (INVARIANT)',
+          async (state) => {
+            await twoTopics();
+            await harness.setSequence(storage, state);
+            await storage.deleteBlock('P2', 'K4');
+            const reopened = await reopen(storage);
+            expect((await reopened.createBlock('P2', { title: 'x' })).id).toBe('K5');
+          },
+        );
+      });
+
+      describe('fail-closed when the counters are lost (O-1)', () => {
+        it.each(['missing', 'invalid'] as const)(
+          'refuses to delete a topic or a block when the counters are %s and a topic cannot be read',
+          async (state) => {
+            await twoTopics();
+            await storage.createTopic(topic('empty'));
+            await harness.breakTopic(storage, 'P2');
+            await harness.setSequence(storage, state);
+            await expectCode(storage.deleteBlock('P1', 'K3'), 'ID_SEQUENCE_UNRECOVERABLE');
+            await expectCode(storage.deleteTopic('P3'), 'ID_SEQUENCE_UNRECOVERABLE');
+            expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K1', 'K2', 'K3']);
+            expect(await storage.getTopic('P3')).not.toBeNull();
+          },
+        );
+
+        it('does not stop a delete when the counters are valid', async () => {
+          await twoTopics();
+          await harness.breakTopic(storage, 'P2');
+          await storage.deleteBlock('P1', 'K3');
+          expect(ids((await storage.getTopic('P1'))?.blocks)).toEqual(['K1', 'K2']);
+        });
+      });
+
+      describe('writes are one at a time (INVARIANT)', () => {
+        it('loses no block and no rename when they race', async () => {
+          await twoTopics();
+          await Promise.all([
+            storage.createBlock('P1', { title: 'five' }),
+            storage.updateBlock('P1', 'K1', { title: 'Renamed' }),
+            storage.updateTopic('P1', { title: 'T' }),
+            storage.createBlock('P1', { title: 'six' }),
+          ]);
+          const read = await storage.getTopic('P1');
+          expect(ids(read?.blocks)).toEqual(['K1', 'K2', 'K3', 'K5', 'K6']);
+          expect(read?.blocks[0]?.title).toBe('Renamed');
+          expect(read?.title).toBe('T');
+        });
+
+        it('never leaves a task in a block that was deleted', async () => {
+          for (let round = 0; round < 5; round++) {
+            const created = await storage.createTopic(topic());
+            const block = await storage.createBlock(created.id, { title: 'b' });
+            const results = await Promise.allSettled([
+              storage.deleteBlock(created.id, block.id),
+              storage.createTask(newTask({ topic: created.id, block: block.id })),
+            ]);
+            const held = (await storage.getTopic(created.id))?.blocks.some(
+              (b) => b.id === block.id,
+            );
+            const placed = (await storage.listTasks()).filter((t) => t.block === block.id);
+            // Either the block is gone and no task is in it, or it stays with its task.
+            if (held) expect(placed).toHaveLength(1);
+            else expect(placed).toHaveLength(0);
+            expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+          }
+        });
+      });
+    });
+
     describe('task workflow overrides', () => {
       it('keeps the overrides it was given, and only those (INVARIANT)', async () => {
         const created = await storage.createTask(newTask({ workflow: { push: true } }));

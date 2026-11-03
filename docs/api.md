@@ -1212,6 +1212,209 @@ Response — 200, application/json:
 }
 ```
 
+## Topics and blocks
+
+A topic (`P<n>`) has an ordered list of blocks (`K<n>`). Ids are global across the board,
+monotonic and never reused, a deleted one included. A block belongs to one topic for good:
+there is no move of a block between topics, and no archiving of a topic.
+
+- A topic can be deleted only when it is empty: no tasks, and no blocks — an empty block
+  makes it non-empty. Otherwise `409 TOPIC_NOT_EMPTY`.
+- A block can be deleted only when no task is in it. Otherwise `409 BLOCK_NOT_EMPTY`.
+- A refusal changes nothing: no file is written and no event is published.
+- A task file that cannot be read may be a task of the topic or block, so it refuses too.
+- The order of the blocks is the order of the list, kept as written; a new block goes last,
+  and `PUT .../blocks/order` takes every block id of the topic exactly once (`400
+  INVALID_REQUEST` otherwise, `404 BLOCK_NOT_FOUND` for a block of another topic on the
+  other block routes).
+- Every successful write is published as a `topic.*` event over `GET /events`:
+  `topic.created` and `topic.updated` carry the whole topic as stored (a change to its blocks
+  is a `topic.updated`), `topic.deleted` carries `topicId`.
+- Writes are last-write-wins (ADR-0018).
+
+### POST /api/v1/topics
+
+Create a topic; it has no blocks yet and the server assigns the id
+
+Not given to AI agents in the generated instructions.
+
+Request body:
+
+```json
+{
+  "title": "M1 Core",
+  "body": "## Goal\n\nShip the core.\n"
+}
+```
+
+Response — 201, application/json:
+
+```json
+{
+  "id": "P1",
+  "title": "M1 Core",
+  "body": "## Goal\n\nShip the core.\n",
+  "blocks": []
+}
+```
+
+### PATCH /api/v1/topics/:id
+
+Change the title or the body of a topic; its blocks are kept
+
+Not given to AI agents in the generated instructions.
+
+Example: PATCH /api/v1/topics/P1
+
+Request body:
+
+```json
+{
+  "title": "M1 Core"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "P1",
+  "title": "M1 Core",
+  "body": "## Goal\n\nShip the core.\n",
+  "blocks": [
+    {
+      "id": "K1",
+      "title": "Foundations"
+    },
+    {
+      "id": "K2",
+      "title": "Rollout"
+    }
+  ]
+}
+```
+
+### DELETE /api/v1/topics/:id
+
+Delete a topic with no tasks and no blocks; otherwise 409 TOPIC_NOT_EMPTY, no change
+
+Not given to AI agents in the generated instructions.
+
+Example: DELETE /api/v1/topics/P1
+
+Response — 200, application/json:
+
+```json
+{
+  "deleted": true
+}
+```
+
+### POST /api/v1/topics/:id/blocks
+
+Create a block at the end of a topic; its id is global across the board
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/topics/P1/blocks
+
+Request body:
+
+```json
+{
+  "title": "Rollout"
+}
+```
+
+Response — 201, application/json:
+
+```json
+{
+  "id": "K2",
+  "title": "Rollout"
+}
+```
+
+### PATCH /api/v1/topics/:id/blocks/:blockId
+
+Rename a block; its id and its place stay. A block does not move between topics
+
+Not given to AI agents in the generated instructions.
+
+Example: PATCH /api/v1/topics/P1/blocks/K2
+
+Request body:
+
+```json
+{
+  "title": "Rollout"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "K2",
+  "title": "Rollout"
+}
+```
+
+### PUT /api/v1/topics/:id/blocks/order
+
+Reorder the blocks of a topic: each of its block ids once; anything else is 400, no change
+
+Not given to AI agents in the generated instructions.
+
+Example: PUT /api/v1/topics/P1/blocks/order
+
+Request body:
+
+```json
+{
+  "blocks": [
+    "K2",
+    "K1"
+  ]
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "P1",
+  "title": "M1 Core",
+  "body": "## Goal\n\nShip the core.\n",
+  "blocks": [
+    {
+      "id": "K2",
+      "title": "Rollout"
+    },
+    {
+      "id": "K1",
+      "title": "Foundations"
+    }
+  ]
+}
+```
+
+### DELETE /api/v1/topics/:id/blocks/:blockId
+
+Delete a block with no tasks; otherwise 409 BLOCK_NOT_EMPTY, no change
+
+Not given to AI agents in the generated instructions.
+
+Example: DELETE /api/v1/topics/P1/blocks/K2
+
+Response — 200, application/json:
+
+```json
+{
+  "deleted": true
+}
+```
+
 ## Events
 
 ### GET /api/v1/events
@@ -1424,6 +1627,9 @@ nothing else. The code is one of:
 - ID_SEQUENCE_UNRECOVERABLE
 - TASK_NOT_FOUND
 - TOPIC_NOT_FOUND
+- BLOCK_NOT_FOUND
+- TOPIC_NOT_EMPTY
+- BLOCK_NOT_EMPTY
 - DOCUMENT_NOT_FOUND
 - REPORT_NOT_FOUND
 - INVALID_DOCUMENT_NAME

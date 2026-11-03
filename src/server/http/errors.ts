@@ -9,6 +9,9 @@ import { BoardError, type BoardErrorCode } from '../../core/errors.js';
 const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   TASK_NOT_FOUND: 404,
   TOPIC_NOT_FOUND: 404,
+  BLOCK_NOT_FOUND: 404,
+  TOPIC_NOT_EMPTY: 409,
+  BLOCK_NOT_EMPTY: 409,
   DOCUMENT_NOT_FOUND: 404,
   REPORT_NOT_FOUND: 404,
   UNKNOWN_STATUS: 422,

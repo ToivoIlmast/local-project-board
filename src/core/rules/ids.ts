@@ -103,7 +103,7 @@ export function allocateRecoverableId(
   if (storedSequence === null && unreadable.length > 0) {
     throw new BoardError(
       'ID_SEQUENCE_UNRECOVERABLE',
-      `Cannot create a topic or a block: topics/sequence.json is missing or invalid, and ` +
+      `Cannot create or delete a topic or a block: topics/sequence.json is missing or invalid, and ` +
         `${unreadable.join(', ')} cannot be read, so a new id could repeat one in use. ` +
         `Fix or remove the unreadable file, or restore sequence.json.`,
       { files: [...unreadable] },

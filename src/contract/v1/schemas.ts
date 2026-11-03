@@ -8,6 +8,7 @@ import {
   fromCheckSchema,
 } from '../../core/model/history.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
+import { blockIdSchema } from '../../core/model/topic.js';
 import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
 /**
@@ -17,6 +18,8 @@ import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/wo
 export {
   aiRunReportSchema,
   aiRunSchema,
+  blockIdSchema,
+  blockSchema,
   checkReportContentSchema,
   checkReportSchema,
   checkSchema,
@@ -45,6 +48,8 @@ export {
   taskSchema,
   taskVersionSchema,
   taskWorkflowSchema,
+  topicIdSchema,
+  topicSchema,
   versionListSchema,
   versionSummarySchema,
   workflowFlagsSchema,
@@ -194,6 +199,23 @@ export const createReportRequestSchema = z.strictObject({
   format: z.enum(['html', 'md']),
   content,
 });
+
+export const createTopicRequestSchema = z.strictObject({
+  title,
+  /** Markdown; defaults to empty. */
+  body: z.string().optional(),
+});
+
+/** The id and the blocks are not a topic's to patch: blocks have routes of their own. */
+export const updateTopicRequestSchema = z
+  .strictObject({ title: title.optional(), body: z.string().optional() })
+  .refine((patch) => Object.keys(patch).length > 0, 'The patch must change something');
+
+/** A block is created and renamed with a title alone; it is created last in its topic. */
+export const blockRequestSchema = z.strictObject({ title });
+
+/** Every block id of the topic once, in the new order. */
+export const reorderBlocksRequestSchema = z.strictObject({ blocks: z.array(blockIdSchema) });
 
 export const deletedSchema = z.strictObject({ deleted: z.literal(true) });
 
@@ -456,6 +478,10 @@ export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
 export type ReplaceWorkflowRequest = z.infer<typeof replaceWorkflowRequestSchema>;
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
+export type CreateTopicRequest = z.infer<typeof createTopicRequestSchema>;
+export type UpdateTopicRequest = z.infer<typeof updateTopicRequestSchema>;
+export type BlockRequest = z.infer<typeof blockRequestSchema>;
+export type ReorderBlocksRequest = z.infer<typeof reorderBlocksRequestSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type RunTaskRequest = z.infer<typeof runTaskRequestSchema>;
 export type RunStarted = z.infer<typeof runStartedSchema>;

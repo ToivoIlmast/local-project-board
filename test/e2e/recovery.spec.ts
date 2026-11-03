@@ -1,4 +1,4 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile, type ChildProcess } from 'node:child_process';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,8 +60,8 @@ function cli(root: string, bin: string, args: string[]): Promise<{ code: number;
   });
 }
 
-function startRunner(root: string, bin: string, args: string[]): ChildProcess {
-  return spawn(process.execPath, [CLI, ...args], { cwd: root, env: env(root, bin) });
+function startRunner(board: RunningBoard, bin: string, args: string[]): ChildProcess {
+  return board.spawnRunner(args, env(board.root, bin)).child;
 }
 
 async function calls(log: string): Promise<{ pid: number; argv: string[] }[]> {
@@ -116,7 +116,7 @@ test('a runner killed mid-session: --recover sees claude alive, then lost once i
   await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Ship it', status: 'todo' } });
   const claude = await fakeClaude(board.root);
 
-  const runner = startRunner(board.root, claude.bin, ['claude', 'T1']);
+  const runner = startRunner(board, claude.bin, ['claude', 'T1']);
   await expect.poll(async () => (await journal(board.root, 'T1', 1))?.['child']).toBeDefined();
   // The journal holds the child from the moment it is spawned; the fake writes its line only
   // once node has started, so the log is waited for, not read at once.
@@ -160,37 +160,33 @@ test('a runner killed mid-session: --recover sees claude alive, then lost once i
   expect(await journal(board.root, 'T1', 1)).toBeUndefined();
 
   // Resume through Send to AI and a runner: the same session, as run 2.
-  const waiting = startRunner(board.root, claude.bin, ['claude', '--wait']);
-  try {
-    let printed = '';
-    waiting.stdout?.on('data', (chunk: Buffer) => (printed += chunk.toString()));
-    await expect.poll(() => printed, { timeout: 15_000 }).toContain('Waiting for Send to AI');
-    await board.api('/api/v1/tasks/T1/run', {
-      method: 'POST',
-      body: { agent: 'claude-code', mode: 'resume' },
-    });
-    // Run 1 is already failed (lost): wait for run 2 to be over.
-    await expect
-      .poll(
-        async () => {
-          const run = await aiRun(board);
-          return run.runId === 2 && run.state !== 'working';
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
-    expect(await aiRun(board)).toMatchObject({
-      runId: 2,
-      sessionId,
-      mode: 'resume',
-      failure: { kind: 'exit', exitCode: 3 },
-    });
-    expect((await calls(claude.log)).at(-1)?.argv).toEqual(
-      expect.arrayContaining(['--resume', sessionId]),
-    );
-  } finally {
-    await killed(waiting);
-  }
+  const waiting = startRunner(board, claude.bin, ['claude', '--wait']);
+  let printed = '';
+  waiting.stdout?.on('data', (chunk: Buffer) => (printed += chunk.toString()));
+  await expect.poll(() => printed, { timeout: 15_000 }).toContain('Waiting for Send to AI');
+  await board.api('/api/v1/tasks/T1/run', {
+    method: 'POST',
+    body: { agent: 'claude-code', mode: 'resume' },
+  });
+  // Run 1 is already failed (lost): wait for run 2 to be over.
+  await expect
+    .poll(
+      async () => {
+        const run = await aiRun(board);
+        return run.runId === 2 && run.state !== 'working';
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  expect(await aiRun(board)).toMatchObject({
+    runId: 2,
+    sessionId,
+    mode: 'resume',
+    failure: { kind: 'exit', exitCode: 3 },
+  });
+  expect((await calls(claude.log)).at(-1)?.argv).toEqual(
+    expect.arrayContaining(['--resume', sessionId]),
+  );
 });
 
 test('an end the runner could not deliver survives the runner and a restart of the board (T45)', async ({
@@ -199,7 +195,7 @@ test('an end the runner could not deliver survives the runner and a restart of t
   await board.api('/api/v1/tasks', { method: 'POST', body: { title: 'Ship it', status: 'todo' } });
   const claude = await fakeClaude(board.root);
 
-  const runner = startRunner(board.root, claude.bin, ['claude', 'T1']);
+  const runner = startRunner(board, claude.bin, ['claude', 'T1']);
   await expect.poll(async () => (await journal(board.root, 'T1', 1))?.['child']).toBeDefined();
 
   // The board goes away; claude ends; the runner records the end and retries in vain …
@@ -219,14 +215,10 @@ test('an end the runner could not deliver survives the runner and a restart of t
   expect(await readFile(journalFile(board.root, 'T1', 1), 'utf8')).not.toContain(runtime.token);
 
   // The next runner delivers it: the real end, not lost.
-  const next = startRunner(board.root, claude.bin, ['claude', '--wait']);
-  try {
-    await expect
-      .poll(async () => (await aiRun(board)).failure, { timeout: 15_000 })
-      .toMatchObject({ kind: 'exit', exitCode: 3 });
-    expect(await aiRun(board)).toMatchObject({ state: 'failed', runId: 1 });
-    await expect.poll(() => journal(board.root, 'T1', 1)).toBeUndefined();
-  } finally {
-    await killed(next);
-  }
+  startRunner(board, claude.bin, ['claude', '--wait']);
+  await expect
+    .poll(async () => (await aiRun(board)).failure, { timeout: 15_000 })
+    .toMatchObject({ kind: 'exit', exitCode: 3 });
+  expect(await aiRun(board)).toMatchObject({ state: 'failed', runId: 1 });
+  await expect.poll(() => journal(board.root, 'T1', 1)).toBeUndefined();
 });

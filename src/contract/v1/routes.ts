@@ -58,6 +58,8 @@ const json = <S extends z.ZodType>(schema: S): RouteResponse<S> => ({
 const taskParams = z.strictObject({ id: s.taskIdSchema });
 const documentParams = z.strictObject({ id: s.taskIdSchema, name: s.documentNameSchema });
 const reportParams = z.strictObject({ id: s.reportIdSchema });
+const topicParams = z.strictObject({ id: s.topicIdSchema });
+const blockParams = z.strictObject({ id: s.topicIdSchema, blockId: s.blockIdSchema });
 const versionParams = z.strictObject({ id: s.taskIdSchema, n: z.coerce.number().int().min(1) });
 const checkParams = z.strictObject({ id: s.taskIdSchema, n: z.coerce.number().int().min(1) });
 
@@ -106,6 +108,18 @@ const exampleReport = {
   title: 'Dependency audit',
   format: 'html' as const,
   createdAt: '2026-09-21T11:30:00.000Z',
+};
+
+const exampleBlocks = [
+  { id: 'K1', title: 'Foundations' },
+  { id: 'K2', title: 'Rollout' },
+];
+
+const exampleTopic = {
+  id: 'P1',
+  title: 'M1 Core',
+  body: '## Goal\n\nShip the core.\n',
+  blocks: exampleBlocks,
 };
 
 const exampleSession = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
@@ -902,6 +916,102 @@ export const routes = {
     response: json(s.deletedSchema),
     example: { params: { id: 'R3' }, response: { deleted: true } },
     ai: { include: true },
+  }),
+
+  // Topics and blocks (ADR-0032 §4, T84). Structure is the owner's to change: an agent is not told.
+  'topics.create': route({
+    id: 'topics.create',
+    method: 'POST',
+    path: '/topics',
+    summary: 'Create a topic; it has no blocks yet and the server assigns the id',
+    request: s.createTopicRequestSchema,
+    response: json(s.topicSchema),
+    successStatus: 201,
+    example: {
+      body: { title: 'M1 Core', body: '## Goal\n\nShip the core.\n' },
+      response: { ...exampleTopic, blocks: [] },
+    },
+    ai: { include: false },
+  }),
+
+  'topics.update': route({
+    id: 'topics.update',
+    method: 'PATCH',
+    path: '/topics/:id',
+    summary: 'Change the title or the body of a topic; its blocks are kept',
+    params: topicParams,
+    request: s.updateTopicRequestSchema,
+    response: json(s.topicSchema),
+    example: { params: { id: 'P1' }, body: { title: 'M1 Core' }, response: exampleTopic },
+    ai: { include: false },
+  }),
+
+  'topics.delete': route({
+    id: 'topics.delete',
+    method: 'DELETE',
+    path: '/topics/:id',
+    summary: 'Delete a topic with no tasks and no blocks; otherwise 409 TOPIC_NOT_EMPTY, no change',
+    params: topicParams,
+    response: json(s.deletedSchema),
+    example: { params: { id: 'P1' }, response: { deleted: true } },
+    ai: { include: false },
+  }),
+
+  'topics.createBlock': route({
+    id: 'topics.createBlock',
+    method: 'POST',
+    path: '/topics/:id/blocks',
+    summary: 'Create a block at the end of a topic; its id is global across the board',
+    params: topicParams,
+    request: s.blockRequestSchema,
+    response: json(s.blockSchema),
+    successStatus: 201,
+    example: { params: { id: 'P1' }, body: { title: 'Rollout' }, response: exampleBlocks[1] },
+    ai: { include: false },
+  }),
+
+  'topics.updateBlock': route({
+    id: 'topics.updateBlock',
+    method: 'PATCH',
+    path: '/topics/:id/blocks/:blockId',
+    summary: 'Rename a block; its id and its place stay. A block does not move between topics',
+    params: blockParams,
+    request: s.blockRequestSchema,
+    response: json(s.blockSchema),
+    example: {
+      params: { id: 'P1', blockId: 'K2' },
+      body: { title: 'Rollout' },
+      response: exampleBlocks[1],
+    },
+    ai: { include: false },
+  }),
+
+  'topics.reorderBlocks': route({
+    id: 'topics.reorderBlocks',
+    method: 'PUT',
+    path: '/topics/:id/blocks/order',
+    summary:
+      'Reorder the blocks of a topic: each of its block ids once; anything else is 400, no change',
+    params: topicParams,
+    request: s.reorderBlocksRequestSchema,
+    response: json(s.topicSchema),
+    example: {
+      params: { id: 'P1' },
+      body: { blocks: ['K2', 'K1'] },
+      response: { ...exampleTopic, blocks: [exampleBlocks[1], exampleBlocks[0]] },
+    },
+    ai: { include: false },
+  }),
+
+  'topics.deleteBlock': route({
+    id: 'topics.deleteBlock',
+    method: 'DELETE',
+    path: '/topics/:id/blocks/:blockId',
+    summary: 'Delete a block with no tasks; otherwise 409 BLOCK_NOT_EMPTY, no change',
+    params: blockParams,
+    response: json(s.deletedSchema),
+    example: { params: { id: 'P1', blockId: 'K2' }, response: { deleted: true } },
+    ai: { include: false },
   }),
 
   'events.stream': route({

@@ -39,6 +39,22 @@ describe('renderApiDoc', () => {
     expect(documented(generated).sort()).toEqual(routeList.map(endpoint).sort());
   });
 
+  it('states the rules of deleting a topic or a block, and of the order of blocks', () => {
+    const doc = renderApiDoc(routeList);
+    for (const text of [
+      '`409 TOPIC_NOT_EMPTY`',
+      '`409 BLOCK_NOT_EMPTY`',
+      'an empty block',
+      'makes it non-empty',
+      'PUT .../blocks/order',
+      '`topic.created`',
+      '`topic.updated`',
+      '`topic.deleted`',
+    ]) {
+      expect(doc.replace(/\s+/g, ' ')).toContain(text);
+    }
+  });
+
   it('marks each route as given to, or withheld from, AI agents', () => {
     const hidden = routeList.filter((r) => !r.ai.include).map((r) => r.id);
     expect(hidden.sort()).toEqual([
@@ -58,6 +74,14 @@ describe('renderApiDoc', () => {
       'instructions.get',
       'runs.stream',
       'tasks.run',
+      // Structure of the board is the owner's to change (ADR-0032 §4), so an agent is not told.
+      'topics.create',
+      'topics.createBlock',
+      'topics.delete',
+      'topics.deleteBlock',
+      'topics.reorderBlocks',
+      'topics.update',
+      'topics.updateBlock',
       // The history of a task is read and written by the page and the runner (ADR-0030).
       'versions.get',
       'versions.list',

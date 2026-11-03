@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Storage } from '../../src/core/ports.js';
+import type { NewTask, Storage } from '../../src/core/ports.js';
 import { parseTask, serializeTask } from '../../src/server/storage/markdown/taskFile.js';
+import { parseTopic } from '../../src/server/storage/markdown/topicFile.js';
 import {
   markdownStorage,
   type MarkdownStorageOptions,
@@ -1236,6 +1237,160 @@ describe('task.md: topic, block and dependsOn (ADR-0032 §3, T82)', () => {
       expect(countOf(text, 'dependsOn')).toBe(0);
       expect(text).toContain('topic: P2');
       expect(text).toContain('estimate: 3');
+    });
+  });
+});
+
+describe('markdown storage: topic and block writes on disk (T84)', () => {
+  let root: string;
+  let storage: Storage;
+
+  beforeEach(async () => {
+    root = await tmpDir();
+    storage = markdownStorage({ root });
+    await storage.init();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await cleanTmpDirs();
+  });
+
+  const newTask = (over: Record<string, unknown> = {}): NewTask => ({
+    title: 'A task',
+    status: 'todo',
+    rank: 'a0',
+    body: '',
+    labels: [],
+    ...over,
+  });
+
+  /** Every file under .board with its bytes, and the directories: nothing may differ. */
+  async function disk(dir = join(root, '.board')): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        result[`${path}/`] = '';
+        Object.assign(result, await disk(path));
+      } else {
+        result[path] = await readFile(path, 'utf8');
+      }
+    }
+    return result;
+  }
+
+  const topicFile = (id: string): string => join(root, '.board', 'topics', id, 'topic.md');
+
+  it('writes a reordered topic as the blocks list of topic.md, in that order', async () => {
+    const created = await storage.createTopic({ title: 'M1', body: 'Body\n' });
+    for (const title of ['a', 'b', 'c']) await storage.createBlock(created.id, { title });
+    await storage.reorderBlocks(created.id, ['K3', 'K1', 'K2']);
+    const text = await readFile(topicFile(created.id), 'utf8');
+    expect(text.indexOf('id: K3')).toBeLessThan(text.indexOf('id: K1'));
+    expect(text.indexOf('id: K1')).toBeLessThan(text.indexOf('id: K2'));
+    expect(text.endsWith('---\nBody\n')).toBe(true);
+    expect(parseTopic('P1', text)).toMatchObject({
+      topic: { blocks: [{ id: 'K3' }, { id: 'K1' }, { id: 'K2' }] },
+    });
+  });
+
+  it('removes the directory of a deleted topic, and keeps the counters', async () => {
+    const created = await storage.createTopic({ title: 'M1', body: '' });
+    await storage.deleteTopic(created.id);
+    expect(await readdir(join(root, '.board', 'topics'))).toEqual(['sequence.json']);
+    expect(
+      JSON.parse(await readFile(join(root, '.board', 'topics', 'sequence.json'), 'utf8')),
+    ).toEqual({
+      formatVersion: 1,
+      topicSequence: 1,
+      blockSequence: 0,
+    });
+  });
+
+  describe('a refusal changes no file at all (INVARIANT)', () => {
+    beforeEach(async () => {
+      await storage.createTopic({ title: 'with a task', body: '' });
+      await storage.createBlock('P1', { title: 'busy' });
+      await storage.createBlock('P1', { title: 'empty' });
+      await storage.createTopic({ title: 'with an empty block only', body: '' });
+      await storage.createBlock('P2', { title: 'empty' });
+      await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+    });
+
+    it.each([
+      ['a topic with a task in a block', (s: Storage) => s.deleteTopic('P1'), 'TOPIC_NOT_EMPTY'],
+      ['a topic with an empty block only', (s: Storage) => s.deleteTopic('P2'), 'TOPIC_NOT_EMPTY'],
+      ['a block with a task', (s: Storage) => s.deleteBlock('P1', 'K1'), 'BLOCK_NOT_EMPTY'],
+      ['a topic that does not exist', (s: Storage) => s.deleteTopic('P9'), 'TOPIC_NOT_FOUND'],
+      ['a block that does not exist', (s: Storage) => s.deleteBlock('P1', 'K9'), 'BLOCK_NOT_FOUND'],
+      ['a block of another topic', (s: Storage) => s.deleteBlock('P2', 'K1'), 'BLOCK_NOT_FOUND'],
+      [
+        'an order that is not whole',
+        (s: Storage) => s.reorderBlocks('P1', ['K1']),
+        'INVALID_REQUEST',
+      ],
+      [
+        'a rename of a missing block',
+        (s: Storage) => s.updateBlock('P1', 'K9', { title: 'x' }),
+        'BLOCK_NOT_FOUND',
+      ],
+      [
+        'an update of a missing topic',
+        (s: Storage) => s.updateTopic('P9', { title: 'x' }),
+        'TOPIC_NOT_FOUND',
+      ],
+    ])('%s', async (_name, action, code) => {
+      const before = await disk();
+      await expect(action(storage)).rejects.toMatchObject({ code });
+      expect(await disk()).toEqual(before);
+    });
+  });
+
+  it('does not even recover the counters when it refuses a delete (INVARIANT)', async () => {
+    await storage.createTopic({ title: 'M1', body: '' });
+    await storage.createBlock('P1', { title: 'busy' });
+    await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+    await rm(join(root, '.board', 'topics', 'sequence.json'));
+    const before = await disk();
+    await expect(storage.deleteBlock('P1', 'K1')).rejects.toMatchObject({
+      code: 'BLOCK_NOT_EMPTY',
+    });
+    await expect(storage.deleteTopic('P1')).rejects.toMatchObject({ code: 'TOPIC_NOT_EMPTY' });
+    expect(await disk()).toEqual(before);
+  });
+
+  it('refuses to delete a topic or a block while a task file cannot be read: it may be in it', async () => {
+    await storage.createTopic({ title: 'with a block', body: '' });
+    await storage.createBlock('P1', { title: 'b' });
+    await storage.createTopic({ title: 'bare', body: '' });
+    const dir = join(root, '.board', 'tasks', 'T1');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'task.md'), 'not a task file\n', 'utf8');
+    const before = await disk();
+    await expect(storage.deleteBlock('P1', 'K1')).rejects.toMatchObject({
+      code: 'BLOCK_NOT_EMPTY',
+    });
+    await expect(storage.deleteTopic('P2')).rejects.toMatchObject({ code: 'TOPIC_NOT_EMPTY' });
+    expect(await disk()).toEqual(before);
+  });
+
+  it('counts a task that names a block of the topic as its own, even without a topic field', async () => {
+    const created = await storage.createTopic({ title: 'M1', body: '' });
+    await storage.createBlock(created.id, { title: 'b' });
+    const dir = join(root, '.board', 'tasks', 'T1');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'task.md'),
+      '---\nid: T1\ntitle: By hand\nstatus: todo\nrank: a0\nlabels: []\nblock: K1\n' +
+        'createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\n',
+      'utf8',
+    );
+    await expect(storage.deleteBlock(created.id, 'K1')).rejects.toMatchObject({
+      code: 'BLOCK_NOT_EMPTY',
+    });
+    await expect(storage.deleteTopic(created.id)).rejects.toMatchObject({
+      code: 'TOPIC_NOT_EMPTY',
     });
   });
 });

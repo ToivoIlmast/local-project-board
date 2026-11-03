@@ -4,6 +4,7 @@ import type {
   ProjectService,
   ReportService,
   TaskService,
+  TopicService,
   WorkflowService,
 } from '../../core/index.js';
 import type { AiRunService } from '../../core/services/aiRunService.js';
@@ -30,6 +31,8 @@ export interface BoardContext {
   workflow: WorkflowService;
   documents: DocumentService;
   reports: ReportService;
+  /** Topics and their blocks (ADR-0032 §4). */
+  topics: TopicService;
   project: ProjectService;
   git: GitReader;
   /** Runner lifecycle: begin and end a run on a task (T31). */

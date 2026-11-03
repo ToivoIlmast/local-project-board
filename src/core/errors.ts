@@ -12,6 +12,12 @@ export const BOARD_ERROR_CODES = [
   'TASK_NOT_FOUND',
   /** A topic that does not exist, or whose topic.md cannot be read (ADR-0032). */
   'TOPIC_NOT_FOUND',
+  /** A block that is not among the blocks of that topic (ADR-0032 §4). */
+  'BLOCK_NOT_FOUND',
+  /** A topic with a block or a task cannot be deleted; an empty block counts (ADR-0032 §4). */
+  'TOPIC_NOT_EMPTY',
+  /** A block with a task cannot be deleted (ADR-0032 §4). */
+  'BLOCK_NOT_EMPTY',
   'DOCUMENT_NOT_FOUND',
   'REPORT_NOT_FOUND',
   'INVALID_DOCUMENT_NAME',

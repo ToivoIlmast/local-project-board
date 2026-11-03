@@ -67,6 +67,14 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'reports.create': { path: '/reports', body: { title: 'Audit', format: 'md', content: '# A\n' } },
   'reports.read': { path: '/reports/R1' },
   'reports.delete': { path: '/reports/R1' },
+  // Topics and blocks (T84); beforeEach below makes P1 with K1 and K2, and an empty P2.
+  'topics.create': { path: '/topics', body: { title: 'Created by the contract test' } },
+  'topics.update': { path: '/topics/P1', body: { title: 'Renamed' } },
+  'topics.delete': { path: '/topics/P2' },
+  'topics.createBlock': { path: '/topics/P1/blocks', body: { title: 'Created' } },
+  'topics.updateBlock': { path: '/topics/P1/blocks/K1', body: { title: 'Renamed' } },
+  'topics.reorderBlocks': { path: '/topics/P1/blocks/order', body: { blocks: ['K2', 'K1'] } },
+  'topics.deleteBlock': { path: '/topics/P1/blocks/K2' },
   'session.get': { path: '/session' },
   'instructions.get': { path: '/instructions' },
   // The history of a task (ADR-0030); beforeEach below makes check 1 (reported) and check 2.
@@ -126,6 +134,10 @@ beforeEach(async () => {
       markdown: '# Research\n',
     })
     .expect(200);
+  await board.post(`${API}/topics`, { title: 'first' }).expect(201);
+  await board.post(`${API}/topics/P1/blocks`, { title: 'one' }).expect(201);
+  await board.post(`${API}/topics/P1/blocks`, { title: 'two' }).expect(201);
+  await board.post(`${API}/topics`, { title: 'empty' }).expect(201);
   // An HTML report, because that is the media the contract declares for reports.read;
   // a markdown report is served as markdown, which reports.test.ts covers.
   await board
