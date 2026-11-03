@@ -13,6 +13,7 @@ import type {
 } from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
+import { assertPlacement } from '../../src/core/rules/placement.js';
 import { assembleCheck, storedCheckReport } from '../../src/core/rules/history.js';
 import {
   BLOCK_ID_PREFIX,
@@ -177,6 +178,7 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     getTask: async (id) => store.tasks.get(id) ?? null,
 
     createTask: async (input: NewTask) => {
+      await assertPlacement(input, {}, idPrefix, async (id) => store.topics.get(id) ?? null);
       const { id, sequence } = allocateId(idPrefix, store.taskSequence, store.tasks.keys());
       store.taskSequence = sequence;
       const timestamp = now();
@@ -189,6 +191,9 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         labels: [...input.labels],
         ...(input.branch === undefined ? {} : { branch: input.branch }),
         ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
+        ...(input.topic === undefined ? {} : { topic: input.topic }),
+        ...(input.block === undefined ? {} : { block: input.block }),
+        ...(input.dependsOn === undefined ? {} : { dependsOn: [...input.dependsOn] }),
         createdAt: timestamp,
         updatedAt: timestamp,
         ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
@@ -199,8 +204,20 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
 
     updateTask: async (id, patch: TaskPatch) => {
       const task = requireTask(id);
-      const { branch, workflow, aiRun, ...rest } = patch;
+      const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
+      await assertPlacement(
+        { topic, block, dependsOn },
+        task,
+        idPrefix,
+        async (topicId) => store.topics.get(topicId) ?? null,
+      );
       const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
+      if (topic === null) delete updated.topic;
+      else if (topic !== undefined) updated.topic = topic;
+      if (block === null) delete updated.block;
+      else if (block !== undefined) updated.block = block;
+      if (dependsOn === null) delete updated.dependsOn;
+      else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
       if (branch === null) delete updated.branch;
       else if (branch !== undefined) updated.branch = branch;
       if (workflow === null) delete updated.workflow;

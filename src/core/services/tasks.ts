@@ -26,6 +26,9 @@ export interface CreateTaskInput {
   labels?: string[] | undefined;
   branch?: string | undefined;
   workflow?: TaskWorkflowOverrides | undefined;
+  topic?: string | undefined;
+  block?: string | undefined;
+  dependsOn?: string[] | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -38,6 +41,10 @@ export interface UpdateTaskInput {
   workflow?: TaskWorkflowOverrides | null | undefined;
   /** What the agent reports about its run; an object replaces it whole, null removes it. */
   aiRun?: AiRun | null | undefined;
+  /** Where the task is placed; null clears it. Not content: it makes no version (ADR-0032 §3). */
+  topic?: string | null | undefined;
+  block?: string | null | undefined;
+  dependsOn?: string[] | null | undefined;
   /**
    * The `contentHash` of the content the change is based on; a content that hashes differently
    * is refused and nothing is written (ADR-0030 §4). Absent means last-write-wins.
@@ -161,6 +168,9 @@ export function createTaskService({
         labels: input.labels ?? [],
         branch: input.branch,
         workflow: input.workflow,
+        topic: input.topic,
+        block: input.block,
+        dependsOn: input.dependsOn,
       });
       // The first version, under the lock of the new task. If it cannot be written the task
       // still exists, and the next sync records its content as a `baseline`.

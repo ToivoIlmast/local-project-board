@@ -203,6 +203,138 @@ export function runStorageConformance(harness: StorageHarness): void {
       });
     });
 
+    describe('topic, block and dependsOn of a task (ADR-0032 §3, T82)', () => {
+      /** P1 with K1 and P2 with K2, so a block of the other topic can be named. */
+      async function topics(provider: Storage = storage): Promise<void> {
+        const first = await provider.createTopic({ title: 'first', body: '' });
+        await provider.createBlock(first.id, { title: 'one' });
+        const second = await provider.createTopic({ title: 'second', body: '' });
+        await provider.createBlock(second.id, { title: 'two' });
+      }
+
+      it('has none of them for a task created without (INVARIANT)', async () => {
+        const created = await storage.createTask(newTask());
+        for (const key of ['topic', 'block', 'dependsOn']) {
+          expect(created).not.toHaveProperty(key);
+          expect(await storage.getTask(created.id)).not.toHaveProperty(key);
+        }
+      });
+
+      it('keeps them across a read and a reopen, and out of extra (INVARIANT)', async () => {
+        await topics();
+        const placed = { topic: 'P1', block: 'K1', dependsOn: ['T7', 'T9'] };
+        const created = await storage.createTask(newTask({ ...placed, extra: { estimate: 3 } }));
+        expect(created).toMatchObject(placed);
+        const reopened = await reopen(storage);
+        const read = await reopened.getTask(created.id);
+        expect(read).toMatchObject(placed);
+        expect(read?.extra).toEqual({ estimate: 3 });
+        expect(taskSchema.safeParse(read).success).toBe(true);
+      });
+
+      it('sets them on update, and clears them with null', async () => {
+        await topics();
+        const created = await storage.createTask(newTask());
+        const placed = await storage.updateTask(created.id, {
+          topic: 'P1',
+          block: 'K1',
+          dependsOn: ['T2'],
+        });
+        expect(placed).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T2'] });
+        const cleared = await storage.updateTask(created.id, {
+          topic: null,
+          block: null,
+          dependsOn: null,
+        });
+        for (const key of ['topic', 'block', 'dependsOn']) expect(cleared).not.toHaveProperty(key);
+        expect(await storage.getTask(created.id)).toEqual(cleared);
+      });
+
+      it('leaves them alone when the patch does not mention them', async () => {
+        await topics();
+        const created = await storage.createTask(
+          newTask({ topic: 'P1', block: 'K1', dependsOn: ['T2'] }),
+        );
+        const updated = await storage.updateTask(created.id, { title: 'Renamed' });
+        expect(updated).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T2'] });
+      });
+
+      it('takes a topic without a block, and moves a task to another topic and block', async () => {
+        await topics();
+        const created = await storage.createTask(newTask({ topic: 'P1' }));
+        expect(created).not.toHaveProperty('block');
+        const moved = await storage.updateTask(created.id, { topic: 'P2', block: 'K2' });
+        expect(moved).toMatchObject({ topic: 'P2', block: 'K2' });
+      });
+
+      describe('a block belongs to the topic it is named with (INVARIANT)', () => {
+        it('refuses a block without a topic, and writes nothing', async () => {
+          await topics();
+          await expectCode(storage.createTask(newTask({ block: 'K1' })), 'INVALID_REQUEST');
+          expect(await storage.listTasks()).toEqual([]);
+          const created = await storage.createTask(newTask());
+          await expectCode(storage.updateTask(created.id, { block: 'K1' }), 'INVALID_REQUEST');
+          expect(await storage.getTask(created.id)).toEqual(created);
+        });
+
+        it('refuses a block of another topic, on create and on update', async () => {
+          await topics();
+          await expectCode(
+            storage.createTask(newTask({ topic: 'P1', block: 'K2' })),
+            'INVALID_REQUEST',
+          );
+          expect(await storage.listTasks()).toEqual([]);
+          const created = await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+          await expectCode(storage.updateTask(created.id, { block: 'K2' }), 'INVALID_REQUEST');
+          expect(await storage.getTask(created.id)).toEqual(created);
+        });
+
+        it('refuses a block of a topic that does not exist, or a block that does not exist', async () => {
+          await topics();
+          await expectCode(
+            storage.createTask(newTask({ topic: 'P9', block: 'K1' })),
+            'INVALID_REQUEST',
+          );
+          await expectCode(
+            storage.createTask(newTask({ topic: 'P1', block: 'K9' })),
+            'INVALID_REQUEST',
+          );
+          expect(await storage.listTasks()).toEqual([]);
+        });
+
+        it('refuses a new topic that leaves the old block behind, and a topic cleared under a block', async () => {
+          await topics();
+          const created = await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+          await expectCode(storage.updateTask(created.id, { topic: 'P2' }), 'INVALID_REQUEST');
+          await expectCode(storage.updateTask(created.id, { topic: null }), 'INVALID_REQUEST');
+          expect(await storage.getTask(created.id)).toEqual(created);
+        });
+      });
+
+      describe('dependsOn names tasks in the form of the configured prefix (INVARIANT)', () => {
+        it('takes ids of the configured prefix, a task that does not exist included', async () => {
+          const provider = await open({ idPrefix: 'F' });
+          const created = await provider.createTask(newTask({ dependsOn: ['F3', 'F40'] }));
+          expect(created.dependsOn).toEqual(['F3', 'F40']);
+        });
+
+        it.each([
+          ['an id of another prefix', ['T3']],
+          ['a topic id', ['P1']],
+          ['a block id', ['K1']],
+          ['text that is not an id', ['F3x']],
+          ['an id with a leading zero', ['F03']],
+        ])('refuses %s, on create and on update, and writes nothing', async (_name, ids) => {
+          const provider = await open({ idPrefix: 'F' });
+          await expectCode(provider.createTask(newTask({ dependsOn: ids })), 'INVALID_REQUEST');
+          expect(await provider.listTasks()).toEqual([]);
+          const created = await provider.createTask(newTask());
+          await expectCode(provider.updateTask(created.id, { dependsOn: ids }), 'INVALID_REQUEST');
+          expect(await provider.getTask(created.id)).toEqual(created);
+        });
+      });
+    });
+
     describe('topic and block ids (ADR-0032 §2)', () => {
       const topic = (title = 'M1 Core'): { title: string; body: string } => ({ title, body: '' });
 

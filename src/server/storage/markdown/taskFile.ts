@@ -13,6 +13,9 @@ const KNOWN = [
   'branch',
   'workflow',
   'aiRun',
+  'topic',
+  'block',
+  'dependsOn',
   'createdAt',
   'updatedAt',
 ];

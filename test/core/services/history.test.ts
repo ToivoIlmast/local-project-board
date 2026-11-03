@@ -160,6 +160,101 @@ describe('task history', () => {
     });
   });
 
+  describe('topic, block and dependsOn are not content (ADR-0030 §1, ADR-0032 §3, T82)', () => {
+    async function twoTopics(): Promise<void> {
+      const first = await storage.createTopic({ title: 'first', body: '' });
+      await storage.createBlock(first.id, { title: 'one' });
+      const second = await storage.createTopic({ title: 'second', body: '' });
+      await storage.createBlock(second.id, { title: 'two' });
+    }
+
+    it('does not make a version when the topic changes (INVARIANT)', async () => {
+      await twoTopics();
+      const task = await tasks.create({ title: 'One' });
+      expect(await numbers(task.id)).toEqual([1]);
+      await tasks.update(task.id, { topic: 'P1' });
+      await tasks.update(task.id, { topic: 'P2' });
+      expect((await tasks.get(task.id)).topic).toBe('P2');
+      await tasks.update(task.id, { topic: null });
+      expect(await tasks.get(task.id)).not.toHaveProperty('topic');
+      expect(await numbers(task.id)).toEqual([1]);
+    });
+
+    it('does not make a version when the block changes (INVARIANT)', async () => {
+      await twoTopics();
+      const task = await tasks.create({ title: 'One', topic: 'P1' });
+      await tasks.update(task.id, { block: 'K1' });
+      await tasks.update(task.id, { topic: 'P2', block: 'K2' });
+      expect(await tasks.get(task.id)).toMatchObject({ topic: 'P2', block: 'K2' });
+      await tasks.update(task.id, { block: null });
+      expect(await tasks.get(task.id)).not.toHaveProperty('block');
+      expect(await numbers(task.id)).toEqual([1]);
+    });
+
+    it('does not make a version when dependsOn changes (INVARIANT)', async () => {
+      const task = await tasks.create({ title: 'One' });
+      await tasks.update(task.id, { dependsOn: ['T7'] });
+      await tasks.update(task.id, { dependsOn: ['T7', 'T8'] });
+      expect((await tasks.get(task.id)).dependsOn).toEqual(['T7', 'T8']);
+      await tasks.update(task.id, { dependsOn: null });
+      expect(await tasks.get(task.id)).not.toHaveProperty('dependsOn');
+      expect(await numbers(task.id)).toEqual([1]);
+    });
+
+    it('does not make a version at create, and writes the fields', async () => {
+      await twoTopics();
+      const task = await tasks.create({
+        title: 'One',
+        topic: 'P1',
+        block: 'K1',
+        dependsOn: ['T9'],
+      });
+      expect(task).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T9'] });
+      expect(await numbers(task.id)).toEqual([1]);
+      expect((await storage.listVersions(task.id))[0]?.snapshot).toEqual({
+        title: 'One',
+        body: '',
+        labels: [],
+      });
+    });
+
+    it('keeps them out of every snapshot and the hash, and changes the content hash by nothing', async () => {
+      await twoTopics();
+      const task = await tasks.create({ title: 'One', body: 'b\n' });
+      const before = contentHash({ title: 'One', body: 'b\n', labels: [] });
+      await tasks.update(task.id, { topic: 'P1', block: 'K1', dependsOn: ['T5'] });
+      await tasks.update(task.id, { title: 'Two' });
+      const versions = await storage.listVersions(task.id);
+      expect(versions.map((version) => version.snapshot)).toEqual([
+        { title: 'One', body: 'b\n', labels: [] },
+        { title: 'Two', body: 'b\n', labels: [] },
+      ]);
+      expect(versions[0]?.snapshot).not.toHaveProperty('topic');
+      // A stale-looking hash from before the placement still matches the content.
+      await expect(
+        tasks.update(task.id, { body: 'c\n', ifContentHash: contentHash(versions[1]!.snapshot) }),
+      ).resolves.toMatchObject({ body: 'c\n' });
+      expect(before).not.toBe(contentHash(versions[1]!.snapshot));
+    });
+
+    it('does not add a baseline or an external version for a task whose placement changed', async () => {
+      await twoTopics();
+      const task = await legacy();
+      await tasks.update(task.id, { topic: 'P1', block: 'K1' });
+      expect(await tasks.get(task.id)).toMatchObject({ topic: 'P1', block: 'K1' });
+      // A task with no history: the sync that a content change would do has no content to do it for.
+      expect(await numbers(task.id)).toEqual([]);
+    });
+
+    it('announces the task, and no version', async () => {
+      await twoTopics();
+      const task = await tasks.create({ title: 'One' });
+      events.events.length = 0;
+      await tasks.update(task.id, { topic: 'P1' });
+      expect(events.events.map((event) => event.type)).toEqual(['task.updated']);
+    });
+  });
+
   describe('ifContentHash', () => {
     it('lets a change through when the content is the one it was based on', async () => {
       const task = await tasks.create({ title: 'One' });

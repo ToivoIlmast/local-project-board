@@ -1138,3 +1138,104 @@ describe('markdown storage: topics, blocks and their counters (ADR-0032 §2–3)
     expect(await readFile(file, 'utf8')).toBe('---\ntitle: M1\nblocks: nope\nowner: me\n---\n');
   });
 });
+
+describe('task.md: topic, block and dependsOn (ADR-0032 §3, T82)', () => {
+  // An earlier board knows none of the three: they are the person's own fields, after updatedAt.
+  const legacyText =
+    '---\nid: T7\ntitle: Handwritten\nstatus: todo\nrank: a0\nlabels: []\n' +
+    'createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n' +
+    'topic: P2\nblock: K5\ndependsOn:\n  - T3\n  - T4\nestimate: 3\nlinks:\n  a: [1, 2]\n---\nBody.\n';
+
+  const countOf = (text: string, key: string): number =>
+    text.split('\n').filter((line) => line.startsWith(`${key}:`)).length;
+
+  it('reads the three from the fields an earlier board kept in `extra`, not as unknown ones (INVARIANT)', () => {
+    const parsed = parseTask('T7', legacyText);
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task).toMatchObject({ topic: 'P2', block: 'K5', dependsOn: ['T3', 'T4'] });
+    expect(parsed.task.extra).toEqual({ estimate: 3, links: { a: [1, 2] } });
+  });
+
+  it('writes each of the three once, and the unknown fields as they were (INVARIANT)', () => {
+    const parsed = parseTask('T7', legacyText);
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    const written = serializeTask(parsed.task);
+    for (const key of ['topic', 'block', 'dependsOn', 'estimate', 'links']) {
+      expect(countOf(written, key)).toBe(1);
+    }
+    const again = parseTask('T7', written);
+    if (!('task' in again)) throw new Error(again.error);
+    expect(again.task).toEqual(parsed.task);
+  });
+
+  it('writes a task without them exactly as before (INVARIANT)', () => {
+    const plain =
+      '---\nid: T7\ntitle: Handwritten\nstatus: todo\nrank: a0\nlabels: []\n' +
+      'createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\nestimate: 3\n---\nBody.\n';
+    const parsed = parseTask('T7', plain);
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(serializeTask(parsed.task)).toBe(plain);
+  });
+
+  it('reports a value of the wrong shape as unreadable, and does not invent it', () => {
+    for (const bad of ['topic: T1\n', 'block: K1\n', 'dependsOn: T3\n', 'topic: P1\nblock: P1\n']) {
+      const parsed = parseTask(
+        'T7',
+        legacyText.replace(/topic: P2\nblock: K5\ndependsOn:\n {2}- T3\n {2}- T4\n/, bad),
+      );
+      expect('error' in parsed).toBe(true);
+    }
+  });
+
+  describe('on disk', () => {
+    let root: string;
+    let storage: Storage;
+
+    beforeEach(async () => {
+      root = await tmpDir();
+      storage = markdownStorage({ root });
+      await storage.init();
+      const dir = join(root, '.board', 'tasks', 'T7');
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'task.md'), legacyText, 'utf8');
+    });
+
+    afterEach(async () => {
+      await storage.close();
+      await cleanTmpDirs();
+    });
+
+    const file = (): string => join(root, '.board', 'tasks', 'T7', 'task.md');
+
+    it('reads the legacy board without a read issue', async () => {
+      expect(await storage.readIssues()).toEqual([]);
+      expect(await storage.getTask('T7')).toMatchObject({
+        topic: 'P2',
+        block: 'K5',
+        dependsOn: ['T3', 'T4'],
+      });
+    });
+
+    it('keeps all of it through a write of something else (INVARIANT)', async () => {
+      await storage.updateTask('T7', { title: 'Renamed', labels: ['x'] });
+      const text = await readFile(file(), 'utf8');
+      for (const key of ['topic', 'block', 'dependsOn', 'estimate', 'links']) {
+        expect(countOf(text, key)).toBe(1);
+      }
+      expect(text).toContain('topic: P2');
+      expect(text).toContain('block: K5');
+      expect(text).toContain('  - T3\n  - T4\n');
+      expect(text).toContain('estimate: 3');
+      expect((await storage.getTask('T7'))?.extra).toEqual({ estimate: 3, links: { a: [1, 2] } });
+      expect(await storage.readIssues()).toEqual([]);
+    });
+
+    it('removes a field from the file when the patch clears it, and keeps the others', async () => {
+      await storage.updateTask('T7', { dependsOn: null });
+      const text = await readFile(file(), 'utf8');
+      expect(countOf(text, 'dependsOn')).toBe(0);
+      expect(text).toContain('topic: P2');
+      expect(text).toContain('estimate: 3');
+    });
+  });
+});
