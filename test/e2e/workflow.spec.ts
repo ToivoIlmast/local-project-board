@@ -1,10 +1,6 @@
-import { spawn } from 'node:child_process';
 import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from './board';
-
-const CLI = fileURLToPath(new URL('../../bin/board.js', import.meta.url));
 
 test('a developer opens the board and works on a task', async ({ page, board }) => {
   await page.goto(board.url);
@@ -479,64 +475,54 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
   await chmod(join(bin, 'claude'), 0o755);
 
   // The runner, started once by the person in a terminal of the project.
-  const runner = spawn(process.execPath, [CLI, 'claude', '--wait'], {
-    cwd: board.root,
-    env: { ...process.env, PATH: bin, XDG_CONFIG_HOME: join(board.root, 'no-user-config') },
-  });
-  let printed = '';
-  runner.stdout.on('data', (chunk: Buffer) => (printed += chunk.toString()));
-  runner.stderr.on('data', (chunk: Buffer) => (printed += chunk.toString()));
-  try {
-    await expect.poll(() => printed, { timeout: 15_000 }).toContain('Waiting for Send to AI');
+  const runner = board.spawnRunner(['claude', '--wait'], { PATH: bin });
+  await expect
+    .poll(() => runner.printed(), { timeout: 15_000 })
+    .toContain('Waiting for Send to AI');
 
-    await page.goto(board.url);
-    await page.getByRole('button', { name: 'Ship it' }).click();
-    const details = page.getByRole('complementary', { name: 'Task T1' });
+  await page.goto(board.url);
+  await page.getByRole('button', { name: 'Ship it' }).click();
+  const details = page.getByRole('complementary', { name: 'Task T1' });
 
-    // From the keyboard, like the other entries of the menu.
-    await details.getByRole('button', { name: 'Send to AI' }).focus();
-    await page.keyboard.press('Enter');
-    await page.getByRole('button', { name: 'Claude Code', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    // The dialog of the run (T38), left as it opens: the default of Claude Code, a new session.
-    const dialog = page.getByRole('dialog', { name: 'Start Claude Code on T1' });
-    await dialog.getByRole('button', { name: 'Start' }).focus();
-    await page.keyboard.press('Enter');
+  // From the keyboard, like the other entries of the menu.
+  await details.getByRole('button', { name: 'Send to AI' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Claude Code', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  // The dialog of the run (T38), left as it opens: the default of Claude Code, a new session.
+  const dialog = page.getByRole('dialog', { name: 'Start Claude Code on T1' });
+  await dialog.getByRole('button', { name: 'Start' }).focus();
+  await page.keyboard.press('Enter');
 
-    await expect(details.getByText(/Claude Code is starting on T1/)).toBeVisible();
-    await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();
+  await expect(details.getByText(/Claude Code is starting on T1/)).toBeVisible();
+  await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();
 
-    // The runner started `claude` with the prompt of T1, in the project, and the session read
-    // the handoff of T1 from the board.
-    await expect
-      .poll(() => readFile(log, 'utf8').catch(() => ''), { timeout: 15_000 })
-      .not.toBe('');
-    const call = JSON.parse(await readFile(log, 'utf8')) as {
-      argv: string[];
-      cwd: string;
-      handoff: string;
-    };
-    const address = board.url.replace(/\/$/, '').replace('localhost', '127.0.0.1');
-    expect(call.argv).toHaveLength(3);
-    expect(call.argv[0]).toBe('--session-id');
-    expect(call.argv[2]).toBe(
-      `Work on task T1 of the local board: read GET ${address}/api/v1/tasks/T1/handoff and follow it.`,
-    );
-    expect(call.cwd).toBe(await realpath(board.root));
-    expect(call.handoff).toMatch(/^# Task T1: Ship it\n/);
-    expect(call.handoff).toContain('# local-project-board API (v1)');
+  // The runner started `claude` with the prompt of T1, in the project, and the session read
+  // the handoff of T1 from the board.
+  await expect.poll(() => readFile(log, 'utf8').catch(() => ''), { timeout: 15_000 }).not.toBe('');
+  const call = JSON.parse(await readFile(log, 'utf8')) as {
+    argv: string[];
+    cwd: string;
+    handoff: string;
+  };
+  const address = board.url.replace(/\/$/, '').replace('localhost', '127.0.0.1');
+  expect(call.argv).toHaveLength(3);
+  expect(call.argv[0]).toBe('--session-id');
+  expect(call.argv[2]).toBe(
+    `Work on task T1 of the local board: read GET ${address}/api/v1/tasks/T1/handoff and follow it.`,
+  );
+  expect(call.cwd).toBe(await realpath(board.root));
+  expect(call.handoff).toMatch(/^# Task T1: Ship it\n/);
+  expect(call.handoff).toContain('# local-project-board API (v1)');
 
-    // What the agent reported is on the page, without a reload.
-    const reported = details.getByRole('region', { name: 'AI run' });
-    await expect(reported).toBeVisible();
-    await expect(reported.getByText('needs-review')).toBeVisible();
+  // What the agent reported is on the page, without a reload.
+  const reported = details.getByRole('region', { name: 'AI run' });
+  await expect(reported).toBeVisible();
+  await expect(reported.getByText('needs-review')).toBeVisible();
 
-    // The token of this run is not in what the runner gave `claude`.
-    const runtime = JSON.parse(
-      await readFile(join(board.root, '.board', 'runtime.json'), 'utf8'),
-    ) as { token: string };
-    expect(JSON.stringify(call.argv) + printed).not.toContain(runtime.token);
-  } finally {
-    runner.kill('SIGINT');
-  }
+  // The token of this run is not in what the runner gave `claude`.
+  const runtime = JSON.parse(
+    await readFile(join(board.root, '.board', 'runtime.json'), 'utf8'),
+  ) as { token: string };
+  expect(JSON.stringify(call.argv) + runner.printed()).not.toContain(runtime.token);
 });
