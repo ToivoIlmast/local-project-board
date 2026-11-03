@@ -22,6 +22,7 @@ import {
   isTaskId,
   isTopicId,
 } from '../../../core/rules/ids.js';
+import { assertPlacement } from '../../../core/rules/placement.js';
 import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
 import { historyFiles } from './history.js';
@@ -160,6 +161,12 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     } catch (error) {
       return { error: `The file cannot be read: ${(error as Error).message}` };
     }
+  }
+
+  async function topicById(id: string): Promise<Topic | null> {
+    if (!isTopicId(id)) return null;
+    const result = await readTopicFile(id);
+    return 'topic' in result ? result.topic : null;
   }
 
   async function scanTopics(): Promise<TopicScan> {
@@ -351,6 +358,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     createTask(input: NewTask) {
       return exclusive(async () => {
         const state = await readState();
+        await assertPlacement(input, {}, idPrefix, topicById);
         const { id, sequence } = allocateId(idPrefix, state.taskSequence, await taskIds());
         const timestamp = now();
         const task: Task = {
@@ -362,6 +370,9 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
           labels: [...input.labels],
           ...(input.branch === undefined ? {} : { branch: input.branch }),
           ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
+          ...(input.topic === undefined ? {} : { topic: input.topic }),
+          ...(input.block === undefined ? {} : { block: input.block }),
+          ...(input.dependsOn === undefined ? {} : { dependsOn: [...input.dependsOn] }),
           createdAt: timestamp,
           updatedAt: timestamp,
           ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
@@ -376,8 +387,15 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     updateTask(id, patch: TaskPatch) {
       return exclusive(async () => {
         const task = await requireTask(id);
-        const { branch, workflow, aiRun, ...rest } = patch;
+        const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
+        await assertPlacement({ topic, block, dependsOn }, task, idPrefix, topicById);
         const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
+        if (topic === null) delete updated.topic;
+        else if (topic !== undefined) updated.topic = topic;
+        if (block === null) delete updated.block;
+        else if (block !== undefined) updated.block = block;
+        if (dependsOn === null) delete updated.dependsOn;
+        else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
         if (branch === null) delete updated.branch;
         else if (branch !== undefined) updated.branch = branch;
         if (workflow === null) delete updated.workflow;
@@ -501,11 +519,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       });
     },
 
-    async getTopic(id) {
-      if (!isTopicId(id)) return null;
-      const result = await readTopicFile(id);
-      return 'topic' in result ? result.topic : null;
-    },
+    getTopic: topicById,
 
     createTopic(input) {
       return exclusive(async () => {

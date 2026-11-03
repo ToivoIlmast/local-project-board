@@ -78,6 +78,45 @@ describe('taskSchema', () => {
   it('rejects unknown top-level fields: they belong in `extra`', () => {
     expect(taskSchema.safeParse({ ...task, estimate: 3 }).success).toBe(false);
   });
+
+  describe('topic, block and dependsOn (ADR-0032 §3)', () => {
+    it('are optional: a task without them parses and has none of the keys', () => {
+      const parsed = taskSchema.parse(task);
+      for (const key of ['topic', 'block', 'dependsOn']) expect(key in parsed).toBe(false);
+    });
+
+    it('keeps them as given', () => {
+      const placed = { ...task, topic: 'P2', block: 'K5', dependsOn: ['T3', 'T4'] };
+      expect(taskSchema.parse(placed)).toEqual(placed);
+    });
+
+    it('takes a topic without a block, and dependsOn alone', () => {
+      expect(taskSchema.safeParse({ ...task, topic: 'P2' }).success).toBe(true);
+      expect(taskSchema.safeParse({ ...task, dependsOn: [] }).success).toBe(true);
+    });
+
+    it('refuses a block without a topic (INVARIANT)', () => {
+      const result = taskSchema.safeParse({ ...task, block: 'K1' });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path[0]).toBe('block');
+    });
+
+    it.each([
+      ['topic', { topic: 'T1' }],
+      ['topic', { topic: 'p1' }],
+      ['topic', { topic: 'P0' }],
+      ['block', { topic: 'P1', block: 'P1' }],
+      ['block', { topic: 'P1', block: 'K0' }],
+      ['dependsOn', { dependsOn: ['t1'] }],
+      ['dependsOn', { dependsOn: ['../T1'] }],
+      ['dependsOn', { dependsOn: ['T1', ''] }],
+      ['dependsOn', { dependsOn: 'T1' }],
+    ])('rejects an invalid %s', (field, override) => {
+      const result = taskSchema.safeParse({ ...task, ...override });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path[0]).toBe(field);
+    });
+  });
 });
 
 describe('documentMetaSchema', () => {

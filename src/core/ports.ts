@@ -32,13 +32,20 @@ export interface NewTask {
   labels: string[];
   branch?: string | undefined;
   workflow?: TaskWorkflowOverrides | undefined;
+  topic?: string | undefined;
+  /** Only with `topic`, and a block of it. */
+  block?: string | undefined;
+  /** Task ids in the form of the board's id prefix. */
+  dependsOn?: string[] | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
 /**
  * Only the given fields change. `branch: null` clears the branch; `workflow: null` clears all of
  * the task's workflow overrides, and a `workflow` object replaces them whole, as `labels` does.
- * `aiRun` is the same: an object replaces the reported run whole, null forgets it.
+ * `aiRun` is the same: an object replaces the reported run whole, null forgets it. `topic`,
+ * `block` and `dependsOn` are set or cleared (null) the same way; the place that results must be
+ * whole, or the write is refused with `INVALID_REQUEST` and nothing changes (ADR-0032 §3).
  */
 export interface TaskPatch {
   title?: string | undefined;
@@ -49,6 +56,9 @@ export interface TaskPatch {
   branch?: string | null | undefined;
   workflow?: TaskWorkflowOverrides | null | undefined;
   aiRun?: AiRun | null | undefined;
+  topic?: string | null | undefined;
+  block?: string | null | undefined;
+  dependsOn?: string[] | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
