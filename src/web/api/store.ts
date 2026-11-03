@@ -127,6 +127,11 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       };
     case 'report.deleted':
       return { ...state, reports: state.reports.filter((report) => report.id !== event.reportId) };
+    case 'topic.created':
+    case 'topic.updated':
+    case 'topic.deleted':
+      // The page does not show topics yet.
+      return state;
     case 'workflow.updated':
       return { ...state, workflow: event.workflow };
     case 'version.created':

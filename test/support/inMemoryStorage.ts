@@ -12,6 +12,12 @@ import type {
   WorkflowOverrides,
 } from '../../src/core/model/index.js';
 import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
+import {
+  assertBlockDeletable,
+  assertTopicDeletable,
+  reorderedBlocks,
+  requireBlock,
+} from '../../src/core/rules/topicWrites.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
 import { assertPlacement } from '../../src/core/rules/placement.js';
 import { assembleCheck, storedCheckReport } from '../../src/core/rules/history.js';
@@ -163,6 +169,38 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         : sequence,
     };
     return id;
+  }
+
+  /** As the markdown provider does: what a delete leaves behind keeps its ids used. */
+  function keepCounters(): void {
+    const topics = [...store.topics.values()].filter((topic): topic is Topic => topic !== null);
+    const topicIds = [...store.topics.keys()];
+    const blockIds = topics.flatMap((topic) => topic.blocks.map((block) => block.id));
+    const stored = store.topicSequence;
+    const unreadable = topicIds
+      .filter((id) => store.topics.get(id) === null)
+      .map((id) => `topics/${id}/topic.md`);
+    const { sequence } = allocateRecoverableId(
+      TOPIC_ID_PREFIX,
+      stored?.topicSequence ?? null,
+      topicIds,
+      unreadable,
+    );
+    store.topicSequence = {
+      topicSequence: sequence - 1,
+      blockSequence: Math.max(
+        stored?.blockSequence ?? 0,
+        highestIdNumber(BLOCK_ID_PREFIX, blockIds),
+      ),
+    };
+  }
+
+  function requireTopic(id: string): Topic {
+    const topic = store.topics.get(id);
+    if (!topic) {
+      throw new BoardError('TOPIC_NOT_FOUND', `Topic "${id}" does not exist.`, { id });
+    }
+    return topic;
   }
 
   return {
@@ -379,6 +417,41 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
       const block = { id, title: input.title };
       store.topics.get(topicId)?.blocks.push(block);
       return { ...block };
+    },
+
+    updateTopic: async (id, patch) => {
+      const topic = requireTopic(id);
+      if (patch.title !== undefined) topic.title = patch.title;
+      if (patch.body !== undefined) topic.body = patch.body;
+      return structuredClone(topic);
+    },
+
+    deleteTopic: async (id) => {
+      const topic = requireTopic(id);
+      assertTopicDeletable(topic, [...store.tasks.values()]);
+      keepCounters();
+      store.topics.delete(id);
+    },
+
+    updateBlock: async (topicId, blockId, patch) => {
+      const topic = requireTopic(topicId);
+      const block = requireBlock(topic, blockId);
+      block.title = patch.title;
+      return { ...block };
+    },
+
+    reorderBlocks: async (topicId, order) => {
+      const topic = requireTopic(topicId);
+      topic.blocks = reorderedBlocks(topic, order);
+      return structuredClone(topic);
+    },
+
+    deleteBlock: async (topicId, blockId) => {
+      const topic = requireTopic(topicId);
+      requireBlock(topic, blockId);
+      assertBlockDeletable(topic, blockId, [...store.tasks.values()]);
+      keepCounters();
+      topic.blocks = topic.blocks.filter((block) => block.id !== blockId);
     },
 
     listReports: async () => [...store.reports.values()].map((entry) => entry.report),

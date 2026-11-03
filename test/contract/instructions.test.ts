@@ -64,6 +64,14 @@ describe('generated AI instructions', () => {
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).
       'runs.stream',
       'tasks.run',
+      // Structure of the board is the owner's to change (ADR-0032 §4), so an agent is not told.
+      'topics.create',
+      'topics.createBlock',
+      'topics.delete',
+      'topics.deleteBlock',
+      'topics.reorderBlocks',
+      'topics.update',
+      'topics.updateBlock',
       // The history of a task is read and written by the page and the runner (ADR-0030).
       'versions.get',
       'versions.list',

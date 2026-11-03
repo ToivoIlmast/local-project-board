@@ -10,6 +10,12 @@ import type {
   WorkflowOverrides,
 } from '../../../core/model/index.js';
 import type { NewReport, NewTask, ReadIssue, Storage, TaskPatch } from '../../../core/ports.js';
+import {
+  assertBlockDeletable,
+  assertTopicDeletable,
+  reorderedBlocks,
+  requireBlock,
+} from '../../../core/rules/topicWrites.js';
 import { documentFormat, isDocumentName } from '../../../core/rules/documentName.js';
 import {
   BLOCK_ID_PREFIX,
@@ -232,6 +238,47 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
 
   async function saveTopic(topic: Topic): Promise<void> {
     await writeFileAtomic(join(topicsDir, topic.id, TOPIC_FILE), serializeTopic(topic));
+  }
+
+  /**
+   * The counters a delete leaves behind: the stored ones, or those recovered from the ids that
+   * exist, whichever is higher. Written before the delete, so the id of what is deleted stays
+   * used even when the counters were lost or behind (ADR-0020). Fail-closed like a create (O-1).
+   */
+  async function keepCounters(scan: TopicScan): Promise<void> {
+    const stored = await readTopicSequence();
+    // The sequence an allocation would return is one past the highest id in use.
+    const topicSequence =
+      allocateRecoverableId(
+        TOPIC_ID_PREFIX,
+        stored?.topicSequence ?? null,
+        scan.topicIds,
+        scan.unreadable.map((issue) => issue.file),
+      ).sequence - 1;
+    const blockSequence = Math.max(
+      stored?.blockSequence ?? 0,
+      highestIdNumber(BLOCK_ID_PREFIX, scan.blockIds),
+    );
+    if (stored?.topicSequence === topicSequence && stored.blockSequence === blockSequence) {
+      return;
+    }
+    await writeTopicSequence({ formatVersion: 1, topicSequence, blockSequence });
+  }
+
+  /** The tasks a delete must look at, and the task files it cannot read and so cannot rule out. */
+  async function tasksForDelete(): Promise<{ tasks: Task[]; unreadable: string[] }> {
+    const tasks: Task[] = [];
+    const unreadable: string[] = [];
+    for (const id of (await taskIds()).sort(byNumber)) {
+      const result = await readTaskFile(id);
+      if (result !== null && 'task' in result) tasks.push(result.task);
+      else if (result !== null) unreadable.push(`tasks/${id}/${TASK_FILE}`);
+    }
+    return { tasks, unreadable };
+  }
+
+  function topicNotFound(id: string): BoardError {
+    return new BoardError('TOPIC_NOT_FOUND', `Topic "${id}" does not exist.`, { id });
   }
 
   async function taskIds(): Promise<string[]> {
@@ -546,6 +593,71 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
         await saveTopic({ ...topic, blocks: [...topic.blocks, block] });
         await writeTopicSequence(next);
         return block;
+      });
+    },
+
+    updateTopic(id, patch) {
+      return exclusive(async () => {
+        const topic = await topicById(id);
+        if (!topic) throw topicNotFound(id);
+        const updated: Topic = {
+          ...topic,
+          ...(patch.title === undefined ? {} : { title: patch.title }),
+          ...(patch.body === undefined ? {} : { body: patch.body }),
+        };
+        await saveTopic(updated);
+        return updated;
+      });
+    },
+
+    deleteTopic(id) {
+      return exclusive(async () => {
+        const scan = await scanTopics();
+        const topic = scan.topics.get(id);
+        if (!topic) throw topicNotFound(id);
+        const { tasks, unreadable } = await tasksForDelete();
+        assertTopicDeletable(topic, tasks, unreadable);
+        await keepCounters(scan);
+        await rm(join(topicsDir, id), { recursive: true, force: true });
+      });
+    },
+
+    updateBlock(topicId, blockId, patch) {
+      return exclusive(async () => {
+        const topic = await topicById(topicId);
+        if (!topic) throw topicNotFound(topicId);
+        const block: Block = { ...requireBlock(topic, blockId), title: patch.title };
+        await saveTopic({
+          ...topic,
+          blocks: topic.blocks.map((held) => (held.id === blockId ? block : held)),
+        });
+        return block;
+      });
+    },
+
+    reorderBlocks(topicId, order) {
+      return exclusive(async () => {
+        const topic = await topicById(topicId);
+        if (!topic) throw topicNotFound(topicId);
+        const reordered: Topic = { ...topic, blocks: reorderedBlocks(topic, order) };
+        await saveTopic(reordered);
+        return reordered;
+      });
+    },
+
+    deleteBlock(topicId, blockId) {
+      return exclusive(async () => {
+        const scan = await scanTopics();
+        const topic = scan.topics.get(topicId);
+        if (!topic) throw topicNotFound(topicId);
+        requireBlock(topic, blockId);
+        const { tasks, unreadable } = await tasksForDelete();
+        assertBlockDeletable(topic, blockId, tasks, unreadable);
+        await keepCounters(scan);
+        await saveTopic({
+          ...topic,
+          blocks: topic.blocks.filter((held) => held.id !== blockId),
+        });
       });
     },
 

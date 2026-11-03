@@ -5,6 +5,7 @@ import {
   createHistoryService,
   createProjectService,
   createReportService,
+  createTopicService,
   createTaskService,
   createWorkflowService,
 } from '../../core/index.js';
@@ -71,6 +72,7 @@ export async function startBoard(options: ServeOptions): Promise<RunningBoard> {
       workflow: createWorkflowService({ storage, events, statuses: config.statuses }),
       documents: createDocumentService({ storage, events }),
       reports: createReportService({ storage, events }),
+      topics: createTopicService({ storage, events }),
       project: createProjectService({
         storage,
         git,

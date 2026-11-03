@@ -100,6 +100,12 @@ export interface NewBlock {
   title: string;
 }
 
+/** Only the given fields change; the id and the blocks are not a topic's to patch. */
+export interface TopicPatch {
+  title?: string | undefined;
+  body?: string | undefined;
+}
+
 export interface NewReport {
   title: string;
   format: 'html' | 'md';
@@ -190,6 +196,27 @@ export interface Storage {
   createTopic(input: NewTopic): Promise<Topic>;
   /** Appends the block to the end of its topic's blocks. */
   createBlock(topicId: string, input: NewBlock): Promise<Block>;
+  /**
+   * Writes (T84) are refused before anything is written, and the refusal changes no file and
+   * no counter: `TOPIC_NOT_FOUND`, `BLOCK_NOT_FOUND` for a block the topic does not hold (a
+   * block never moves between topics), and `INVALID_REQUEST` for an order that is not exactly
+   * the blocks the topic holds. The ids of what is deleted stay used (ADR-0020), even when the
+   * counters were lost; with them lost and a topic unreadable, a delete is refused with
+   * `ID_SEQUENCE_UNRECOVERABLE`, as a create is.
+   */
+  updateTopic(id: string, patch: TopicPatch): Promise<Topic>;
+  /**
+   * Refused with `TOPIC_NOT_EMPTY` unless the topic has no blocks, an empty one included, and
+   * no task is in it or in a block of it. A task file that cannot be read may be such a task,
+   * so it refuses too. Checked in the same section as the delete, so a task cannot arrive
+   * between the check and the write.
+   */
+  deleteTopic(id: string): Promise<void>;
+  updateBlock(topicId: string, blockId: string, patch: NewBlock): Promise<Block>;
+  /** `order` is every block id of the topic once; the topic is answered as it is stored then. */
+  reorderBlocks(topicId: string, order: readonly string[]): Promise<Topic>;
+  /** Refused with `BLOCK_NOT_EMPTY` while a task is in the block (a task that cannot be read counts). */
+  deleteBlock(topicId: string, blockId: string): Promise<void>;
 
   listReports(): Promise<Report[]>;
   readReport(id: string): Promise<string | null>;

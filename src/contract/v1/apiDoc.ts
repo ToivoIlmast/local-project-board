@@ -12,8 +12,32 @@ const GROUPS: Record<string, string> = {
   documents: 'Documents',
   git: 'Git (read-only)',
   reports: 'Reports',
+  topics: 'Topics and blocks',
   events: 'Events',
   instructions: 'Instructions',
+};
+
+/** What the routes of a group do together, which no single route can say (shown under its heading). */
+const GROUP_NOTES: Record<string, string[]> = {
+  topics: [
+    'A topic (`P<n>`) has an ordered list of blocks (`K<n>`). Ids are global across the board,',
+    'monotonic and never reused, a deleted one included. A block belongs to one topic for good:',
+    'there is no move of a block between topics, and no archiving of a topic.',
+    '',
+    '- A topic can be deleted only when it is empty: no tasks, and no blocks — an empty block',
+    '  makes it non-empty. Otherwise `409 TOPIC_NOT_EMPTY`.',
+    '- A block can be deleted only when no task is in it. Otherwise `409 BLOCK_NOT_EMPTY`.',
+    '- A refusal changes nothing: no file is written and no event is published.',
+    '- A task file that cannot be read may be a task of the topic or block, so it refuses too.',
+    '- The order of the blocks is the order of the list, kept as written; a new block goes last,',
+    '  and `PUT .../blocks/order` takes every block id of the topic exactly once (`400',
+    '  INVALID_REQUEST` otherwise, `404 BLOCK_NOT_FOUND` for a block of another topic on the',
+    '  other block routes).',
+    '- Every successful write is published as a `topic.*` event over `GET /events`:',
+    '  `topic.created` and `topic.updated` carry the whole topic as stored (a change to its blocks',
+    '  is a `topic.updated`), `topic.deleted` carries `topicId`.',
+    '- Writes are last-write-wins (ADR-0018).',
+  ],
 };
 
 const MEDIA_TYPES: Record<string, string> = {
@@ -44,6 +68,7 @@ export function renderApiDoc(routes: Route[]): string {
 
   for (const prefix of groupOrder(routes)) {
     lines.push('', `## ${GROUPS[prefix] ?? capitalize(prefix)}`);
+    if (GROUP_NOTES[prefix]) lines.push('', ...GROUP_NOTES[prefix]);
     for (const route of routes.filter((r) => resource(r) === prefix))
       lines.push(...describe(route));
   }

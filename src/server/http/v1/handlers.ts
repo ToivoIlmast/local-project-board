@@ -204,6 +204,22 @@ export const handlers: Handlers = {
     return deleted;
   },
 
+  'topics.create': (context, { body }) => context.topics.create(body),
+  'topics.update': (context, { params, body }) => context.topics.update(params.id, body),
+  'topics.delete': async (context, { params }) => {
+    await context.topics.remove(params.id);
+    return deleted;
+  },
+  'topics.createBlock': (context, { params, body }) => context.topics.createBlock(params.id, body),
+  'topics.updateBlock': (context, { params, body }) =>
+    context.topics.updateBlock(params.id, params.blockId, body),
+  'topics.reorderBlocks': (context, { params, body }) =>
+    context.topics.reorderBlocks(params.id, body.blocks),
+  'topics.deleteBlock': async (context, { params }) => {
+    await context.topics.removeBlock(params.id, params.blockId);
+    return deleted;
+  },
+
   'ai-run.begin': async (context, { params, body }) => context.aiRun.begin(params.id, body),
 
   'ai-run.end': async (context, { params, body }) =>

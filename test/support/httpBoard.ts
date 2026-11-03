@@ -10,6 +10,7 @@ import {
   createProjectService,
   createReportService,
   createTaskService,
+  createTopicService,
   createWorkflowService,
 } from '../../src/core/index.js';
 import { createAiRunService } from '../../src/core/services/aiRunService.js';
@@ -99,6 +100,7 @@ export async function createTestBoard(options: TestBoardOptions = {}): Promise<T
     workflow: createWorkflowService({ storage, events: sink, statuses }),
     documents: createDocumentService({ storage, events: sink }),
     reports: createReportService({ storage, events: sink }),
+    topics: createTopicService({ storage, events: sink }),
     project: createProjectService({
       storage,
       git,

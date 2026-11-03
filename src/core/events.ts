@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { documentMetaSchema } from './model/document.js';
 import { reportSchema } from './model/report.js';
 import { taskSchema } from './model/task.js';
+import { topicIdSchema, topicSchema } from './model/topic.js';
 import { documentNameSchema } from './model/document.js';
 import { reportIdSchema } from './model/report.js';
 import { taskIdSchema } from './model/task.js';
@@ -34,6 +35,13 @@ export const boardEventSchema = z.discriminatedUnion('type', [
   }),
   /** The overrides of the board or of its columns changed; a task's own come as `task.updated`. */
   z.strictObject({ type: z.literal('workflow.updated'), workflow: workflowStateSchema }),
+  /**
+   * A topic was created or changed, or one of its blocks was (created, renamed, reordered,
+   * deleted): the event carries the topic as it is now, with its blocks in order (ADR-0032 §4).
+   */
+  z.strictObject({ type: z.literal('topic.created'), topic: topicSchema }),
+  z.strictObject({ type: z.literal('topic.updated'), topic: topicSchema }),
+  z.strictObject({ type: z.literal('topic.deleted'), topicId: topicIdSchema }),
   /**
    * Something changed on disk; the client refetches. Mostly an edit made outside the server,
    * but the watcher also echoes the server's own writes (ADR-0019), so it may follow, or come
