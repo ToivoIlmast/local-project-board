@@ -6,8 +6,10 @@ import type { TaskWorkflowOverrides } from '../model/workflow.js';
 import type { EventSink, Storage } from '../ports.js';
 import { applyContentPatch, changedFields, contentOf } from '../rules/history.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
+import type { BlockingReason } from '../rules/readiness.js';
 import { assertKnownStatus } from '../rules/status.js';
 import { assertContentHash, assertFromCheck, planSync } from './taskHistory.js';
+import { readBoardReadiness } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
 export interface TaskServiceOptions {
@@ -58,9 +60,16 @@ export interface MoveTaskInput extends Position {
   status: string;
 }
 
+/** A task as it is read, with its readiness beside it, never inside it (ADR-0032 §8, F3). */
+export type TaskWithReadiness = Task & { readiness: { reasons: BlockingReason[] } };
+
 export interface TaskService {
   list(): Promise<Task[]>;
   get(id: string): Promise<Task>;
+  /** `list`, each task with its readiness, from one read of the board. */
+  listWithReadiness(): Promise<TaskWithReadiness[]>;
+  /** `get`, with the readiness of the task, from one read of the board. */
+  getWithReadiness(id: string): Promise<TaskWithReadiness>;
   create(input: CreateTaskInput): Promise<Task>;
   update(id: string, patch: UpdateTaskInput): Promise<Task>;
   move(id: string, move: MoveTaskInput): Promise<Task>;
@@ -154,15 +163,41 @@ export function createTaskService({
     return task;
   }
 
+  function inBoardOrder(tasks: Task[]): Task[] {
+    const order = new Map(statuses.map((status, index) => [status, index]));
+    // A status that is no longer configured sorts last rather than disappearing.
+    const rank = (task: Task): number => order.get(task.status) ?? statuses.length;
+    return tasks.sort((a, b) => rank(a) - rank(b) || compareByRank(a, b));
+  }
+
   return {
     async list() {
-      const order = new Map(statuses.map((status, index) => [status, index]));
-      // A status that is no longer configured sorts last rather than disappearing.
-      const rank = (task: Task): number => order.get(task.status) ?? statuses.length;
-      return (await storage.listTasks()).sort((a, b) => rank(a) - rank(b) || compareByRank(a, b));
+      return inBoardOrder(await storage.listTasks());
     },
 
     get: require,
+
+    async listWithReadiness() {
+      const { tasks, reasons } = await readBoardReadiness(storage, statuses);
+      return inBoardOrder(tasks).map((task) => ({
+        ...task,
+        readiness: { reasons: reasons[task.id] ?? [] },
+      }));
+    },
+
+    async getWithReadiness(id) {
+      for (let attempt = 1; ; attempt += 1) {
+        const { tasks, reasons } = await readBoardReadiness(storage, statuses);
+        const task = tasks.find((candidate) => candidate.id === id);
+        if (task !== undefined) return { ...task, readiness: { reasons: reasons[id] ?? [] } };
+        // Not on the board as it was read: `get` says why, or it came since and is read again.
+        // Never answered without reasons computed for it.
+        await require(id);
+        if (attempt === 2) {
+          throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
+        }
+      }
+    },
 
     async create(input) {
       const status = input.status ?? firstStatus(statuses);

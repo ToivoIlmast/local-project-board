@@ -22,6 +22,11 @@ export const API_RULES: readonly string[] = [
     'the styles and the data inside the file and load nothing from the internet.',
   'Documents and reports are text of at most a million characters; this is not a file store.',
   'Deleting a task deletes its documents with it, and its id is not given to another task.',
+  'A task whose `readiness.reasons` is not empty (`GET /tasks`, `GET /tasks/:id`) is blocked: ' +
+    'a task it depends on, or an earlier block of its topic, is not done yet. Do not start work ' +
+    'on a blocked task. This rule is information for you, not a gate on the server: the board ' +
+    'refuses only the start of a run and the handoff of a task without a working run ' +
+    '(`409 TASK_BLOCKED`), never your other requests.',
 ];
 
 /** What the board itself is called and what a task on it may say; read at generation time. */

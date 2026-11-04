@@ -5,16 +5,17 @@ import {
   generateInstructions,
   type BoardFacts,
 } from '../../../contract/v1/index.js';
-import type {
-  DocumentService,
-  HistoryService,
-  TaskService,
-  WorkflowService,
+import {
+  taskBlocked,
+  type DocumentService,
+  type HistoryService,
+  type TaskService,
+  type WorkflowService,
 } from '../../../core/index.js';
 
 /** The reads a handoff is made of; nothing here can change the board. */
 export interface HandoffServices {
-  tasks: Pick<TaskService, 'get'>;
+  tasks: Pick<TaskService, 'getWithReadiness'>;
   documents: Pick<DocumentService, 'list'>;
   workflow: Pick<WorkflowService, 'forTask'>;
 }
@@ -34,13 +35,19 @@ export interface HandoffSource {
  * route of `GET /tasks/:id/workflow` answers the same) and the general instructions — made
  * without a token, because a handoff is passed around and a token is for whoever asks for it.
  * Nothing is written and nothing is kept.
+ *
+ * A blocked task has no handoff, `TASK_BLOCKED` with its reasons instead, unless a run of it
+ * works: a run that has started keeps its handoff, a resumed one too (ADR-0032 §8, F1).
  */
 export async function composeHandoff(
   { tasks, documents, workflow }: HandoffServices,
   id: string,
   { baseUrl, board, projectRules }: HandoffSource,
 ): Promise<string> {
-  const task = await tasks.get(id);
+  const { readiness, ...task } = await tasks.getWithReadiness(id);
+  if (readiness.reasons.length > 0 && task.aiRun?.state !== 'working') {
+    throw taskBlocked(id, readiness.reasons);
+  }
   const [attached, effective] = await Promise.all([documents.list(id), workflow.forTask(id)]);
   return generateHandoff({
     task,

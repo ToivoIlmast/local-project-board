@@ -75,6 +75,9 @@ const exampleTask = {
   updatedAt: '2026-09-21T11:30:00.000Z',
 };
 
+/** Readiness is computed on every read; an empty list of reasons means the task may start. */
+const exampleReadiness = { reasons: [{ code: 'task-not-done' as const, task: 'T11' }] };
+
 const exampleDefaults = {
   editCode: true,
   branch: true,
@@ -248,9 +251,9 @@ export const routes = {
     id: 'tasks.list',
     method: 'GET',
     path: '/tasks',
-    summary: 'List every task, ordered by status and rank',
-    response: json(z.array(s.taskSchema)),
-    example: { response: [exampleTask] },
+    summary: 'List every task, ordered by status and rank, each with its `readiness`',
+    response: json(z.array(s.taskWithReadinessSchema)),
+    example: { response: [{ ...exampleTask, readiness: exampleReadiness }] },
     ai: { include: true },
   }),
 
@@ -278,10 +281,10 @@ export const routes = {
     id: 'tasks.get',
     method: 'GET',
     path: '/tasks/:id',
-    summary: 'Read one task, including its markdown body',
+    summary: 'Read one task, including its markdown body and its `readiness`',
     params: taskParams,
-    response: json(s.taskSchema),
-    example: { params: { id: 'T12' }, response: exampleTask },
+    response: json(s.taskWithReadinessSchema),
+    example: { params: { id: 'T12' }, response: { ...exampleTask, readiness: exampleReadiness } },
     ai: { include: true },
   }),
 

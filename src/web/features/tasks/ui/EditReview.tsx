@@ -65,7 +65,11 @@ export function EditReview({
       if (error instanceof ApiError && error.code === 'TASK_CONTENT_CHANGED') {
         // Read the task again, so that the diff is against what is there now.
         const fresh = await client.getTask(task.id).catch(() => undefined);
-        if (fresh !== undefined) await store.handleEvent({ type: 'task.updated', task: fresh });
+        if (fresh !== undefined) {
+          // The task as the event carries it; its readiness is the store's to read.
+          const { readiness: _readiness, ...current } = fresh;
+          await store.handleEvent({ type: 'task.updated', task: current });
+        }
         setConflict(true);
         throw new Error(
           'The task changed while you were reviewing. Your changes are kept below, against its ' +

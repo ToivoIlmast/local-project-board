@@ -18,6 +18,9 @@ import {
 } from '../support/fixtures';
 
 const TOKEN = 'the-session-token';
+
+/** A task as the reads of tasks answer it: with its readiness beside it (ADR-0032 §8). */
+const ready = <T extends object>(task: T) => ({ ...task, readiness: { reasons: [] } });
 const BASE = 'http://127.0.0.1:7432';
 
 /** Answers the session route with a token and everything else with what the test says. */
@@ -77,9 +80,9 @@ describe('the board client speaks the contract', () => {
   it('covers every route the UI needs with one code path', async () => {
     const answers: Record<string, Reply> = {
       'GET /api/v1/project': { json: aProject() },
-      'GET /api/v1/tasks': { json: [aTask()] },
+      'GET /api/v1/tasks': { json: [ready(aTask())] },
       'POST /api/v1/tasks': { json: aTask(), status: 201 },
-      'GET /api/v1/tasks/T1': { json: aTask({ id: 'T1' }) },
+      'GET /api/v1/tasks/T1': { json: ready(aTask({ id: 'T1' })) },
       'PATCH /api/v1/tasks/T1': { json: aTask({ id: 'T1' }) },
       'POST /api/v1/tasks/T1/move': { json: aTask({ id: 'T1' }) },
       'DELETE /api/v1/tasks/T1': { json: { deleted: true } },
@@ -214,7 +217,7 @@ describe('the session token', () => {
   });
 
   it('is not sent with a read: the board asks for it only where it changes something', async () => {
-    const { fake, client } = board(() => ({ json: [aTask()] }));
+    const { fake, client } = board(() => ({ json: [ready(aTask())] }));
 
     await client.listTasks();
 
@@ -500,7 +503,7 @@ describe('a request that does not come back (T62)', () => {
 
   it('leaves no timer and no listener behind, whichever way it ends', async () => {
     jest.useFakeTimers();
-    const { client } = board(() => ({ json: [aTask()] }));
+    const { client } = board(() => ({ json: [ready(aTask())] }));
     const caller = new AbortController();
     const added = jest.spyOn(caller.signal, 'addEventListener');
     const removed = jest.spyOn(caller.signal, 'removeEventListener');

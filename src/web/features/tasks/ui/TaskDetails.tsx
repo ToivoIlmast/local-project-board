@@ -66,7 +66,11 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       if (error instanceof ApiError && error.code === 'TASK_CONTENT_CHANGED') {
         // Read the task again: the next try is against what is there now.
         const fresh = await client.getTask(task.id).catch(() => undefined);
-        if (fresh !== undefined) await store.handleEvent({ type: 'task.updated', task: fresh });
+        if (fresh !== undefined) {
+          // The task as the event carries it; its readiness is the store's to read.
+          const { readiness: _readiness, ...current } = fresh;
+          await store.handleEvent({ type: 'task.updated', task: current });
+        }
       }
       throw error;
     }

@@ -110,6 +110,7 @@ function BoardScreen() {
           <Board
             project={project}
             tasks={state.tasks}
+            readiness={state.readiness}
             busy={state.busy}
             onOpen={open}
             onEdit={setEditingId}

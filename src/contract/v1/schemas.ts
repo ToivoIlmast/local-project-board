@@ -8,6 +8,7 @@ import {
   fromCheckSchema,
 } from '../../core/model/history.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
+import type { BlockingReason } from '../../core/rules/readiness.js';
 import { blockIdSchema, topicIdSchema } from '../../core/model/topic.js';
 import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
@@ -348,6 +349,39 @@ export const runsQuerySchema = z.strictObject({
     .optional(),
 });
 
+/** One reason a task may not start yet, as `readiness` computes it (ADR-0032 §7). */
+export const blockingReasonSchema = z.discriminatedUnion('code', [
+  z.strictObject({ code: z.literal('task-not-done'), task: taskIdSchema }),
+  z.strictObject({ code: z.literal('task-missing'), task: taskIdSchema }),
+  z.strictObject({ code: z.literal('task-unreadable'), task: taskIdSchema }),
+  z.strictObject({ code: z.literal('topic-missing'), topic: z.string() }),
+  z.strictObject({ code: z.literal('topic-unreadable'), topic: z.string() }),
+  z.strictObject({ code: z.literal('block-missing'), topic: z.string(), block: z.string() }),
+  z.strictObject({
+    code: z.literal('block-incomplete'),
+    topic: z.string(),
+    block: z.string(),
+    tasks: z.array(taskIdSchema),
+  }),
+  z.strictObject({ code: z.literal('block-empty'), topic: z.string(), block: z.string() }),
+  z.strictObject({ code: z.literal('block-order-unknown'), tasks: z.array(z.string()) }),
+  z.strictObject({ code: z.literal('cycle'), tasks: z.array(taskIdSchema) }),
+  z.strictObject({ code: z.literal('config'), status: z.string() }),
+]);
+
+// The wire form is the core's type: a reason added to one and not the other does not compile.
+const _sameReasons: z.ZodType<BlockingReason> = blockingReasonSchema;
+void _sameReasons;
+
+/**
+ * A task as `GET /tasks` and `GET /tasks/:id` answer it: the task exactly as `taskSchema`
+ * describes it, with its readiness beside it (ADR-0032 §8, F3). Readiness is computed on every
+ * read and is no part of the task: not stored, not exported, and no write takes it.
+ */
+export const taskWithReadinessSchema = taskSchema.safeExtend({
+  readiness: z.strictObject({ reasons: z.array(blockingReasonSchema) }),
+});
+
 /**
  * What the board tells its own page about this run. The token is the whole of it: the page
  * must not learn anything about the machine it runs on, and the token must never be put in
@@ -494,6 +528,7 @@ export type UpdateTopicRequest = z.infer<typeof updateTopicRequestSchema>;
 export type BlockRequest = z.infer<typeof blockRequestSchema>;
 export type ReorderBlocksRequest = z.infer<typeof reorderBlocksRequestSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type TaskWithReadiness = z.infer<typeof taskWithReadinessSchema>;
 export type RunTaskRequest = z.infer<typeof runTaskRequestSchema>;
 export type RunStarted = z.infer<typeof runStartedSchema>;
 export type RunRequest = z.infer<typeof runRequestSchema>;

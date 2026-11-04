@@ -14,6 +14,7 @@ import {
   type Route,
   type RouteId,
   type Task,
+  type TaskWithReadiness,
   type WorkflowState,
   type EffectiveWorkflow,
   type RunStarted,
@@ -70,8 +71,9 @@ export interface BoardClient {
   /** This run's token. The page never shows it; the client sends it with changes. */
   session(options?: RequestOptions): Promise<string>;
 
-  listTasks(options?: RequestOptions): Promise<Task[]>;
-  getTask(id: string, options?: RequestOptions): Promise<Task>;
+  /** Each task with its readiness beside it (ADR-0032 §8). */
+  listTasks(options?: RequestOptions): Promise<TaskWithReadiness[]>;
+  getTask(id: string, options?: RequestOptions): Promise<TaskWithReadiness>;
   createTask(input: BodyOf<'tasks.create'>, options?: RequestOptions): Promise<Task>;
   updateTask(id: string, patch: BodyOf<'tasks.update'>, options?: RequestOptions): Promise<Task>;
   moveTask(id: string, move: BodyOf<'tasks.move'>, options?: RequestOptions): Promise<Task>;

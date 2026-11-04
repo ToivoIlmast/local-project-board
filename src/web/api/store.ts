@@ -1,4 +1,5 @@
 import type {
+  BlockingReason,
   BoardEvent,
   Check,
   CheckSummary,
@@ -37,6 +38,11 @@ export interface BoardState {
   /** The overrides of the board and of its columns, with the defaults; never a task's effective. */
   workflow?: WorkflowState | undefined;
   tasks: Task[];
+  /**
+   * The reasons of each task not to start yet, by id, as the server last computed them. Apart
+   * from the tasks, as on the wire: a task is never changed by its readiness (ADR-0032 §8).
+   */
+  readiness: Record<string, BlockingReason[]>;
   reports: Report[];
   /** Missing when git could not be read; the board itself keeps working (§17). */
   git?: GitStatus | undefined;
@@ -62,6 +68,7 @@ export function emptyState(): BoardState {
   return {
     phase: 'loading',
     tasks: [],
+    readiness: {},
     reports: [],
     documents: {},
     history: {},
@@ -177,6 +184,22 @@ function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** The tasks as `taskSchema` has them, and their readiness by id, from one list. */
+function splitReadiness(
+  listed: readonly (Task & { readiness: { reasons: BlockingReason[] } })[],
+): Pick<BoardState, 'tasks' | 'readiness'> {
+  const tasks: Task[] = [];
+  const readiness: Record<string, BlockingReason[]> = {};
+  for (const {
+    readiness: { reasons },
+    ...task
+  } of listed) {
+    tasks.push(task);
+    readiness[task.id] = reasons;
+  }
+  return { tasks, readiness };
+}
+
 function replaceById(tasks: Task[], task: Task): Task[] {
   const index = tasks.findIndex((candidate) => candidate.id === task.id);
   if (index === -1) return [...tasks, task];
@@ -267,11 +290,11 @@ export function createBoardStore(client: BoardClient): BoardStore {
    * that could not catch up here is read again anyway.
    */
   async function readBoard(): Promise<
-    Pick<BoardState, 'project' | 'workflow' | 'tasks' | 'reports' | 'git'>
+    Pick<BoardState, 'project' | 'workflow' | 'tasks' | 'readiness' | 'reports' | 'git'>
   > {
     for (let attempt = 1; ; attempt += 1) {
       const before = told;
-      const [project, workflow, tasks, reports] = await Promise.all([
+      const [project, workflow, listed, reports] = await Promise.all([
         client.project(),
         client.workflow(),
         client.listTasks(),
@@ -280,9 +303,23 @@ export function createBoardStore(client: BoardClient): BoardStore {
       // Git is context, not the board: a repository that cannot be read hides nothing else.
       const git = await client.gitStatus().catch(() => undefined);
       if (told === before || attempt === READ_ATTEMPTS) {
-        return { project, workflow, tasks, reports, git };
+        return { project, workflow, ...splitReadiness(listed), reports, git };
       }
     }
+  }
+
+  /**
+   * The readiness of one task depends on others: a dependency done, a block emptied, a topic
+   * reordered. So after any such change the page asks the server again rather than working it
+   * out, and only the answer to the latest question is shown.
+   */
+  let readinessAsked = 0;
+  async function loadReadiness(): Promise<void> {
+    const asked = ++readinessAsked;
+    const listed = await client.listTasks().catch(() => undefined);
+    if (listed === undefined || asked !== readinessAsked) return;
+    const { readiness } = splitReadiness(listed);
+    set((current) => ({ ...current, readiness }));
   }
 
   async function busy<T>(id: string, run: () => Promise<T>): Promise<T> {
@@ -309,7 +346,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
         error: undefined,
       }));
       try {
-        const { project, workflow, tasks, reports, git } = await readBoard();
+        const { project, workflow, tasks, readiness, reports, git } = await readBoard();
         set((current) => ({
           ...current,
           phase: 'ready',
@@ -317,6 +354,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
           project,
           workflow,
           tasks,
+          readiness,
           reports,
           git,
         }));
@@ -445,6 +483,9 @@ export function createBoardStore(client: BoardClient): BoardStore {
         return;
       }
       apply(event);
+      if (event.type.startsWith('task.') || event.type.startsWith('topic.')) {
+        await loadReadiness();
+      }
       // The history is not part of any event: the page that has it open reads it again.
       if (event.type === 'version.created' || event.type === 'check.updated') {
         const key = `${event.taskId}/${event.number}`;

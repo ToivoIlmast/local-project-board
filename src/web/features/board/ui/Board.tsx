@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { columnsOf } from '../../../api/index';
-import type { Project, Task } from '../../../../contract/v1/index';
+import type { BlockingReason, Project, Task } from '../../../../contract/v1/index';
 import { EmptyState } from '../../../shared/ui/index';
 import { TaskCard } from '../../tasks/index';
 import { intentFor, isNoop, type MoveIntent } from '../model/dnd';
 import { useDrag } from '../model/useDrag';
 import { Column } from './Column';
 
+/** One empty list for every task without reasons, so a card is not drawn again for nothing. */
+const NONE: readonly BlockingReason[] = [];
+
 export interface BoardProps {
   project: Project;
   tasks: Task[];
+  /** The reasons of each task not to start yet, by id. */
+  readiness: Record<string, BlockingReason[]>;
   busy: string[];
   onOpen: (id: string) => void;
   onEdit: (id: string) => void;
@@ -26,6 +31,7 @@ export interface BoardProps {
 export function Board({
   project,
   tasks,
+  readiness,
   busy,
   onOpen,
   onEdit,
@@ -104,6 +110,7 @@ export function Board({
               <TaskCard
                 key={task.id}
                 task={task}
+                reasons={readiness[task.id] ?? NONE}
                 statuses={project.statuses}
                 busy={busy.includes(task.id)}
                 dragging={drag?.id === task.id}

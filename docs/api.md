@@ -85,7 +85,7 @@ A patch that names none of them leaves them as they are, unchecked.
 
 ### GET /api/v1/tasks
 
-List every task, ordered by status and rank
+List every task, ordered by status and rank, each with its `readiness`
 
 Given to AI agents in the generated instructions.
 
@@ -104,7 +104,15 @@ Response — 200, application/json:
     ],
     "branch": "feat/git-adapter",
     "createdAt": "2026-09-21T09:00:00.000Z",
-    "updatedAt": "2026-09-21T11:30:00.000Z"
+    "updatedAt": "2026-09-21T11:30:00.000Z",
+    "readiness": {
+      "reasons": [
+        {
+          "code": "task-not-done",
+          "task": "T11"
+        }
+      ]
+    }
   }
 ]
 ```
@@ -148,7 +156,7 @@ Response — 201, application/json:
 
 ### GET /api/v1/tasks/:id
 
-Read one task, including its markdown body
+Read one task, including its markdown body and its `readiness`
 
 Given to AI agents in the generated instructions.
 
@@ -168,7 +176,15 @@ Response — 200, application/json:
   ],
   "branch": "feat/git-adapter",
   "createdAt": "2026-09-21T09:00:00.000Z",
-  "updatedAt": "2026-09-21T11:30:00.000Z"
+  "updatedAt": "2026-09-21T11:30:00.000Z",
+  "readiness": {
+    "reasons": [
+      {
+        "code": "task-not-done",
+        "task": "T11"
+      }
+    ]
+  }
 }
 ```
 
@@ -1658,6 +1674,7 @@ nothing else. The code is one of:
 - AI_RUN_ALREADY_FINAL
 - NO_SESSION_TO_RESUME
 - NO_RUN_TO_RESTART
+- TASK_BLOCKED
 - AI_RUN_NOT_CLEARABLE
 - INVALID_REQUEST
 - VERSION_NOT_FOUND
