@@ -19,6 +19,21 @@ const GROUPS: Record<string, string> = {
 
 /** What the routes of a group do together, which no single route can say (shown under its heading). */
 const GROUP_NOTES: Record<string, string[]> = {
+  tasks: [
+    'A task may be placed in a topic (`topic`), in a block of it (`block`, only with `topic`), and',
+    'wait for other tasks (`dependsOn`, task ids). They are not content: changing them makes no',
+    'version. `POST` and `PATCH` check what they name against the board, and a refusal is `422`',
+    'with nothing written:',
+    '',
+    '- `INVALID_PLACEMENT`: a topic that does not exist or cannot be read, a block without a',
+    '  topic, or a block the topic does not hold.',
+    '- `INVALID_DEPENDENCY`: an entry that is not a task id of the board (a block id included),',
+    '  a task that does not exist, or one whose file, or the file of a task it leads to, cannot',
+    '  be read.',
+    '- `DEPENDENCY_CYCLE`: the task would be in a cycle; `details.tasks` names its tasks.',
+    '',
+    'A patch that names none of them leaves them as they are, unchecked.',
+  ],
   topics: [
     'A topic (`P<n>`) has an ordered list of blocks (`K<n>`). Ids are global across the board,',
     'monotonic and never reused, a deleted one included. A block belongs to one topic for good:',

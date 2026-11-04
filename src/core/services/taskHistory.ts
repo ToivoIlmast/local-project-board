@@ -1,6 +1,6 @@
 import { BoardError } from '../errors.js';
 import type { FromCheck, TaskContent, TaskVersion } from '../model/history.js';
-import type { Storage } from '../ports.js';
+import type { NewVersion, Storage } from '../ports.js';
 import {
   applyBlockers,
   changedFields,
@@ -25,33 +25,36 @@ export function latestVersion(versions: readonly TaskVersion[]): TaskVersion | u
 }
 
 /**
- * Step 3: makes history end at what is on disk. A task that has none gets a `baseline` of its
- * content; a task whose content differs from its latest version gets an `external` one, for a
- * change made outside the server. Returns the versions it appended, to be announced.
+ * Step 3, planned and not written: the version that makes history end at what is on disk. A
+ * task that has none needs a `baseline` of its content; a task whose content differs from its
+ * latest version needs an `external` one, for a change made outside the server. Undefined when
+ * history ends there already. For a caller that has the storage write it with the task (T85).
  */
+export async function planSync(
+  storage: Storage,
+  taskId: string,
+  content: TaskContent,
+): Promise<NewVersion | undefined> {
+  const latest = latestVersion(await storage.listVersions(taskId));
+  if (latest === undefined) {
+    return { source: 'baseline', changed: [], snapshot: contentOf(content) };
+  }
+  if (sameContent(latest.snapshot, content)) return undefined;
+  return {
+    source: 'external',
+    changed: changedFields(latest.snapshot, content),
+    snapshot: contentOf(content),
+  };
+}
+
+/** Step 3, written: `planSync`, appended. Returns the versions it appended, to be announced. */
 export async function syncHistory(
   storage: Storage,
   taskId: string,
   content: TaskContent,
 ): Promise<TaskVersion[]> {
-  const latest = latestVersion(await storage.listVersions(taskId));
-  if (latest === undefined) {
-    return [
-      await storage.appendVersion(taskId, {
-        source: 'baseline',
-        changed: [],
-        snapshot: contentOf(content),
-      }),
-    ];
-  }
-  if (sameContent(latest.snapshot, content)) return [];
-  return [
-    await storage.appendVersion(taskId, {
-      source: 'external',
-      changed: changedFields(latest.snapshot, content),
-      snapshot: contentOf(content),
-    }),
-  ];
+  const sync = await planSync(storage, taskId, content);
+  return sync === undefined ? [] : [await storage.appendVersion(taskId, sync)];
 }
 
 export function contentChanged(

@@ -18,6 +18,18 @@ export const BOARD_ERROR_CODES = [
   'TOPIC_NOT_EMPTY',
   /** A block with a task cannot be deleted (ADR-0032 §4). */
   'BLOCK_NOT_EMPTY',
+  /**
+   * A task's `topic` or `block` that the board does not hold: a topic that does not exist or
+   * cannot be read, a block without a topic, or a block of another topic (ADR-0032 §3–4, T85).
+   */
+  'INVALID_PLACEMENT',
+  /**
+   * A `dependsOn` entry that is not a task id of the board, a block id included, or a task that
+   * does not exist, or whose file, or the file of a task it leads to, cannot be read (T85).
+   */
+  'INVALID_DEPENDENCY',
+  /** A `dependsOn` that would put the task in a dependency cycle (ADR-0032 §4, T85). */
+  'DEPENDENCY_CYCLE',
   'DOCUMENT_NOT_FOUND',
   'REPORT_NOT_FOUND',
   'INVALID_DOCUMENT_NAME',

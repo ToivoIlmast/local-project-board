@@ -159,6 +159,99 @@ describe('markdown storage on disk', () => {
     expect((await storage.createTask(task)).id).toBe('T8');
   });
 
+  describe('dependsOn on a board edited by hand (T85)', () => {
+    /** A task.md as a person writes it, with the frontmatter lines given. */
+    async function handwrite(id: string, lines = ''): Promise<void> {
+      const dir = join(root, '.board', 'tasks', id);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, 'task.md'),
+        `---\nid: ${id}\ntitle: Handwritten\nstatus: todo\nrank: a0\nlabels: []\n${lines}createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\n`,
+        'utf8',
+      );
+    }
+
+    async function codeOf(action: Promise<unknown>): Promise<string> {
+      const error = await action.then(
+        () => undefined,
+        (failure: unknown) => failure,
+      );
+      return (error as { code?: string } | undefined)?.code ?? 'no error';
+    }
+
+    /** Every file of the board and its bytes: what a refusal must leave as it was. */
+    async function files(): Promise<Record<string, string>> {
+      const board = join(root, '.board');
+      const entries = await readdir(board, { recursive: true, withFileTypes: true });
+      const result: Record<string, string> = {};
+      for (const entry of entries.filter((candidate) => candidate.isFile())) {
+        const path = join(entry.parentPath, entry.name);
+        result[path.slice(board.length + 1)] = await readFile(path, 'utf8');
+      }
+      return result;
+    }
+
+    it('refuses a create that closes a cycle with a task that named its id in advance', async () => {
+      // T1 was written by hand to wait for T2, which does not exist yet: T2 is the next id.
+      await handwrite('T1', 'dependsOn:\n  - T2\n');
+      const before = await files();
+      expect(await codeOf(storage.createTask({ ...task, dependsOn: ['T1'] }))).toBe(
+        'DEPENDENCY_CYCLE',
+      );
+      expect(await files()).toEqual(before);
+      expect((await storage.createTask(task)).id).toBe('T2');
+    });
+
+    it('refuses a dependency on a task whose file cannot be read: its own are unknown', async () => {
+      const good = await storage.createTask(task);
+      await handwrite('T5');
+      await writeFile(join(root, '.board', 'tasks', 'T5', 'task.md'), 'broken\n', 'utf8');
+      const before = await files();
+      expect(await codeOf(storage.updateTask(good.id, { dependsOn: ['T5'] }))).toBe(
+        'INVALID_DEPENDENCY',
+      );
+      expect(await codeOf(storage.createTask({ ...task, dependsOn: ['T5'] }))).toBe(
+        'INVALID_DEPENDENCY',
+      );
+      expect(await files()).toEqual(before);
+    });
+
+    it('refuses a dependency that leads to a task whose file cannot be read (fail-closed)', async () => {
+      const first = await storage.createTask(task);
+      await handwrite('T2', 'dependsOn:\n  - T5\n');
+      await handwrite('T5');
+      await writeFile(join(root, '.board', 'tasks', 'T5', 'task.md'), 'broken\n', 'utf8');
+      const before = await files();
+      expect(await codeOf(storage.updateTask(first.id, { dependsOn: ['T2'] }))).toBe(
+        'INVALID_DEPENDENCY',
+      );
+      expect(await files()).toEqual(before);
+    });
+
+    it('lets a cycle left by hand elsewhere stand in the way of no other write', async () => {
+      await handwrite('T1', 'dependsOn:\n  - T2\n');
+      await handwrite('T2', 'dependsOn:\n  - T1\n');
+      const other = await storage.createTask({ ...task, dependsOn: ['T1'] });
+      expect(other.dependsOn).toEqual(['T1']);
+      // A write to a task of the cycle that keeps it is refused; clearing breaks it.
+      expect(await codeOf(storage.updateTask('T1', { dependsOn: ['T2'] }))).toBe(
+        'DEPENDENCY_CYCLE',
+      );
+      expect((await storage.updateTask('T1', { title: 'Renamed' })).dependsOn).toEqual(['T2']);
+      expect(await storage.updateTask('T1', { dependsOn: null })).not.toHaveProperty('dependsOn');
+    });
+
+    it('writes no file of a task on a refused update, the other tasks included', async () => {
+      const a = await storage.createTask(task);
+      const b = await storage.createTask({ ...task, dependsOn: [a.id] });
+      const before = await files();
+      expect(await codeOf(storage.updateTask(a.id, { title: 'x', dependsOn: [b.id] }))).toBe(
+        'DEPENDENCY_CYCLE',
+      );
+      expect(await files()).toEqual(before);
+    });
+  });
+
   it('reports a broken task file instead of crashing (INVARIANT)', async () => {
     const good = await storage.createTask(task);
     const dir = join(root, '.board', 'tasks', 'T99');

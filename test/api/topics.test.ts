@@ -29,7 +29,7 @@ async function createBlock(
   return response.body as { id: string; title: string };
 }
 
-/** Tasks get their place over HTTP in T85; until then it is written through the port. */
+/** Written through the port, so these tests do not lean on the task routes (T85). */
 async function createTask(place: { topic?: string; block?: string }): Promise<string> {
   const task = await board.storage.createTask({
     title: 'A task',

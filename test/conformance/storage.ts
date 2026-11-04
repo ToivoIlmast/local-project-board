@@ -1,6 +1,6 @@
 import { BoardError } from '../../src/core/errors.js';
 import { taskSchema } from '../../src/core/model/index.js';
-import type { NewTask, Storage } from '../../src/core/ports.js';
+import type { NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
 
 /** The counters of topics and blocks as a person could leave them, or a stored value. */
 export type SequenceState =
@@ -222,7 +222,9 @@ export function runStorageConformance(harness: StorageHarness): void {
 
       it('keeps them across a read and a reopen, and out of extra (INVARIANT)', async () => {
         await topics();
-        const placed = { topic: 'P1', block: 'K1', dependsOn: ['T7', 'T9'] };
+        await storage.createTask(newTask());
+        await storage.createTask(newTask());
+        const placed = { topic: 'P1', block: 'K1', dependsOn: ['T1', 'T2'] };
         const created = await storage.createTask(newTask({ ...placed, extra: { estimate: 3 } }));
         expect(created).toMatchObject(placed);
         const reopened = await reopen(storage);
@@ -235,6 +237,7 @@ export function runStorageConformance(harness: StorageHarness): void {
       it('sets them on update, and clears them with null', async () => {
         await topics();
         const created = await storage.createTask(newTask());
+        await storage.createTask(newTask());
         const placed = await storage.updateTask(created.id, {
           topic: 'P1',
           block: 'K1',
@@ -252,11 +255,22 @@ export function runStorageConformance(harness: StorageHarness): void {
 
       it('leaves them alone when the patch does not mention them', async () => {
         await topics();
+        await storage.createTask(newTask());
         const created = await storage.createTask(
-          newTask({ topic: 'P1', block: 'K1', dependsOn: ['T2'] }),
+          newTask({ topic: 'P1', block: 'K1', dependsOn: ['T1'] }),
         );
         const updated = await storage.updateTask(created.id, { title: 'Renamed' });
-        expect(updated).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T2'] });
+        expect(updated).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T1'] });
+      });
+
+      it('keeps a place that no longer holds when the patch does not mention it', async () => {
+        // A deleted dependency, as a board leaves behind (ADR-0032 Consequences): a rename
+        // must stay possible, and the dangling id is readiness's `task-missing`, not a refusal.
+        await storage.createTask(newTask());
+        const created = await storage.createTask(newTask({ dependsOn: ['T1'] }));
+        await storage.deleteTask('T1');
+        const renamed = await storage.updateTask(created.id, { title: 'Renamed' });
+        expect(renamed.dependsOn).toEqual(['T1']);
       });
 
       it('takes a topic without a block, and moves a task to another topic and block', async () => {
@@ -267,70 +281,267 @@ export function runStorageConformance(harness: StorageHarness): void {
         expect(moved).toMatchObject({ topic: 'P2', block: 'K2' });
       });
 
-      describe('a block belongs to the topic it is named with (INVARIANT)', () => {
+      /** A refused create writes no task, and changes none of those there are. */
+      async function expectNoCreate(
+        provider: Storage,
+        input: Partial<NewTask>,
+        code: string,
+      ): Promise<void> {
+        const before = await provider.listTasks();
+        await expectCode(provider.createTask(newTask(input)), code);
+        expect(await provider.listTasks()).toEqual(before);
+      }
+
+      /** A refused update changes no task: the one written, and every other one. */
+      async function expectNoUpdate(
+        provider: Storage,
+        id: string,
+        patch: Parameters<Storage['updateTask']>[1],
+        code: string,
+      ): Promise<void> {
+        const before = await provider.listTasks();
+        await expectCode(provider.updateTask(id, patch), code);
+        expect(await provider.listTasks()).toEqual(before);
+      }
+
+      describe('a block belongs to the topic it is named with (INVARIANT, T85)', () => {
         it('refuses a block without a topic, and writes nothing', async () => {
           await topics();
-          await expectCode(storage.createTask(newTask({ block: 'K1' })), 'INVALID_REQUEST');
-          expect(await storage.listTasks()).toEqual([]);
+          await expectNoCreate(storage, { block: 'K1' }, 'INVALID_PLACEMENT');
           const created = await storage.createTask(newTask());
-          await expectCode(storage.updateTask(created.id, { block: 'K1' }), 'INVALID_REQUEST');
-          expect(await storage.getTask(created.id)).toEqual(created);
+          await expectNoUpdate(storage, created.id, { block: 'K1' }, 'INVALID_PLACEMENT');
         });
 
         it('refuses a block of another topic, on create and on update', async () => {
           await topics();
-          await expectCode(
-            storage.createTask(newTask({ topic: 'P1', block: 'K2' })),
-            'INVALID_REQUEST',
-          );
-          expect(await storage.listTasks()).toEqual([]);
+          await expectNoCreate(storage, { topic: 'P1', block: 'K2' }, 'INVALID_PLACEMENT');
           const created = await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
-          await expectCode(storage.updateTask(created.id, { block: 'K2' }), 'INVALID_REQUEST');
-          expect(await storage.getTask(created.id)).toEqual(created);
+          await expectNoUpdate(storage, created.id, { block: 'K2' }, 'INVALID_PLACEMENT');
+          await expectNoUpdate(
+            storage,
+            created.id,
+            { topic: 'P1', block: 'K2' },
+            'INVALID_PLACEMENT',
+          );
         });
 
         it('refuses a block of a topic that does not exist, or a block that does not exist', async () => {
           await topics();
-          await expectCode(
-            storage.createTask(newTask({ topic: 'P9', block: 'K1' })),
-            'INVALID_REQUEST',
-          );
-          await expectCode(
-            storage.createTask(newTask({ topic: 'P1', block: 'K9' })),
-            'INVALID_REQUEST',
-          );
-          expect(await storage.listTasks()).toEqual([]);
+          await expectNoCreate(storage, { topic: 'P9', block: 'K1' }, 'INVALID_PLACEMENT');
+          await expectNoCreate(storage, { topic: 'P1', block: 'K9' }, 'INVALID_PLACEMENT');
+          const created = await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
+          await expectNoUpdate(storage, created.id, { block: 'K9' }, 'INVALID_PLACEMENT');
+        });
+
+        it('refuses a topic that does not exist, without a block too', async () => {
+          await topics();
+          await expectNoCreate(storage, { topic: 'P9' }, 'INVALID_PLACEMENT');
+          const created = await storage.createTask(newTask({ topic: 'P1' }));
+          await expectNoUpdate(storage, created.id, { topic: 'P9' }, 'INVALID_PLACEMENT');
+        });
+
+        it('refuses a topic that cannot be read: whether it holds the block is unknown', async () => {
+          await topics();
+          const repair = await harness.breakTopic(storage, 'P1');
+          await expectNoCreate(storage, { topic: 'P1', block: 'K1' }, 'INVALID_PLACEMENT');
+          await expectNoCreate(storage, { topic: 'P1' }, 'INVALID_PLACEMENT');
+          await repair();
+          expect(await storage.createTask(newTask({ topic: 'P1', block: 'K1' }))).toMatchObject({
+            topic: 'P1',
+            block: 'K1',
+          });
         });
 
         it('refuses a new topic that leaves the old block behind, and a topic cleared under a block', async () => {
           await topics();
           const created = await storage.createTask(newTask({ topic: 'P1', block: 'K1' }));
-          await expectCode(storage.updateTask(created.id, { topic: 'P2' }), 'INVALID_REQUEST');
-          await expectCode(storage.updateTask(created.id, { topic: null }), 'INVALID_REQUEST');
-          expect(await storage.getTask(created.id)).toEqual(created);
+          await expectNoUpdate(storage, created.id, { topic: 'P2' }, 'INVALID_PLACEMENT');
+          await expectNoUpdate(storage, created.id, { topic: null }, 'INVALID_PLACEMENT');
         });
       });
 
       describe('dependsOn names tasks in the form of the configured prefix (INVARIANT)', () => {
-        it('takes ids of the configured prefix, a task that does not exist included', async () => {
+        it('takes ids of the configured prefix', async () => {
           const provider = await open({ idPrefix: 'F' });
-          const created = await provider.createTask(newTask({ dependsOn: ['F3', 'F40'] }));
-          expect(created.dependsOn).toEqual(['F3', 'F40']);
+          await provider.createTask(newTask());
+          await provider.createTask(newTask());
+          const created = await provider.createTask(newTask({ dependsOn: ['F1', 'F2'] }));
+          expect(created.dependsOn).toEqual(['F1', 'F2']);
         });
 
         it.each([
-          ['an id of another prefix', ['T3']],
+          ['an id of another prefix', ['T1']],
           ['a topic id', ['P1']],
           ['a block id', ['K1']],
-          ['text that is not an id', ['F3x']],
-          ['an id with a leading zero', ['F03']],
+          ['text that is not an id', ['F1x']],
+          ['an id with a leading zero', ['F01']],
         ])('refuses %s, on create and on update, and writes nothing', async (_name, ids) => {
           const provider = await open({ idPrefix: 'F' });
-          await expectCode(provider.createTask(newTask({ dependsOn: ids })), 'INVALID_REQUEST');
-          expect(await provider.listTasks()).toEqual([]);
-          const created = await provider.createTask(newTask());
-          await expectCode(provider.updateTask(created.id, { dependsOn: ids }), 'INVALID_REQUEST');
-          expect(await provider.getTask(created.id)).toEqual(created);
+          await topics(provider);
+          const existing = await provider.createTask(newTask());
+          await expectNoCreate(provider, { dependsOn: ids }, 'INVALID_DEPENDENCY');
+          await expectNoUpdate(provider, existing.id, { dependsOn: ids }, 'INVALID_DEPENDENCY');
+        });
+      });
+
+      describe('updateTaskContent: the place, the sync, the task and the edit in one write (T85)', () => {
+        const content = { title: 'Renamed', body: 'new\n', labels: [] };
+        const writeHistory = {
+          sync: { source: 'baseline' as const, changed: [], snapshot: content },
+          version: { source: 'edit' as const, changed: ['title' as const], snapshot: content },
+        };
+
+        it('refuses a place as updateTask does, and appends no version (INVARIANT)', async () => {
+          await topics();
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask({ dependsOn: [a.id] }));
+          const before = await storage.listTasks();
+          const refused: [TaskPatch, string][] = [
+            [{ dependsOn: [b.id] }, 'DEPENDENCY_CYCLE'],
+            [{ dependsOn: ['T9'] }, 'INVALID_DEPENDENCY'],
+            [{ block: 'K2' }, 'INVALID_PLACEMENT'],
+          ];
+          for (const [write, code] of refused) {
+            await expectCode(
+              storage.updateTaskContent(a.id, { title: 'Renamed', ...write }, writeHistory),
+              code,
+            );
+          }
+          await expectCode(
+            storage.updateTaskContent('T9', { title: 'Renamed' }, writeHistory),
+            'TASK_NOT_FOUND',
+          );
+          expect(await storage.listTasks()).toEqual(before);
+          expect(await storage.listVersions(a.id)).toEqual([]);
+        });
+
+        it('appends the sync, writes the task, appends the edit, and answers with them', async () => {
+          await topics();
+          const a = await storage.createTask(newTask());
+          const { task, versions } = await storage.updateTaskContent(
+            a.id,
+            { title: 'Renamed', topic: 'P1', block: 'K1' },
+            writeHistory,
+          );
+          expect(task).toMatchObject({ title: 'Renamed', topic: 'P1', block: 'K1' });
+          expect(await storage.getTask(a.id)).toEqual(task);
+          expect(versions.map((version) => [version.number, version.source])).toEqual([
+            [1, 'baseline'],
+            [2, 'edit'],
+          ]);
+          expect(await storage.listVersions(a.id)).toEqual(versions);
+          // Without a sync, only the edit, numbered after what is there.
+          const next = await storage.updateTaskContent(
+            a.id,
+            { title: 'Again' },
+            { version: writeHistory.version },
+          );
+          expect(next.versions.map((version) => version.number)).toEqual([3]);
+        });
+      });
+
+      it('uses no id for a refused create: the next one gets it (ADR-0020, T85)', async () => {
+        await topics();
+        await expectCode(storage.createTask(newTask({ dependsOn: ['T1'] })), 'INVALID_DEPENDENCY');
+        await expectCode(storage.createTask(newTask({ topic: 'P9' })), 'INVALID_PLACEMENT');
+        expect((await storage.createTask(newTask())).id).toBe('T1');
+        const reopened = await reopen(storage);
+        expect((await reopened.createTask(newTask())).id).toBe('T2');
+      });
+
+      describe('dependsOn names tasks that exist and makes no cycle (INVARIANT, T85)', () => {
+        it('refuses a task that does not exist, or no longer does, on create and on update', async () => {
+          const first = await storage.createTask(newTask());
+          const gone = await storage.createTask(newTask());
+          await storage.deleteTask(gone.id);
+          for (const ids of [['T9'], [first.id, 'T9'], [gone.id]]) {
+            await expectNoCreate(storage, { dependsOn: ids }, 'INVALID_DEPENDENCY');
+            await expectNoUpdate(storage, first.id, { dependsOn: ids }, 'INVALID_DEPENDENCY');
+          }
+        });
+
+        it('takes a task of another topic, and a task without a topic', async () => {
+          await topics();
+          const other = await storage.createTask(newTask({ topic: 'P2', block: 'K2' }));
+          const loose = await storage.createTask(newTask());
+          const created = await storage.createTask(
+            newTask({ topic: 'P1', block: 'K1', dependsOn: [other.id, loose.id] }),
+          );
+          expect(created.dependsOn).toEqual([other.id, loose.id]);
+          expect(await storage.getTask(created.id)).toEqual(created);
+        });
+
+        it('refuses a task that depends on itself', async () => {
+          const task = await storage.createTask(newTask());
+          await expectNoUpdate(storage, task.id, { dependsOn: [task.id] }, 'DEPENDENCY_CYCLE');
+        });
+
+        it('refuses a cycle of two, and of three, naming its tasks; nothing is written', async () => {
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask({ dependsOn: [a.id] }));
+          const c = await storage.createTask(newTask({ dependsOn: [b.id] }));
+          await expectNoUpdate(storage, a.id, { dependsOn: [b.id] }, 'DEPENDENCY_CYCLE');
+          await expectNoUpdate(storage, a.id, { dependsOn: [c.id] }, 'DEPENDENCY_CYCLE');
+          const refused = await storage
+            .updateTask(a.id, { dependsOn: [c.id] })
+            .catch((error: unknown) => error as BoardError);
+          expect((refused as BoardError).details).toEqual({ tasks: [a.id, b.id, c.id] });
+        });
+
+        it('refuses a cycle along with a valid change of the same write', async () => {
+          await topics();
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask({ dependsOn: [a.id] }));
+          await expectNoUpdate(
+            storage,
+            a.id,
+            { title: 'Renamed', topic: 'P1', block: 'K1', dependsOn: [b.id] },
+            'DEPENDENCY_CYCLE',
+          );
+        });
+
+        it('takes a chain and a diamond, which are not cycles', async () => {
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask({ dependsOn: [a.id] }));
+          const c = await storage.createTask(newTask({ dependsOn: [a.id] }));
+          const d = await storage.createTask(newTask({ dependsOn: [b.id, c.id] }));
+          expect(d.dependsOn).toEqual([b.id, c.id]);
+          // Turning around one edge of the chain is no cycle either once the old one is gone.
+          await storage.updateTask(b.id, { dependsOn: null });
+          expect((await storage.updateTask(a.id, { dependsOn: [b.id] })).dependsOn).toEqual([b.id]);
+        });
+
+        it('orders two writes that would make a cycle together: exactly one is taken', async () => {
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask());
+          const results = await Promise.allSettled([
+            storage.updateTask(a.id, { dependsOn: [b.id] }),
+            storage.updateTask(b.id, { dependsOn: [a.id] }),
+          ]);
+          expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+          const refused = results.find((result) => result.status === 'rejected');
+          expect(((refused as PromiseRejectedResult).reason as BoardError).code).toBe(
+            'DEPENDENCY_CYCLE',
+          );
+          const after = await storage.listTasks();
+          expect(after.filter((task) => task.dependsOn !== undefined)).toHaveLength(1);
+        });
+
+        it('orders a write and the delete of the task it names: never a dependency on nothing', async () => {
+          const a = await storage.createTask(newTask());
+          const b = await storage.createTask(newTask());
+          const [write] = await Promise.allSettled([
+            storage.updateTask(a.id, { dependsOn: [b.id] }),
+            storage.deleteTask(b.id),
+          ]);
+          // Either order is a board of today: the write came first and its dependency was then
+          // deleted (allowed, ADR-0032 Consequences), or the delete came first and it was refused.
+          if (write.status === 'rejected') {
+            expect((write.reason as BoardError).code).toBe('INVALID_DEPENDENCY');
+            expect(await storage.getTask(a.id)).toEqual(a);
+          } else {
+            expect(write.value.dependsOn).toEqual([b.id]);
+          }
         });
       });
     });

@@ -28,7 +28,12 @@ import {
   isTaskId,
   isTopicId,
 } from '../../../core/rules/ids.js';
-import { assertPlacement } from '../../../core/rules/placement.js';
+import {
+  assertDependencies,
+  assertPlacement,
+  type DependencyBoard,
+  type PlacementWrite,
+} from '../../../core/rules/placement.js';
 import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
 import { historyFiles } from './history.js';
@@ -277,6 +282,23 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     return { tasks, unreadable };
   }
 
+  /** What a `dependsOn` is judged against (T85): read inside `exclusive()`, as a delete is. */
+  async function dependencyBoard(): Promise<DependencyBoard> {
+    const board: { tasks: Task[]; unreadable: string[] } = { tasks: [], unreadable: [] };
+    for (const id of (await taskIds()).sort(byNumber)) {
+      const result = await readTaskFile(id);
+      if (result !== null && 'task' in result) board.tasks.push(result.task);
+      else if (result !== null) board.unreadable.push(id);
+    }
+    return board;
+  }
+
+  /** Every check of a task's place and dependencies; called inside `exclusive()` (T85). */
+  async function assertPlaced(task: Task, write: PlacementWrite): Promise<void> {
+    await assertPlacement(write, task, idPrefix, topicById);
+    await assertDependencies(task.id, write.dependsOn, dependencyBoard);
+  }
+
   function topicNotFound(id: string): BoardError {
     return new BoardError('TOPIC_NOT_FOUND', `Topic "${id}" does not exist.`, { id });
   }
@@ -305,6 +327,27 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     const task = await loadTask(requireTaskId(id));
     if (!task) throw notFound(id);
     return task;
+  }
+
+  /** The task as `patch` leaves it, its place checked, and nothing written; inside `exclusive`. */
+  async function patched(id: string, patch: TaskPatch): Promise<Task> {
+    const task = await requireTask(id);
+    const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
+    await assertPlaced(task, { topic, block, dependsOn });
+    const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
+    if (topic === null) delete updated.topic;
+    else if (topic !== undefined) updated.topic = topic;
+    if (block === null) delete updated.block;
+    else if (block !== undefined) updated.block = block;
+    if (dependsOn === null) delete updated.dependsOn;
+    else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
+    if (branch === null) delete updated.branch;
+    else if (branch !== undefined) updated.branch = branch;
+    if (workflow === null) delete updated.workflow;
+    else if (workflow !== undefined) updated.workflow = { ...workflow };
+    if (aiRun === null) delete updated.aiRun;
+    else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
+    return updated;
   }
 
   async function saveTask(task: Task): Promise<Task> {
@@ -407,6 +450,8 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
         const state = await readState();
         await assertPlacement(input, {}, idPrefix, topicById);
         const { id, sequence } = allocateId(idPrefix, state.taskSequence, await taskIds());
+        // With its id: a task written by hand may already wait for it.
+        await assertDependencies(id, input.dependsOn, dependencyBoard);
         const timestamp = now();
         const task: Task = {
           id,
@@ -432,24 +477,18 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     },
 
     updateTask(id, patch: TaskPatch) {
+      return exclusive(async () => saveTask(await patched(id, patch)));
+    },
+
+    updateTaskContent(id, patch: TaskPatch, { sync, version }) {
+      // One section, and the history files written directly: `appendVersion` would wait for
+      // the queue this section holds.
       return exclusive(async () => {
-        const task = await requireTask(id);
-        const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
-        await assertPlacement({ topic, block, dependsOn }, task, idPrefix, topicById);
-        const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
-        if (topic === null) delete updated.topic;
-        else if (topic !== undefined) updated.topic = topic;
-        if (block === null) delete updated.block;
-        else if (block !== undefined) updated.block = block;
-        if (dependsOn === null) delete updated.dependsOn;
-        else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
-        if (branch === null) delete updated.branch;
-        else if (branch !== undefined) updated.branch = branch;
-        if (workflow === null) delete updated.workflow;
-        else if (workflow !== undefined) updated.workflow = { ...workflow };
-        if (aiRun === null) delete updated.aiRun;
-        else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
-        return saveTask(updated);
+        const updated = await patched(id, patch);
+        const versions = sync === undefined ? [] : [await history.appendVersion(id, sync)];
+        const task = await saveTask(updated);
+        versions.push(await history.appendVersion(id, version));
+        return { task, versions };
       });
     },
 

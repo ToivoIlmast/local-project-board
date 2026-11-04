@@ -44,8 +44,10 @@ export interface NewTask {
  * Only the given fields change. `branch: null` clears the branch; `workflow: null` clears all of
  * the task's workflow overrides, and a `workflow` object replaces them whole, as `labels` does.
  * `aiRun` is the same: an object replaces the reported run whole, null forgets it. `topic`,
- * `block` and `dependsOn` are set or cleared (null) the same way; the place that results must be
- * whole, or the write is refused with `INVALID_REQUEST` and nothing changes (ADR-0032 §3).
+ * `block` and `dependsOn` are set or cleared (null) the same way; what a write names of them must
+ * hold against the board, or it is refused and nothing changes (ADR-0032 §3–4, T85): the place
+ * that results must be whole (`INVALID_PLACEMENT`), and `dependsOn` must name tasks that can be
+ * read (`INVALID_DEPENDENCY`) and put the task in no cycle (`DEPENDENCY_CYCLE`).
  */
 export interface TaskPatch {
   title?: string | undefined;
@@ -66,6 +68,14 @@ export interface TaskPatch {
 export type NewVersion = Omit<TaskVersion, 'taskId' | 'number' | 'createdAt'> & {
   createdAt?: string | undefined;
 };
+
+/** The versions a write of content brings, planned by the caller (see `updateTaskContent`). */
+export interface TaskWriteHistory {
+  /** The `baseline` or `external` that makes history end at the content read; before the task. */
+  sync?: NewVersion | undefined;
+  /** The version of the new content; after the task. */
+  version: NewVersion;
+}
 
 export type NewCheckBegin = Omit<CheckBegin, 'taskId' | 'number' | 'createdAt'> & {
   createdAt?: string | undefined;
@@ -135,9 +145,31 @@ export interface Storage {
    */
   readIssues(): Promise<ReadIssue[]>;
   getTask(id: string): Promise<Task | null>;
-  /** Allocates the id atomically; an id is never reused (ADR-0020). */
+  /**
+   * Allocates the id atomically; an id is never reused (ADR-0020). The checks of `topic`, `block`
+   * and `dependsOn` (see `TaskPatch`) apply, and a refused create uses no id.
+   *
+   * A create, an update and a delete of a task, and a delete of a topic or a block, are ordered:
+   * the checks of one and its write are never parted by another (T85). So two writes that would
+   * make a cycle together cannot both be taken.
+   */
   createTask(input: NewTask): Promise<Task>;
   updateTask(id: string, patch: TaskPatch): Promise<Task>;
+  /**
+   * `updateTask` of a change of content, with the versions it brings (ADR-0030 §3), in one of
+   * the ordered sections of `createTask`: the task is read and the place checked, then `sync` is
+   * appended, then the task written, then `version` appended. A refused place writes nothing,
+   * and no write of the board comes between the check and the last append (T85). Returns the
+   * versions appended, in that order.
+   *
+   * Ordered against this provider's own writes only: a file edited by hand or a second process
+   * is not. A write that fails part way stops there, and what was appended before it stays.
+   */
+  updateTaskContent(
+    id: string,
+    patch: TaskPatch,
+    history: TaskWriteHistory,
+  ): Promise<{ task: Task; versions: TaskVersion[] }>;
   /** Deletes the task, its documents and its history. */
   deleteTask(id: string): Promise<void>;
 

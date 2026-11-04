@@ -11,7 +11,7 @@ import type {
   Topic,
   WorkflowOverrides,
 } from '../../src/core/model/index.js';
-import type { NewReport, NewTask, Storage, TaskPatch } from '../../src/core/ports.js';
+import type { NewReport, NewTask, NewVersion, Storage, TaskPatch } from '../../src/core/ports.js';
 import {
   assertBlockDeletable,
   assertTopicDeletable,
@@ -19,7 +19,11 @@ import {
   requireBlock,
 } from '../../src/core/rules/topicWrites.js';
 import { isDocumentName } from '../../src/core/rules/documentName.js';
-import { assertPlacement } from '../../src/core/rules/placement.js';
+import {
+  assertDependencies,
+  assertPlacement,
+  type PlacementWrite,
+} from '../../src/core/rules/placement.js';
 import { assembleCheck, storedCheckReport } from '../../src/core/rules/history.js';
 import {
   BLOCK_ID_PREFIX,
@@ -82,10 +86,70 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
   const idPrefix = options.idPrefix ?? 'T';
   const now = (): string => new Date().toISOString();
 
+  /**
+   * The checks of a task write await, so without this another write could come between the
+   * check and the write; the same promise chain as the Markdown provider's (T85).
+   */
+  let queue: Promise<unknown> = Promise.resolve();
+  function exclusive<T>(action: () => Promise<T>): Promise<T> {
+    const result = queue.then(action, action);
+    queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  const dependencyBoard = async () => ({ tasks: [...store.tasks.values()], unreadable: [] });
+
+  async function assertPlaced(task: Task, write: PlacementWrite): Promise<void> {
+    await assertPlacement(write, task, idPrefix, async (id) => store.topics.get(id) ?? null);
+    await assertDependencies(task.id, write.dependsOn, dependencyBoard);
+  }
+
   function requireTask(id: string): Task {
     const task = store.tasks.get(id);
     if (!task) throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
     return task;
+  }
+
+  /** The task as `patch` leaves it, its place checked, and nothing written; inside `exclusive`. */
+  async function patched(id: string, patch: TaskPatch): Promise<Task> {
+    const task = requireTask(id);
+    const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
+    await assertPlaced(task, { topic, block, dependsOn });
+    const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
+    if (topic === null) delete updated.topic;
+    else if (topic !== undefined) updated.topic = topic;
+    if (block === null) delete updated.block;
+    else if (block !== undefined) updated.block = block;
+    if (dependsOn === null) delete updated.dependsOn;
+    else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
+    if (branch === null) delete updated.branch;
+    else if (branch !== undefined) updated.branch = branch;
+    if (workflow === null) delete updated.workflow;
+    else if (workflow !== undefined) updated.workflow = { ...workflow };
+    if (aiRun === null) delete updated.aiRun;
+    else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
+    return updated;
+  }
+
+  /** The append itself, outside the queue: for a section that holds it already. */
+  function appendVersion(taskId: string, input: NewVersion): TaskVersion {
+    const history = historyOf(taskId);
+    const number = Math.max(0, ...history.versions.map((version) => version.number)) + 1;
+    const version: TaskVersion = {
+      taskId,
+      number,
+      createdAt: input.createdAt ?? now(),
+      source: input.source,
+      changed: [...input.changed],
+      snapshot: structuredClone(input.snapshot),
+      ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
+      ...(input.fromCheck === undefined ? {} : { fromCheck: structuredClone(input.fromCheck) }),
+    };
+    history.versions.push(version);
+    return structuredClone(version);
   }
 
   function historyOf(taskId: string): MemoryHistory {
@@ -215,85 +279,65 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         .map(([id]) => ({ file: `topics/${id}/topic.md`, message: 'The file cannot be read.' })),
     getTask: async (id) => store.tasks.get(id) ?? null,
 
-    createTask: async (input: NewTask) => {
-      await assertPlacement(input, {}, idPrefix, async (id) => store.topics.get(id) ?? null);
-      const { id, sequence } = allocateId(idPrefix, store.taskSequence, store.tasks.keys());
-      store.taskSequence = sequence;
-      const timestamp = now();
-      const task: Task = {
-        id,
-        title: input.title,
-        status: input.status,
-        rank: input.rank,
-        body: input.body,
-        labels: [...input.labels],
-        ...(input.branch === undefined ? {} : { branch: input.branch }),
-        ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
-        ...(input.topic === undefined ? {} : { topic: input.topic }),
-        ...(input.block === undefined ? {} : { block: input.block }),
-        ...(input.dependsOn === undefined ? {} : { dependsOn: [...input.dependsOn] }),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
-      };
-      store.tasks.set(id, task);
-      return task;
-    },
+    createTask: (input: NewTask) =>
+      exclusive(async () => {
+        await assertPlacement(input, {}, idPrefix, async (id) => store.topics.get(id) ?? null);
+        const { id, sequence } = allocateId(idPrefix, store.taskSequence, store.tasks.keys());
+        await assertDependencies(id, input.dependsOn, dependencyBoard);
+        store.taskSequence = sequence;
+        const timestamp = now();
+        const task: Task = {
+          id,
+          title: input.title,
+          status: input.status,
+          rank: input.rank,
+          body: input.body,
+          labels: [...input.labels],
+          ...(input.branch === undefined ? {} : { branch: input.branch }),
+          ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
+          ...(input.topic === undefined ? {} : { topic: input.topic }),
+          ...(input.block === undefined ? {} : { block: input.block }),
+          ...(input.dependsOn === undefined ? {} : { dependsOn: [...input.dependsOn] }),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          ...(input.extra === undefined ? {} : { extra: { ...input.extra } }),
+        };
+        store.tasks.set(id, task);
+        return task;
+      }),
 
-    updateTask: async (id, patch: TaskPatch) => {
-      const task = requireTask(id);
-      const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
-      await assertPlacement(
-        { topic, block, dependsOn },
-        task,
-        idPrefix,
-        async (topicId) => store.topics.get(topicId) ?? null,
-      );
-      const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
-      if (topic === null) delete updated.topic;
-      else if (topic !== undefined) updated.topic = topic;
-      if (block === null) delete updated.block;
-      else if (block !== undefined) updated.block = block;
-      if (dependsOn === null) delete updated.dependsOn;
-      else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
-      if (branch === null) delete updated.branch;
-      else if (branch !== undefined) updated.branch = branch;
-      if (workflow === null) delete updated.workflow;
-      else if (workflow !== undefined) updated.workflow = { ...workflow };
-      if (aiRun === null) delete updated.aiRun;
-      else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
-      store.tasks.set(id, updated);
-      return updated;
-    },
+    updateTask: (id, patch: TaskPatch) =>
+      exclusive(async () => {
+        const updated = await patched(id, patch);
+        store.tasks.set(id, updated);
+        return updated;
+      }),
+
+    // As the markdown provider: one section, the versions appended without entering it again.
+    updateTaskContent: (id, patch: TaskPatch, { sync, version }) =>
+      exclusive(async () => {
+        const updated = await patched(id, patch);
+        const versions = sync === undefined ? [] : [appendVersion(id, sync)];
+        store.tasks.set(id, updated);
+        versions.push(appendVersion(id, version));
+        return { task: updated, versions };
+      }),
 
     readWorkflow: async () => structuredClone(store.workflow),
     writeWorkflow: async (workflow) => {
       store.workflow = structuredClone(workflow);
     },
 
-    deleteTask: async (id) => {
-      requireTask(id);
-      store.tasks.delete(id);
-      store.documents.delete(id);
-      store.history.delete(id);
-    },
+    deleteTask: (id) =>
+      exclusive(async () => {
+        requireTask(id);
+        store.tasks.delete(id);
+        store.documents.delete(id);
+        store.history.delete(id);
+      }),
 
-    appendVersion: async (taskId, input) => {
-      const history = historyOf(taskId);
-      const number = Math.max(0, ...history.versions.map((version) => version.number)) + 1;
-      const version: TaskVersion = {
-        taskId,
-        number,
-        createdAt: input.createdAt ?? now(),
-        source: input.source,
-        changed: [...input.changed],
-        snapshot: structuredClone(input.snapshot),
-        ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
-        ...(input.fromCheck === undefined ? {} : { fromCheck: structuredClone(input.fromCheck) }),
-      };
-      history.versions.push(version);
-      return structuredClone(version);
-    },
+    // In the queue of the writes, as the markdown provider's is.
+    appendVersion: (taskId, input) => exclusive(async () => appendVersion(taskId, input)),
     listVersions: async (taskId) => structuredClone(historyOf(taskId).versions),
     readVersion: async (taskId, number) =>
       structuredClone(historyOf(taskId).versions.find((v) => v.number === number) ?? null),
@@ -426,12 +470,13 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
       return structuredClone(topic);
     },
 
-    deleteTopic: async (id) => {
-      const topic = requireTopic(id);
-      assertTopicDeletable(topic, [...store.tasks.values()]);
-      keepCounters();
-      store.topics.delete(id);
-    },
+    deleteTopic: (id) =>
+      exclusive(async () => {
+        const topic = requireTopic(id);
+        assertTopicDeletable(topic, [...store.tasks.values()]);
+        keepCounters();
+        store.topics.delete(id);
+      }),
 
     updateBlock: async (topicId, blockId, patch) => {
       const topic = requireTopic(topicId);
@@ -446,13 +491,14 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
       return structuredClone(topic);
     },
 
-    deleteBlock: async (topicId, blockId) => {
-      const topic = requireTopic(topicId);
-      requireBlock(topic, blockId);
-      assertBlockDeletable(topic, blockId, [...store.tasks.values()]);
-      keepCounters();
-      topic.blocks = topic.blocks.filter((block) => block.id !== blockId);
-    },
+    deleteBlock: (topicId, blockId) =>
+      exclusive(async () => {
+        const topic = requireTopic(topicId);
+        requireBlock(topic, blockId);
+        assertBlockDeletable(topic, blockId, [...store.tasks.values()]);
+        keepCounters();
+        topic.blocks = topic.blocks.filter((block) => block.id !== blockId);
+      }),
 
     listReports: async () => [...store.reports.values()].map((entry) => entry.report),
     readReport: async (id) => store.reports.get(id)?.content ?? null,

@@ -69,6 +69,20 @@ Response — 200, application/json:
 
 ## Tasks
 
+A task may be placed in a topic (`topic`), in a block of it (`block`, only with `topic`), and
+wait for other tasks (`dependsOn`, task ids). They are not content: changing them makes no
+version. `POST` and `PATCH` check what they name against the board, and a refusal is `422`
+with nothing written:
+
+- `INVALID_PLACEMENT`: a topic that does not exist or cannot be read, a block without a
+  topic, or a block the topic does not hold.
+- `INVALID_DEPENDENCY`: an entry that is not a task id of the board (a block id included),
+  a task that does not exist, or one whose file, or the file of a task it leads to, cannot
+  be read.
+- `DEPENDENCY_CYCLE`: the task would be in a cycle; `details.tasks` names its tasks.
+
+A patch that names none of them leaves them as they are, unchecked.
+
 ### GET /api/v1/tasks
 
 List every task, ordered by status and rank
@@ -1630,6 +1644,9 @@ nothing else. The code is one of:
 - BLOCK_NOT_FOUND
 - TOPIC_NOT_EMPTY
 - BLOCK_NOT_EMPTY
+- INVALID_PLACEMENT
+- INVALID_DEPENDENCY
+- DEPENDENCY_CYCLE
 - DOCUMENT_NOT_FOUND
 - REPORT_NOT_FOUND
 - INVALID_DOCUMENT_NAME
