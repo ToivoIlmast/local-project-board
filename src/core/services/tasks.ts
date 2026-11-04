@@ -7,7 +7,7 @@ import type { EventSink, Storage } from '../ports.js';
 import { applyContentPatch, changedFields, contentOf } from '../rules/history.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import { assertKnownStatus } from '../rules/status.js';
-import { assertContentHash, assertFromCheck, syncHistory } from './taskHistory.js';
+import { assertContentHash, assertFromCheck, planSync } from './taskHistory.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
 export interface TaskServiceOptions {
@@ -93,7 +93,8 @@ export function createTaskService({
 
   /**
    * One change of a task, inside the lock of the task (ADR-0030 §3): read, every precondition,
-   * sync, write. A refusal anywhere before the write leaves nothing behind.
+   * sync, write. A refusal anywhere before the write leaves nothing behind; the place is the last
+   * precondition, checked by the storage in the section that syncs and writes.
    */
   async function change(id: string, input: UpdateTaskInput): Promise<Task> {
     const { ifContentHash, fromCheck, ...patch } = input;
@@ -122,28 +123,34 @@ export function createTaskService({
 
     const after = applyContentPatch(before, patch);
     const changed = changedFields(before, after);
-
-    // Sync: history ends at what is on disk before the new content is written.
-    const appended = changed.length > 0 ? await syncHistory(storage, id, before) : [];
-    const task = await storage.updateTask(id, {
+    const write = {
       ...patch,
       // A plain status change lands at the end of the new column; /move places it precisely.
       ...(movedToAnotherColumn
         ? { rank: rankForPosition(await column(patch.status as string), {}, id) }
         : {}),
-    });
-    if (changed.length > 0) {
-      // After task.md, so a crash in between leaves the content ahead of history, to be found
-      // as `external` by the next sync, and never a version that did not become the task.
-      const version = await storage.appendVersion(id, {
+    };
+    if (changed.length === 0) {
+      const task = await storage.updateTask(id, write);
+      announce(task, []);
+      return task;
+    }
+
+    // Sync: history ends at what is on disk before the new content is written. Planned here,
+    // and written by the storage in the section that checks the place, so a refused place, or
+    // a write of the board that makes it one, leaves no version behind (T85). The edit comes
+    // after task.md, so a crash in between leaves the content ahead of history, to be found as
+    // `external` by the next sync, and never a version that did not become the task.
+    const { task, versions } = await storage.updateTaskContent(id, write, {
+      sync: await planSync(storage, id, before),
+      version: {
         source: 'edit',
         changed,
         snapshot: after,
         ...(fromCheck === undefined ? {} : { fromCheck }),
-      });
-      appended.push(version);
-    }
-    announce(task, appended);
+      },
+    });
+    announce(task, versions);
     return task;
   }
 

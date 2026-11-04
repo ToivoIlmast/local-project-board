@@ -8,7 +8,7 @@ import {
   fromCheckSchema,
 } from '../../core/model/history.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
-import { blockIdSchema } from '../../core/model/topic.js';
+import { blockIdSchema, topicIdSchema } from '../../core/model/topic.js';
 import { taskWorkflowSchema, workflowOverridesSchema } from '../../core/model/workflow.js';
 
 /**
@@ -147,6 +147,10 @@ export const createTaskRequestSchema = z.strictObject({
   branch: z.string().min(1).optional(),
   /** The task's own overrides of the AI workflow settings; only what is set (ADR-0028). */
   workflow: taskWorkflowSchema.optional(),
+  /** Where the task is placed and what it waits for; checked against the board (T85). */
+  topic: topicIdSchema.optional(),
+  block: blockIdSchema.optional(),
+  dependsOn: z.array(taskIdSchema).optional(),
 });
 
 export const updateTaskRequestSchema = z
@@ -164,6 +168,13 @@ export const updateTaskRequestSchema = z
      * 409 AI_RUN_NOT_CLEARABLE (T45). An object is rejected — use the report route (T32).
      */
     aiRun: z.null().optional(),
+    /**
+     * Where the task is placed and what it waits for; null clears it. Not content, so no version
+     * (ADR-0032 §3). What does not hold against the board is `422` and nothing is written (T85).
+     */
+    topic: topicIdSchema.nullable().optional(),
+    block: blockIdSchema.nullable().optional(),
+    dependsOn: z.array(taskIdSchema).nullable().optional(),
     /**
      * The `contentHash` of the content this change is based on. When the content is another one,
      * the answer is `409 TASK_CONTENT_CHANGED` and nothing is written; without it the change is

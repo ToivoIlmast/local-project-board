@@ -193,9 +193,13 @@ describe('task history', () => {
 
     it('does not make a version when dependsOn changes (INVARIANT)', async () => {
       const task = await tasks.create({ title: 'One' });
-      await tasks.update(task.id, { dependsOn: ['T7'] });
-      await tasks.update(task.id, { dependsOn: ['T7', 'T8'] });
-      expect((await tasks.get(task.id)).dependsOn).toEqual(['T7', 'T8']);
+      const [first, second] = [
+        await tasks.create({ title: 'A' }),
+        await tasks.create({ title: 'B' }),
+      ];
+      await tasks.update(task.id, { dependsOn: [first.id] });
+      await tasks.update(task.id, { dependsOn: [first.id, second.id] });
+      expect((await tasks.get(task.id)).dependsOn).toEqual([first.id, second.id]);
       await tasks.update(task.id, { dependsOn: null });
       expect(await tasks.get(task.id)).not.toHaveProperty('dependsOn');
       expect(await numbers(task.id)).toEqual([1]);
@@ -203,13 +207,14 @@ describe('task history', () => {
 
     it('does not make a version at create, and writes the fields', async () => {
       await twoTopics();
+      const dependency = await tasks.create({ title: 'Before' });
       const task = await tasks.create({
         title: 'One',
         topic: 'P1',
         block: 'K1',
-        dependsOn: ['T9'],
+        dependsOn: [dependency.id],
       });
-      expect(task).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: ['T9'] });
+      expect(task).toMatchObject({ topic: 'P1', block: 'K1', dependsOn: [dependency.id] });
       expect(await numbers(task.id)).toEqual([1]);
       expect((await storage.listVersions(task.id))[0]?.snapshot).toEqual({
         title: 'One',
@@ -221,8 +226,9 @@ describe('task history', () => {
     it('keeps them out of every snapshot and the hash, and changes the content hash by nothing', async () => {
       await twoTopics();
       const task = await tasks.create({ title: 'One', body: 'b\n' });
+      const dependency = await tasks.create({ title: 'Before' });
       const before = contentHash({ title: 'One', body: 'b\n', labels: [] });
-      await tasks.update(task.id, { topic: 'P1', block: 'K1', dependsOn: ['T5'] });
+      await tasks.update(task.id, { topic: 'P1', block: 'K1', dependsOn: [dependency.id] });
       await tasks.update(task.id, { title: 'Two' });
       const versions = await storage.listVersions(task.id);
       expect(versions.map((version) => version.snapshot)).toEqual([
