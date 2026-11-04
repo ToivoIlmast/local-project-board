@@ -22,6 +22,7 @@ import {
   contentOf,
   generateHandoff,
   latestDecisions,
+  readiness,
   sameContent,
   summarizeCheck,
 } from '../../../src/contract/v1/index';
@@ -224,13 +225,25 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       task.workflow,
     );
 
+  // Computed by the very function the server uses; this board has no topics.
+  const reasonsOfTasks = () =>
+    readiness({ tasks, topics: [], readIssues: [], statuses: project.statuses });
+
   const client: BoardClient = {
     project: () => record('project', () => ({ ...project })),
     instructions: () => record('instructions', () => options.instructions ?? '# API\n'),
     session: () => record('session', () => 'fake-token'),
 
-    listTasks: () => record('listTasks', () => tasks.map((task) => ({ ...task }))),
-    getTask: (id) => record('getTask', () => ({ ...require(id) })),
+    listTasks: () =>
+      record('listTasks', () => {
+        const reasons = reasonsOfTasks();
+        return tasks.map((task) => ({ ...task, readiness: { reasons: reasons[task.id] ?? [] } }));
+      }),
+    getTask: (id) =>
+      record('getTask', () => ({
+        ...require(id),
+        readiness: { reasons: reasonsOfTasks()[id] ?? [] },
+      })),
     createTask: (input) =>
       record('createTask', () => {
         sequence += 1;

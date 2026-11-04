@@ -3,6 +3,7 @@ import {
   API_BASE_PATH as API,
   errorResponseSchema,
   taskSchema,
+  taskWithReadinessSchema,
 } from '../../src/contract/v1/index.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
@@ -27,7 +28,7 @@ async function create(title: string, status = 'todo'): Promise<string> {
 async function column(status: string): Promise<string[]> {
   const response = await board.get(`${API}/tasks`).expect(200);
   return z
-    .array(taskSchema)
+    .array(taskWithReadinessSchema)
     .parse(response.body)
     .filter((task) => task.status === status)
     .map((task) => task.title);
@@ -78,7 +79,9 @@ describe('POST /tasks/:id/move', () => {
   it('computes the rank on the server: the request never carries one', async () => {
     const first = await create('first', 'done');
     const id = await create('a');
-    const firstRank = taskSchema.parse((await board.get(`${API}/tasks/${first}`)).body).rank;
+    const firstRank = taskWithReadinessSchema.parse(
+      (await board.get(`${API}/tasks/${first}`)).body,
+    ).rank;
 
     await board.post(`${API}/tasks/${id}/move`, { status: 'done', rank: firstRank }).expect(400);
 

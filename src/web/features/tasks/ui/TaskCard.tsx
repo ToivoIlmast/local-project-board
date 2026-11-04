@@ -1,11 +1,14 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
-import type { Task } from '../../../../contract/v1/index';
+import { launchState, type BlockingReason, type Task } from '../../../../contract/v1/index';
 import { Badge, Menu, type MenuItem } from '../../../shared/ui/index';
+import { reasonText } from '../model/readinessText';
 import { hasOwnSettings } from '../model/taskWorkflow';
 import { useSendToAi } from '../model/useSendToAi';
 
 export interface TaskCardProps {
   task: Task;
+  /** Why the task may not start yet, as the board computed it; none means it may. */
+  reasons: readonly BlockingReason[];
   statuses: string[];
   /** A change of this task is on its way to the board. */
   busy: boolean;
@@ -24,6 +27,7 @@ export interface TaskCardProps {
  */
 export const TaskCard = memo(function TaskCard({
   task,
+  reasons,
   statuses,
   busy,
   dragging,
@@ -35,6 +39,8 @@ export const TaskCard = memo(function TaskCard({
   onDragStart,
 }: TaskCardProps) {
   const sendToAi = useSendToAi(task);
+  // ● and 🔒 can be shown together: a run that has started is not stopped (ADR-0032 §7).
+  const launch = launchState(task, reasons);
   const items: (MenuItem | 'separator')[] = [
     { label: 'Open', onSelect: () => onOpen(task.id) },
     { label: 'Edit', onSelect: () => onEdit(task.id) },
@@ -94,6 +100,16 @@ export const TaskCard = memo(function TaskCard({
               : ''}
           </Badge>
         )}
+        {launch.running ? (
+          <Badge tone="accent" title="An AI run is working">
+            ●
+          </Badge>
+        ) : null}
+        {launch.blocked ? (
+          <Badge tone="warning" title={`Blocked: ${reasons.map(reasonText).join('; ')}`}>
+            🔒
+          </Badge>
+        ) : null}
         {hasOwnSettings(task.workflow) ? (
           <Badge tone="warning" title="This task has AI settings of its own">
             ⚙ AI settings

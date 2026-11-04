@@ -5,6 +5,7 @@ import {
   API_BASE_PATH as API,
   errorResponseSchema,
   taskSchema,
+  taskWithReadinessSchema,
 } from '../../src/contract/v1/index.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
@@ -42,7 +43,7 @@ describe('GET /tasks', () => {
     const response = await board.get(`${API}/tasks`).expect(200);
     expect(
       z
-        .array(taskSchema)
+        .array(taskWithReadinessSchema)
         .parse(response.body)
         .map((task) => task.title),
     ).toEqual(['first todo', 'second todo', 'done one']);
@@ -87,7 +88,7 @@ describe('GET /tasks/:id', () => {
   it('reads one task with its markdown body', async () => {
     const id = await createTask();
     const response = await board.get(`${API}/tasks/${id}`).expect(200);
-    expect(taskSchema.parse(response.body).body).toBe(draft.body);
+    expect(taskWithReadinessSchema.parse(response.body).body).toBe(draft.body);
   });
 
   it('answers 404 for a task that does not exist', async () => {

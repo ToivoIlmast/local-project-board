@@ -46,6 +46,11 @@ export const BOARD_ERROR_CODES = [
   'NO_SESSION_TO_RESUME',
   /** Restart was asked for a task that has no earlier run to start over (T37). */
   'NO_RUN_TO_RESTART',
+  /**
+   * A work run, or the handoff while no run works, was asked for a task that has reasons not
+   * to start yet; `details.reasons` holds them (ADR-0032 §8, ADR-0029 T78, T86).
+   */
+  'TASK_BLOCKED',
   /** PATCH aiRun: null on a run with a runId, in any state: its runId must not restart (T45). */
   'AI_RUN_NOT_CLEARABLE',
   /** A request that can only be judged against the state of the board (ADR-0030 §7). */

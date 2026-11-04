@@ -2,6 +2,7 @@ import type { AiRun, AiRunReport } from '../model/aiRun.js';
 import type { EventSink, Storage } from '../ports.js';
 import { BoardError } from '../errors.js';
 import type { Task } from '../model/task.js';
+import { reasonsOf, taskBlocked } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
 export interface AiRunServiceOptions {
@@ -56,6 +57,11 @@ export interface AiRunService {
    * run, and it must be over. Throws `NO_RUN_TO_RESTART` or `AI_RUN_IN_PROGRESS`.
    */
   requireRestartable(taskId: string): Promise<void>;
+  /**
+   * Throws `TASK_BLOCKED` with the reasons when the task may not be started yet (ADR-0029 T78,
+   * L1). Asked by `/run` after the refusals above; begin asks again itself (L2).
+   */
+  requireReady(taskId: string): Promise<void>;
 }
 
 /** The current runId from a task's aiRun, normalizing legacy records (no runId → 0). */
@@ -66,6 +72,7 @@ function currentRunId(aiRun: AiRun | undefined): number {
 
 export function createAiRunService({
   storage,
+  statuses,
   events,
   locks = createTaskLocks(),
 }: AiRunServiceOptions): AiRunService {
@@ -118,6 +125,11 @@ export function createAiRunService({
     );
   }
 
+  async function assertReady(taskId: string): Promise<void> {
+    const reasons = await reasonsOf(storage, statuses, taskId);
+    if (reasons.length > 0) throw taskBlocked(taskId, reasons);
+  }
+
   function noRun(taskId: string): BoardError {
     return new BoardError(
       'NO_RUN_TO_RESTART',
@@ -143,6 +155,8 @@ export function createAiRunService({
         if (task.aiRun.state === 'working') throw inProgress(taskId);
       }),
 
+    requireReady: (taskId) => locks.run(taskId, () => assertReady(taskId)),
+
     requireIdle: (taskId) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
@@ -162,6 +176,10 @@ export function createAiRunService({
         if (input.mode === 'resume' && task.aiRun?.sessionId !== input.sessionId) {
           throw noSession(taskId);
         }
+
+        // The last guard on the server, after the refusals above and before anything is
+        // written: a task that became blocked since /run is refused here (ADR-0029 T78, L2).
+        await assertReady(taskId);
 
         const newRun: AiRun = {
           agent: task.aiRun?.agent ?? 'runner',

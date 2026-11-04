@@ -4,6 +4,7 @@ export * from './ports.js';
 export * from './services/documents.js';
 export * from './services/history.js';
 export * from './services/project.js';
+export * from './services/readiness.js';
 export * from './services/reports.js';
 export * from './services/snapshot.js';
 export * from './services/tasks.js';

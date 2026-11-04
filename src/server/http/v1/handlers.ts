@@ -75,9 +75,10 @@ export const handlers: Handlers = {
     };
   },
 
-  'tasks.list': (context) => context.tasks.list(),
+  // A task is read with its readiness beside it; the task itself stays what taskSchema says.
+  'tasks.list': (context) => context.tasks.listWithReadiness(),
   'tasks.create': (context, { body }) => context.tasks.create(body),
-  'tasks.get': (context, { params }) => context.tasks.get(params.id),
+  'tasks.get': (context, { params }) => context.tasks.getWithReadiness(params.id),
   'tasks.update': (context, { params, body }) => context.tasks.update(params.id, body),
   'tasks.move': (context, { params, body }) => context.tasks.move(params.id, body),
   'tasks.delete': async (context, { params }) => {
@@ -115,6 +116,9 @@ export const handlers: Handlers = {
     if (body.mode === 'resume') await context.aiRun.requireResumable(params.id);
     // And Restart needs a run that is over, to start its work over (T37).
     if (body.mode === 'restart') await context.aiRun.requireRestartable(params.id);
+    // Only then readiness, in every mode, so the refusals above answer as they did (F4); and
+    // before the runner is asked, because asking it is already telling it (ADR-0029 T78, L1).
+    await context.aiRun.requireReady(params.id);
     const request = {
       taskId: params.id,
       agent: body.agent,

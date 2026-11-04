@@ -6,6 +6,7 @@ import {
   effectiveWorkflowSchema,
   errorResponseSchema,
   taskSchema,
+  taskWithReadinessSchema,
   workflowStateSchema,
   type WorkflowOverrides,
 } from '../../src/contract/v1/index.js';
@@ -48,7 +49,7 @@ const readState = async () =>
 const readEffective = async (id: string) =>
   effectiveWorkflowSchema.parse((await board.get(`${API}/tasks/${id}/workflow`).expect(200)).body);
 const readTask = async (id: string) =>
-  taskSchema.parse((await board.get(`${API}/tasks/${id}`).expect(200)).body);
+  taskWithReadinessSchema.parse((await board.get(`${API}/tasks/${id}`).expect(200)).body);
 
 /** Both providers must give the API the same behaviour; only the disk has more to check. */
 const providers: [string, () => Promise<TestBoard>][] = [
@@ -604,7 +605,8 @@ describe.each(providers)('the workflow routes on %s', (_name, open) => {
       expect(response.status).toBe(200);
       const after = taskSchema.parse(response.body);
       const { workflow, updatedAt, ...rest } = after;
-      const { updatedAt: _before, ...restBefore } = before;
+      // A read carries readiness beside the task; the answer of a write is the task alone.
+      const { updatedAt: _before, readiness: _readiness, ...restBefore } = before;
       expect(workflow).toEqual({ push: true });
       expect(rest).toEqual(restBefore);
       expect(updatedAt >= _before).toBe(true);

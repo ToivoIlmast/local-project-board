@@ -4,6 +4,7 @@ import {
   projectSchema,
   reportSchema,
   taskSchema,
+  taskWithReadinessSchema,
 } from '../../src/contract/v1/index.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
@@ -279,7 +280,9 @@ describe('an external agent with nothing but the handoff of a task', () => {
       await agent.json(call.method, call.route, path, call.body);
     }
 
-    const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
+    const after = taskWithReadinessSchema.parse(
+      await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`),
+    );
     // The default workflow: work starts in `in-progress`, the branch is recorded, and the task
     // moves to `done` when the agent finishes (finishStatus default for a board with done).
     expect(after.status).toBe('done');
@@ -332,7 +335,9 @@ describe('an external agent with nothing but the handoff of a task', () => {
       const path = call.path.replace('<runId>', String(runId));
       await agent.json(call.method, call.route, path, call.body);
     }
-    const after = taskSchema.parse(await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`));
+    const after = taskWithReadinessSchema.parse(
+      await agent.json('GET', '/tasks/:id', `/tasks/${created.id}`),
+    );
     expect(after).toMatchObject({ status: 'todo', aiRun: { state: 'finished' } });
     expect(after.branch).toBeUndefined();
     expect(await board.storage.listDocuments('T1')).toEqual([]);
