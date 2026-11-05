@@ -382,3 +382,56 @@ describe('Send to AI → Claude Code (T27)', () => {
     expect(sendMenu()).toHaveFocus();
   });
 });
+
+describe('"Copy handoff" and what blocks the task', () => {
+  const blocked = (extra: Partial<Task> = {}): Task[] => [
+    aTask({ id: 'T2', title: 'Dependency', status: 'todo', rank: 'a1' }),
+    todo({ dependsOn: ['T2'], ...extra }),
+  ];
+
+  it('is disabled in the details of a blocked task with no working run', async () => {
+    const rendered = await openTask({ tasks: blocked() });
+
+    await rendered.user.click(sendMenu());
+
+    expect(screen.getByRole('button', { name: 'Copy handoff' })).toBeDisabled();
+    expect(rendered.board.calls).not.toContain('handoff');
+  });
+
+  it('stays enabled in the details of a blocked task whose run works', async () => {
+    const rendered = await openTask({
+      tasks: blocked({
+        aiRun: {
+          agent: 'claude',
+          state: 'working',
+          sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        },
+      }),
+    });
+
+    await copyHandoff(rendered);
+
+    expect(await within(details()).findByText('Handoff copied to the clipboard.')).toBeVisible();
+  });
+
+  it('stays enabled when no reasons are given, or the list is empty (fail-open)', async () => {
+    const board = fakeBoard({ tasks: [todo()] });
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <BoardProvider client={board.client} connect={() => () => undefined}>
+        <SendToAi task={todo()} />
+      </BoardProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Send to AI' }));
+    expect(screen.getByRole('button', { name: 'Copy handoff' })).toBeEnabled();
+    await user.keyboard('{Escape}');
+
+    rerender(
+      <BoardProvider client={board.client} connect={() => () => undefined}>
+        <SendToAi task={todo()} reasons={[]} />
+      </BoardProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Send to AI' }));
+    expect(screen.getByRole('button', { name: 'Copy handoff' })).toBeEnabled();
+  });
+});

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { jest } from '@jest/globals';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import type { Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
@@ -145,5 +145,28 @@ describe('"Send to AI → Claude Code" in the menu of a card (T19, T27)', () => 
     ).not.toBeInTheDocument();
     expect(rendered.board.runs).toEqual([{ taskId: 'T2', agent: 'claude-code' }]);
     expect(rendered.board.calls).not.toContain('handoff');
+  });
+});
+
+describe('"Copy handoff" when the board has not said what blocks a task (fail-open)', () => {
+  it('stays enabled for a task whose readiness has not been read, and copies', async () => {
+    const rendered = await renderBoard({ tasks: seed() });
+    // The board cannot answer the list that carries readiness; the task still arrives by event.
+    rendered.board.fail('listTasks', new ApiError(500, 'INTERNAL_ERROR', 'no'));
+    act(() =>
+      rendered.board.emit({ type: 'task.created', task: aTask({ id: 'T9', title: 'Late' }) }),
+    );
+    await screen.findByRole('button', { name: 'Late' });
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Actions for T9' }));
+    expect(screen.getByRole('button', { name: 'Send to AI: Copy handoff' })).toBeEnabled();
+  });
+
+  it('stays enabled for a task with no reasons', async () => {
+    const rendered = await renderBoard({ tasks: seed() });
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Actions for T1' }));
+
+    expect(screen.getByRole('button', { name: 'Send to AI: Copy handoff' })).toBeEnabled();
   });
 });

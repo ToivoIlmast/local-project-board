@@ -83,6 +83,15 @@ with nothing written:
 
 A patch that names none of them leaves them as they are, unchecked.
 
+A task with a non-empty `readiness.reasons` is blocked (ADR-0032). The board refuses to start
+work on it with `409 TASK_BLOCKED`, and `details.reasons` carries the reasons as codes:
+
+- `GET /tasks/:id/handoff`: a blocked task has no handoff, unless its `aiRun.state` is
+  `working`: a run that has started keeps its handoff.
+- `POST /tasks/:id/run` with `kind: work`: a blocked task is not started, and a run that is
+  working is refused as before. `kind: check` and `kind: research` are not gated.
+- Nothing else is refused for readiness: reading and changing the task are as for any task.
+
 ### GET /api/v1/tasks
 
 List every task, ordered by status and rank, each with its `readiness`

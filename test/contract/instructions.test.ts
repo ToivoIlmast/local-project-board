@@ -112,6 +112,25 @@ describe('generated AI instructions', () => {
     for (const text of [custom, empty]) expect(text).toContain('## Working on a task');
   });
 
+  it('tells an agent not to start work on a blocked task, as information and not as a gate (T88, INVARIANT)', () => {
+    const rule = API_RULES.find((candidate) => candidate.includes('readiness.reasons'));
+    expect(rule).toBeDefined();
+    const text = (rule ?? '').replace(/\s+/g, ' ');
+
+    // A task with reasons is blocked, and the agent is told not to start work on it …
+    expect(text).toMatch(/not empty[^.]*is blocked/);
+    expect(text).toMatch(/Do not start work on a blocked task/);
+    // … while the board is said not to enforce this for the agent's other requests …
+    expect(text).toMatch(/not a gate on the server/);
+    expect(text).toMatch(/never your other requests/);
+    // … and to refuse the start of a run and the handoff, with the code the agent will see.
+    expect(text).toMatch(
+      /refuses only the start of a run and the handoff[^.]*\(`409 TASK_BLOCKED`\)/,
+    );
+    // The rule reaches the agent in the generated text.
+    expect(instructions).toContain(`- ${rule}`);
+  });
+
   it('never tells an agent to read the instructions it is already reading', () => {
     expect(instructions).not.toContain(routes['instructions.get'].path);
   });
