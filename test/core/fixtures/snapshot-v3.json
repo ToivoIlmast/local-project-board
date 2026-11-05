@@ -1,0 +1,105 @@
+{
+  "formatVersion": 3,
+  "exportedAt": "2026-11-04T14:21:43.644Z",
+  "project": {
+    "name": "dep-health",
+    "statuses": ["todo", "done"],
+    "idPrefix": "T"
+  },
+  "workflow": {
+    "board": {
+      "push": false
+    },
+    "statuses": {
+      "todo": {
+        "editCode": false
+      }
+    }
+  },
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Extract the git adapter",
+      "status": "todo",
+      "rank": "a0",
+      "body": "## Context\n",
+      "labels": ["refactor"],
+      "createdAt": "2026-11-04T14:21:43.593Z",
+      "updatedAt": "2026-11-04T14:21:43.593Z",
+      "extra": {
+        "estimate": 3
+      }
+    },
+    {
+      "id": "T2",
+      "title": "Write the docs",
+      "status": "done",
+      "rank": "a1",
+      "body": "",
+      "labels": [],
+      "workflow": {
+        "commit": false
+      },
+      "topic": "P1",
+      "block": "K1",
+      "dependsOn": ["T1"],
+      "createdAt": "2026-11-04T14:21:43.597Z",
+      "updatedAt": "2026-11-04T14:21:43.611Z"
+    }
+  ],
+  "documents": [
+    {
+      "taskId": "T1",
+      "name": "plan.md",
+      "content": "# Plan\n"
+    }
+  ],
+  "reports": [
+    {
+      "id": "R1",
+      "title": "Audit",
+      "format": "html",
+      "createdAt": "2026-11-04T14:21:43.616Z",
+      "content": "<h1>Audit</h1>\n"
+    }
+  ],
+  "history": [
+    {
+      "taskId": "T1",
+      "versions": [
+        {
+          "taskId": "T1",
+          "number": 1,
+          "createdAt": "2026-11-04T14:21:43.620Z",
+          "source": "baseline",
+          "changed": [],
+          "snapshot": {
+            "title": "Extract the git adapter",
+            "body": "## Context\n",
+            "labels": ["refactor"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "state": "working",
+          "begin": {
+            "taskId": "T1",
+            "number": 1,
+            "version": 1,
+            "createdAt": "2026-11-04T14:21:43.625Z",
+            "agent": "claude-code",
+            "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+            "repo": null
+          },
+          "decisions": []
+        }
+      ]
+    },
+    {
+      "taskId": "T2",
+      "versions": [],
+      "checks": []
+    }
+  ]
+}

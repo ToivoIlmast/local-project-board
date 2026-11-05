@@ -110,6 +110,12 @@ export interface NewBlock {
   title: string;
 }
 
+/** The counters of topics and blocks as `sequence.json` stores them (ADR-0032 §2). */
+export interface TopicSequence {
+  topicSequence: number;
+  blockSequence: number;
+}
+
 /** Only the given fields change; the id and the blocks are not a topic's to patch. */
 export interface TopicPatch {
   title?: string | undefined;
@@ -225,6 +231,13 @@ export interface Storage {
    * cannot be read is null, and a block for it is `TOPIC_NOT_FOUND`.
    */
   getTopic(id: string): Promise<Topic | null>;
+  /** Every topic that can be read, by number; one that cannot is left out, as a task is. */
+  listTopics(): Promise<Topic[]>;
+  /**
+   * The counters as stored, for the export (ADR-0032 §10): null when they are missing or invalid.
+   * Nothing is recovered from the ids that exist, and nothing is written.
+   */
+  readTopicSequence(): Promise<TopicSequence | null>;
   createTopic(input: NewTopic): Promise<Topic>;
   /** Appends the block to the end of its topic's blocks. */
   createBlock(topicId: string, input: NewBlock): Promise<Block>;

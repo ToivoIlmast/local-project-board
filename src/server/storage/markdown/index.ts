@@ -607,6 +607,17 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
 
     getTopic: topicById,
 
+    async listTopics() {
+      const { topics } = await scanTopics();
+      return [...topics.values()].sort((a, b) => byNumber(a.id, b.id));
+    },
+
+    async readTopicSequence() {
+      const stored = await readTopicSequence();
+      if (stored === null) return null;
+      return { topicSequence: stored.topicSequence, blockSequence: stored.blockSequence };
+    },
+
     createTopic(input) {
       return exclusive(async () => {
         const { id, next } = await allocateTopicOrBlockId(TOPIC_ID_PREFIX, await scanTopics());

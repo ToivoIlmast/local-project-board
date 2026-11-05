@@ -263,7 +263,7 @@ describe('boardSnapshotSchema', () => {
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 
-  it('accepts only format version 3: the history changed the shape of version 2', () => {
+  it('refuses format versions 1 and 2: the history changed the shape of version 2', () => {
     expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 1 }).success).toBe(false);
     expect(boardSnapshotSchema.safeParse({ ...snapshot, formatVersion: 2 }).success).toBe(false);
   });
