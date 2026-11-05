@@ -68,6 +68,7 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'reports.read': { path: '/reports/R1' },
   'reports.delete': { path: '/reports/R1' },
   // Topics and blocks (T84); beforeEach below makes P1 with K1 and K2, and an empty P2.
+  'topics.list': { path: '/topics' },
   'topics.create': { path: '/topics', body: { title: 'Created by the contract test' } },
   'topics.update': { path: '/topics/P1', body: { title: 'Renamed' } },
   'topics.delete': { path: '/topics/P2' },

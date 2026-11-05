@@ -1,17 +1,26 @@
 import { useState } from 'react';
 import { useBoard } from '../api/react';
-import { Board, BoardHeader, ReadIssues, type MoveIntent } from '../features/board/index';
+import {
+  Board,
+  BoardHeader,
+  NO_TOPIC,
+  ReadIssues,
+  TopicFilter,
+  filterByTopic,
+  type MoveIntent,
+} from '../features/board/index';
 import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
 import { ReportsPanel } from '../features/reports/index';
 import { SettingsPanel } from '../features/settings/index';
 import { TaskDetails, TaskDialog } from '../features/tasks/index';
+import { TopicsPanel } from '../features/topics/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
 import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedChanges';
 import { useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
-type Panel = 'reports' | 'git' | 'instructions' | 'settings';
+type Panel = 'reports' | 'topics' | 'git' | 'instructions' | 'settings';
 
 /**
  * The whole board in one screen: columns on the left, whatever is being looked at on the
@@ -31,6 +40,7 @@ function BoardScreen() {
   const leave = useLeaveGuard();
   const [openTaskId, setOpenTaskId] = useSearchParam('task');
   const [panel, setPanel] = useSearchParam('panel');
+  const [topicFilter, setTopicFilter] = useSearchParam('topic');
   const [creating, setCreating] = useState<{ status?: string | undefined } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -51,6 +61,11 @@ function BoardScreen() {
   }
 
   const task = state.tasks.find((candidate) => candidate.id === openTaskId);
+  // A topic in the address that the board does not have is said, not shown as an empty board.
+  const missingTopic =
+    topicFilter !== null &&
+    topicFilter !== NO_TOPIC &&
+    !state.topics.some((topic) => topic.id === topicFilter);
   const editing = state.tasks.find((candidate) => candidate.id === editingId);
   // Every way out of the panel goes through `leave`: it asks if a form in the panel holds
   // changes, and goes straight on if not. Looking at what is already open is not a way out.
@@ -96,6 +111,15 @@ function BoardScreen() {
         </p>
       )}
 
+      {missingTopic ? (
+        <p className="notice" role="alert">
+          {`Topic ${topicFilter} is not on the board. It may have been deleted, or it cannot be read.`}
+          <Button size="small" onClick={() => setTopicFilter(null)}>
+            Show all
+          </Button>
+        </p>
+      ) : null}
+
       {notice === undefined ? null : (
         <p className="notice" role="alert">
           {notice}
@@ -105,11 +129,14 @@ function BoardScreen() {
         </p>
       )}
 
+      <TopicFilter topics={state.topics} value={topicFilter} onChange={setTopicFilter} />
+
       <div className="page__body">
         <main className="page__board">
           <Board
             project={project}
-            tasks={state.tasks}
+            tasks={filterByTopic(state.tasks, topicFilter)}
+            filtered={topicFilter !== null}
             readiness={state.readiness}
             busy={state.busy}
             onOpen={open}
@@ -140,6 +167,13 @@ function BoardScreen() {
           </Panel>
         ) : panel === 'reports' ? (
           <ReportsPanel onClose={closePanel} />
+        ) : panel === 'topics' ? (
+          <TopicsPanel
+            onClose={closePanel}
+            onDeleted={(id) => {
+              if (topicFilter === id) setTopicFilter(null);
+            }}
+          />
         ) : panel === 'git' ? (
           <GitPanel onClose={closePanel} />
         ) : panel === 'instructions' ? (

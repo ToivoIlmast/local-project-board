@@ -1271,6 +1271,34 @@ there is no move of a block between topics, and no archiving of a topic.
   is a `topic.updated`), `topic.deleted` carries `topicId`.
 - Writes are last-write-wins (ADR-0018).
 
+### GET /api/v1/topics
+
+List the topics with their blocks, by number; one that cannot be read is left out
+
+Not given to AI agents in the generated instructions.
+
+Response — 200, application/json:
+
+```json
+[
+  {
+    "id": "P1",
+    "title": "M1 Core",
+    "body": "## Goal\n\nShip the core.\n",
+    "blocks": [
+      {
+        "id": "K1",
+        "title": "Foundations"
+      },
+      {
+        "id": "K2",
+        "title": "Rollout"
+      }
+    ]
+  }
+]
+```
+
 ### POST /api/v1/topics
 
 Create a topic; it has no blocks yet and the server assigns the id

@@ -15,11 +15,18 @@ for (const scheme of ['light', 'dark'] as const) {
     board,
   }) => {
     await page.emulateMedia({ colorScheme: scheme });
+    // A topic with a task in it, which cannot be deleted, and an empty one, which can.
+    await board.api('/api/v1/topics', {
+      method: 'POST',
+      body: { title: 'M1 Core', body: 'The first milestone.\n' },
+    });
+    await board.api('/api/v1/topics', { method: 'POST', body: { title: 'M2 Rollout' } });
     await board.api('/api/v1/tasks', {
       method: 'POST',
       body: {
         title: 'A task with a rather long title to see how wrapping behaves',
         status: 'todo',
+        topic: 'P1',
         labels: ['ui', 'a11y'],
         branch: 'task/T1-a11y',
         // A task with settings of its own, one of them muting the rest: the AI block opened, with
@@ -83,9 +90,43 @@ for (const scheme of ['light', 'dark'] as const) {
           await page.getByRole('button', { name: 'Dependency audit' }).click();
         },
       ],
+      [
+        'the topics',
+        async () => {
+          await page.getByRole('button', { name: 'Topics' }).click();
+          await expect(page.getByRole('complementary', { name: 'Topics' })).toBeVisible();
+        },
+      ],
+      ['the topic form', () => page.getByRole('button', { name: 'New topic' }).click()],
+      [
+        'a topic that cannot be deleted',
+        async () => {
+          const topics = page.getByRole('complementary', { name: 'Topics' });
+          await topics.getByRole('button', { name: 'Cancel' }).click();
+          await topics.getByRole('button', { name: 'Delete P1' }).click();
+          const question = page.getByRole('dialog');
+          await question.getByRole('button', { name: 'Delete', exact: true }).click();
+          await expect(question.getByRole('alert')).toContainText('not empty');
+        },
+      ],
+      [
+        'the board filtered by a topic',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByLabel('Topic', { exact: true }).selectOption('P1');
+          await expect(page.getByRole('region', { name: /^todo \(1\)/ })).toBeVisible();
+        },
+      ],
       ['the git panel', () => page.getByRole('button', { name: 'Git', exact: true }).click()],
       ['the AI instructions', () => page.getByRole('button', { name: 'AI instructions' }).click()],
       ['the settings', () => page.getByRole('button', { name: 'Settings' }).click()],
+      [
+        'a topic filter that finds no topic',
+        async () => {
+          await page.goto(`${board.url.replace(/\/$/, '')}/?topic=P9`);
+          await expect(page.getByRole('alert')).toContainText('Topic P9 is not on the board');
+        },
+      ],
       [
         'a task that is not there',
         async () => {

@@ -12,6 +12,7 @@ import type {
   Report,
   Task,
   TaskVersion,
+  Topic,
   VersionList,
   WorkflowState,
 } from '../../contract/v1/index';
@@ -44,6 +45,8 @@ export interface BoardState {
    */
   readiness: Record<string, BlockingReason[]>;
   reports: Report[];
+  /** Every topic the board could read, by number. */
+  topics: Topic[];
   /** Missing when git could not be read; the board itself keeps working (§17). */
   git?: GitStatus | undefined;
   /** By task id, for the tasks whose documents have been opened. */
@@ -70,6 +73,7 @@ export function emptyState(): BoardState {
     tasks: [],
     readiness: {},
     reports: [],
+    topics: [],
     documents: {},
     history: {},
     snapshots: {},
@@ -136,9 +140,9 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       return { ...state, reports: state.reports.filter((report) => report.id !== event.reportId) };
     case 'topic.created':
     case 'topic.updated':
+      return { ...state, topics: upsertTopic(state.topics, event.topic) };
     case 'topic.deleted':
-      // The page does not show topics yet.
-      return state;
+      return { ...state, topics: state.topics.filter((topic) => topic.id !== event.topicId) };
     case 'workflow.updated':
       return { ...state, workflow: event.workflow };
     case 'version.created':
@@ -200,6 +204,19 @@ function splitReadiness(
   return { tasks, readiness };
 }
 
+/** The number in a topic id: `P12` is 12. Ids that are not one sort last, by their text. */
+function topicNumber(id: string): number {
+  const number = Number(id.slice(1));
+  return Number.isInteger(number) ? number : Number.POSITIVE_INFINITY;
+}
+
+/** The topics by number, as the server lists them, with this one added or replaced. */
+function upsertTopic(topics: Topic[], topic: Topic): Topic[] {
+  return [...topics.filter((candidate) => candidate.id !== topic.id), topic].sort(
+    (a, b) => topicNumber(a.id) - topicNumber(b.id) || compare(a.id, b.id),
+  );
+}
+
 function replaceById(tasks: Task[], task: Task): Task[] {
   const index = tasks.findIndex((candidate) => candidate.id === task.id);
   if (index === -1) return [...tasks, task];
@@ -222,6 +239,10 @@ export interface BoardStore {
   writeDocument(taskId: string, name: string, content: string): Promise<void>;
   deleteDocument(taskId: string, name: string): Promise<void>;
   deleteReport(id: string): Promise<void>;
+  createTopic(input: Parameters<BoardClient['createTopic']>[0]): Promise<Topic>;
+  updateTopic(id: string, patch: Parameters<BoardClient['updateTopic']>[1]): Promise<Topic>;
+  /** Rejects with the board's own refusal (`TOPIC_NOT_EMPTY`) and leaves the topic on the page. */
+  deleteTopic(id: string): Promise<void>;
   /** Reads the versions and the checks of a task, and keeps them current from then on. */
   loadHistory(taskId: string): Promise<void>;
   /** One version with its snapshot; resolves from what was read before when it can. */
@@ -290,20 +311,21 @@ export function createBoardStore(client: BoardClient): BoardStore {
    * that could not catch up here is read again anyway.
    */
   async function readBoard(): Promise<
-    Pick<BoardState, 'project' | 'workflow' | 'tasks' | 'readiness' | 'reports' | 'git'>
+    Pick<BoardState, 'project' | 'workflow' | 'tasks' | 'readiness' | 'reports' | 'topics' | 'git'>
   > {
     for (let attempt = 1; ; attempt += 1) {
       const before = told;
-      const [project, workflow, listed, reports] = await Promise.all([
+      const [project, workflow, listed, reports, topics] = await Promise.all([
         client.project(),
         client.workflow(),
         client.listTasks(),
         client.listReports(),
+        client.listTopics(),
       ]);
       // Git is context, not the board: a repository that cannot be read hides nothing else.
       const git = await client.gitStatus().catch(() => undefined);
       if (told === before || attempt === READ_ATTEMPTS) {
-        return { project, workflow, ...splitReadiness(listed), reports, git };
+        return { project, workflow, ...splitReadiness(listed), reports, topics, git };
       }
     }
   }
@@ -346,7 +368,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
         error: undefined,
       }));
       try {
-        const { project, workflow, tasks, readiness, reports, git } = await readBoard();
+        const { project, workflow, tasks, readiness, reports, topics, git } = await readBoard();
         set((current) => ({
           ...current,
           phase: 'ready',
@@ -356,6 +378,7 @@ export function createBoardStore(client: BoardClient): BoardStore {
           tasks,
           readiness,
           reports,
+          topics,
           git,
         }));
       } catch (error) {
@@ -469,6 +492,23 @@ export function createBoardStore(client: BoardClient): BoardStore {
     async deleteReport(id) {
       await client.deleteReport(id);
       apply({ type: 'report.deleted', reportId: id });
+    },
+
+    async createTopic(input) {
+      const topic = await client.createTopic(input);
+      apply({ type: 'topic.created', topic });
+      return topic;
+    },
+
+    async updateTopic(id, patch) {
+      const topic = await client.updateTopic(id, patch);
+      apply({ type: 'topic.updated', topic });
+      return topic;
+    },
+
+    async deleteTopic(id) {
+      await client.deleteTopic(id);
+      apply({ type: 'topic.deleted', topicId: id });
     },
 
     async updateWorkflow(overrides) {

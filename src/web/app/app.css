@@ -74,6 +74,27 @@
   flex-basis: 100%;
 }
 
+.board-filter {
+  padding: 8px 16px 0;
+}
+
+.board-filter .field {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 0;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.board-filter .field__label {
+  margin-bottom: 0;
+}
+
+.board-filter .select {
+  flex: 1;
+}
+
 .page__body {
   display: flex;
   flex: 1;
@@ -278,6 +299,7 @@
 
 .documents__list,
 .reports__list,
+.topics__list,
 .git__files,
 .git__commits {
   list-style: none;
@@ -286,7 +308,8 @@
 }
 
 .documents__item,
-.reports__item {
+.reports__item,
+.topics__item {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -321,6 +344,16 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #fff;
+}
+
+.topics__title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.topics__form {
+  margin: 8px 0 16px;
 }
 
 .git__section {

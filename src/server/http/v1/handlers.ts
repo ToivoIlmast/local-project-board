@@ -208,6 +208,7 @@ export const handlers: Handlers = {
     return deleted;
   },
 
+  'topics.list': (context) => context.topics.list(),
   'topics.create': (context, { body }) => context.topics.create(body),
   'topics.update': (context, { params, body }) => context.topics.update(params.id, body),
   'topics.delete': async (context, { params }) => {

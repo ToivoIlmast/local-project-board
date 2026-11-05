@@ -19,6 +19,8 @@ export interface CreateTopicInput {
  * announced as `topic.updated` with the topic as it is then.
  */
 export interface TopicService {
+  /** Every topic that can be read, by number. */
+  list(): Promise<Topic[]>;
   create(input: CreateTopicInput): Promise<Topic>;
   update(id: string, patch: TopicPatch): Promise<Topic>;
   remove(id: string): Promise<void>;
@@ -36,6 +38,8 @@ export function createTopicService({ storage, events }: TopicServiceOptions): To
   }
 
   return {
+    list: () => storage.listTopics(),
+
     async create(input) {
       const topic = await storage.createTopic({
         title: input.title,

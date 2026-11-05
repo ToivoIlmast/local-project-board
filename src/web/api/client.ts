@@ -11,6 +11,7 @@ import {
   type GitStatus,
   type Project,
   type Report,
+  type Topic,
   type Route,
   type RouteId,
   type Task,
@@ -134,6 +135,13 @@ export interface BoardClient {
   listReports(options?: RequestOptions): Promise<Report[]>;
   readReport(id: string, options?: RequestOptions): Promise<string>;
   deleteReport(id: string, options?: RequestOptions): Promise<void>;
+
+  /** Every topic that can be read, by number. */
+  listTopics(options?: RequestOptions): Promise<Topic[]>;
+  createTopic(input: BodyOf<'topics.create'>, options?: RequestOptions): Promise<Topic>;
+  updateTopic(id: string, patch: BodyOf<'topics.update'>, options?: RequestOptions): Promise<Topic>;
+  /** Refused with `TOPIC_NOT_EMPTY` while the topic holds a task or a block. */
+  deleteTopic(id: string, options?: RequestOptions): Promise<void>;
 
   gitStatus(options?: RequestOptions): Promise<GitStatus>;
   gitCommits(limit: number, ref?: string, options?: RequestOptions): Promise<GitCommit[]>;
@@ -265,6 +273,13 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     readReport: (id, o) => call('reports.read', { params: { id } }, o),
     deleteReport: async (id, o) => {
       await call('reports.delete', { params: { id } }, o);
+    },
+
+    listTopics: (o) => call('topics.list', {}, o),
+    createTopic: (body, o) => call('topics.create', { body }, o),
+    updateTopic: (id, body, o) => call('topics.update', { params: { id }, body }, o),
+    deleteTopic: async (id, o) => {
+      await call('topics.delete', { params: { id } }, o);
     },
 
     gitStatus: (o) => call('git.status', {}, o),

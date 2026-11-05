@@ -12,6 +12,7 @@ import type {
   RunTaskRequest,
   Task,
   TaskVersion,
+  Topic,
   VersionList,
   WorkflowOverrides,
   WorkflowState,
@@ -35,6 +36,7 @@ export interface FakeBoardOptions {
   project?: Project;
   tasks?: Task[];
   reports?: Report[];
+  topics?: Topic[];
   git?: GitStatus;
   /** The overrides the board already has; none by default. */
   workflow?: WorkflowOverrides;
@@ -58,6 +60,7 @@ export interface FakeBoard {
   calls: string[];
   tasks: Task[];
   reports: Report[];
+  topics: Topic[];
   documents: Map<string, { meta: DocumentMeta; content: string }>;
   project: Project;
   git: GitStatus;
@@ -86,6 +89,8 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   const project = options.project ?? aProject();
   const tasks: Task[] = [...(options.tasks ?? [])];
   const reports: Report[] = [...(options.reports ?? [])];
+  const topics: Topic[] = structuredClone(options.topics ?? []);
+  let topicSequence = topics.length;
   const documents = new Map<string, { meta: DocumentMeta; content: string }>();
   const overrides: WorkflowOverrides = structuredClone(
     options.workflow ?? { board: {}, statuses: {} },
@@ -225,9 +230,15 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       task.workflow,
     );
 
-  // Computed by the very function the server uses; this board has no topics.
+  // Computed by the very function the server uses.
   const reasonsOfTasks = () =>
-    readiness({ tasks, topics: [], readIssues: [], statuses: project.statuses });
+    readiness({ tasks, topics, readIssues: [], statuses: project.statuses });
+
+  const requireTopic = (id: string): Topic => {
+    const topic = topics.find((candidate) => candidate.id === id);
+    if (!topic) throw new ApiError(404, 'TOPIC_NOT_FOUND', `Topic "${id}" does not exist.`, { id });
+    return topic;
+  };
 
   const client: BoardClient = {
     project: () => record('project', () => ({ ...project })),
@@ -493,6 +504,44 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         emit({ type: 'report.deleted', reportId: id });
       }),
 
+    listTopics: () => record('listTopics', () => structuredClone(topics)),
+    createTopic: (input) =>
+      record('createTopic', () => {
+        topicSequence += 1;
+        const topic: Topic = {
+          id: `P${topicSequence}`,
+          title: input.title,
+          body: input.body ?? '',
+          blocks: [],
+        };
+        topics.push(topic);
+        emit({ type: 'topic.created', topic: structuredClone(topic) });
+        return structuredClone(topic);
+      }),
+    updateTopic: (id, patch) =>
+      record('updateTopic', () => {
+        const topic = requireTopic(id);
+        Object.assign(topic, patch);
+        emit({ type: 'topic.updated', topic: structuredClone(topic) });
+        return structuredClone(topic);
+      }),
+    // As the server refuses: a task in the topic, or a block of it, keeps it.
+    deleteTopic: (id) =>
+      record('deleteTopic', () => {
+        const topic = requireTopic(id);
+        const held = tasks.filter((task) => task.topic === id).map((task) => task.id);
+        if (held.length > 0 || topic.blocks.length > 0) {
+          throw new ApiError(
+            409,
+            'TOPIC_NOT_EMPTY',
+            `Topic "${id}" is not empty and cannot be deleted. Delete its empty blocks and move or delete its tasks first.`,
+            { id, tasks: held, blocks: topic.blocks.map((block) => block.id) },
+          );
+        }
+        topics.splice(topics.indexOf(topic), 1);
+        emit({ type: 'topic.deleted', topicId: id });
+      }),
+
     gitStatus: () => record('gitStatus', () => ({ ...(options.git ?? aGitStatus()) })),
     gitCommits: (_limit, _ref) =>
       record('gitCommits', () => options.commits ?? ([] as GitCommit[])),
@@ -514,6 +563,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     calls,
     tasks,
     reports,
+    topics,
     documents,
     project,
     git: options.git ?? aGitStatus(),

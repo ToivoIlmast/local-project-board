@@ -523,6 +523,7 @@ export type MoveTaskRequest = z.infer<typeof moveTaskRequestSchema>;
 export type ReplaceWorkflowRequest = z.infer<typeof replaceWorkflowRequestSchema>;
 export type WriteDocumentRequest = z.infer<typeof writeDocumentRequestSchema>;
 export type CreateReportRequest = z.infer<typeof createReportRequestSchema>;
+export type { Topic } from '../../core/model/topic.js';
 export type CreateTopicRequest = z.infer<typeof createTopicRequestSchema>;
 export type UpdateTopicRequest = z.infer<typeof updateTopicRequestSchema>;
 export type BlockRequest = z.infer<typeof blockRequestSchema>;
