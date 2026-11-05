@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useBoard } from '../api/react';
 import {
   Board,
@@ -6,10 +6,12 @@ import {
   NO_TOPIC,
   ReadIssues,
   TopicFilter,
+  ViewSwitch,
   filterByTopic,
   type MoveIntent,
+  type View,
 } from '../features/board/index';
-import { BlocksPanel } from '../features/blocks/index';
+import { BlocksView } from '../features/blocks/index';
 import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
 import { ReportsPanel } from '../features/reports/index';
@@ -18,10 +20,10 @@ import { TaskDetails, TaskDialog } from '../features/tasks/index';
 import { TopicsPanel } from '../features/topics/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
 import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedChanges';
-import { useSearchParam } from '../shared/hooks/useSearchParam';
+import { replaceSearchParams, useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
-type Panel = 'reports' | 'topics' | 'blocks' | 'git' | 'instructions' | 'settings';
+type Panel = 'reports' | 'topics' | 'git' | 'instructions' | 'settings';
 
 /**
  * The whole board in one screen: columns on the left, whatever is being looked at on the
@@ -42,11 +44,19 @@ function BoardScreen() {
   const [openTaskId, setOpenTaskId] = useSearchParam('task');
   const [panel, setPanel] = useSearchParam('panel');
   const [topicFilter, setTopicFilter] = useSearchParam('topic');
+  const [viewParam, setViewParam] = useSearchParam('view');
+  // `?panel=blocks` was the Blocks of T91, before they had the main area: it is the view now.
+  const legacyBlocks = panel === 'blocks';
+  const view: View = viewParam === 'blocks' || legacyBlocks ? 'blocks' : 'board';
   const [creating, setCreating] = useState<{ status?: string | undefined } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const remove = useAsyncAction((id: string) => store.deleteTask(id));
+
+  useEffect(() => {
+    if (legacyBlocks) replaceSearchParams({ panel: null, view: 'blocks' });
+  }, [legacyBlocks]);
 
   if (state.phase === 'loading') return <Spinner label="Loading the board…" />;
 
@@ -130,22 +140,32 @@ function BoardScreen() {
         </p>
       )}
 
-      <TopicFilter topics={state.topics} value={topicFilter} onChange={setTopicFilter} />
+      <div className="page__controls">
+        <ViewSwitch
+          value={view}
+          onChange={(next) => setViewParam(next === 'blocks' ? 'blocks' : null)}
+        />
+        <TopicFilter topics={state.topics} value={topicFilter} onChange={setTopicFilter} />
+      </div>
 
       <div className="page__body">
         <main className="page__board">
-          <Board
-            project={project}
-            tasks={filterByTopic(state.tasks, topicFilter)}
-            filtered={topicFilter !== null}
-            readiness={state.readiness}
-            busy={state.busy}
-            onOpen={open}
-            onEdit={setEditingId}
-            onDelete={setDeletingId}
-            onCreate={(status) => setCreating({ status })}
-            onMove={move}
-          />
+          {view === 'blocks' ? (
+            <BlocksView topicFilter={topicFilter} onOpen={open} />
+          ) : (
+            <Board
+              project={project}
+              tasks={filterByTopic(state.tasks, topicFilter)}
+              filtered={topicFilter !== null}
+              readiness={state.readiness}
+              busy={state.busy}
+              onOpen={open}
+              onEdit={setEditingId}
+              onDelete={setDeletingId}
+              onCreate={(status) => setCreating({ status })}
+              onMove={move}
+            />
+          )}
         </main>
 
         {task !== undefined ? (
@@ -175,8 +195,6 @@ function BoardScreen() {
               if (topicFilter === id) setTopicFilter(null);
             }}
           />
-        ) : panel === 'blocks' ? (
-          <BlocksPanel onClose={closePanel} onOpen={open} />
         ) : panel === 'git' ? (
           <GitPanel onClose={closePanel} />
         ) : panel === 'instructions' ? (

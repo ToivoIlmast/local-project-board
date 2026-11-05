@@ -74,8 +74,28 @@
   flex-basis: 100%;
 }
 
-.board-filter {
+.page__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
   padding: 8px 16px 0;
+}
+
+.view-switch {
+  display: flex;
+  gap: 4px;
+}
+
+.view-switch [aria-current='page'] {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.board-filter {
+  flex: 1;
+  min-width: 220px;
 }
 
 .board-filter .field {
@@ -756,6 +776,17 @@
 }
 
 /* The Blocks View: a topic, its blocks in their order, and the tasks in them. */
+.blocks__title-main {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.blocks__none {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
 .blocks__topic {
   margin-bottom: 20px;
 }

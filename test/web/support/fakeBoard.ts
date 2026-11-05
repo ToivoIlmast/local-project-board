@@ -91,6 +91,10 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   const reports: Report[] = [...(options.reports ?? [])];
   const topics: Topic[] = structuredClone(options.topics ?? []);
   let topicSequence = topics.length;
+  let blockSequence = Math.max(
+    0,
+    ...topics.flatMap((t) => t.blocks.map((b) => Number(b.id.slice(1)))),
+  );
   const documents = new Map<string, { meta: DocumentMeta; content: string }>();
   const overrides: WorkflowOverrides = structuredClone(
     options.workflow ?? { board: {}, statuses: {} },
@@ -238,6 +242,12 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     const topic = topics.find((candidate) => candidate.id === id);
     if (!topic) throw new ApiError(404, 'TOPIC_NOT_FOUND', `Topic "${id}" does not exist.`, { id });
     return topic;
+  };
+
+  const requireBlock = (topic: Topic, id: string): Topic['blocks'][number] => {
+    const block = topic.blocks.find((candidate) => candidate.id === id);
+    if (!block) throw new ApiError(404, 'BLOCK_NOT_FOUND', `Block "${id}" does not exist.`, { id });
+    return block;
   };
 
   const client: BoardClient = {
@@ -560,6 +570,53 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         }
         topics.splice(topics.indexOf(topic), 1);
         emit({ type: 'topic.deleted', topicId: id });
+      }),
+
+    // As the server answers (ADR-0032 §4): a block id is global, a new block is last, and a block
+    // that holds a task is not deleted. Each change is announced as `topic.updated`.
+    createBlock: (topicId, input) =>
+      record('createBlock', () => {
+        const topic = requireTopic(topicId);
+        blockSequence += 1;
+        const block = { id: `K${blockSequence}`, title: input.title };
+        topic.blocks.push(block);
+        emit({ type: 'topic.updated', topic: structuredClone(topic) });
+        return { ...block };
+      }),
+    updateBlock: (topicId, blockId, input) =>
+      record('updateBlock', () => {
+        const topic = requireTopic(topicId);
+        const block = requireBlock(topic, blockId);
+        block.title = input.title;
+        emit({ type: 'topic.updated', topic: structuredClone(topic) });
+        return { ...block };
+      }),
+    reorderBlocks: (topicId, order) =>
+      record('reorderBlocks', () => {
+        const topic = requireTopic(topicId);
+        const ids = topic.blocks.map((block) => block.id);
+        if (order.length !== ids.length || !ids.every((id) => order.includes(id))) {
+          throw new ApiError(400, 'INVALID_REQUEST', 'Give each block of the topic once.');
+        }
+        topic.blocks = order.map((id) => requireBlock(topic, id));
+        emit({ type: 'topic.updated', topic: structuredClone(topic) });
+        return structuredClone(topic);
+      }),
+    deleteBlock: (topicId, blockId) =>
+      record('deleteBlock', () => {
+        const topic = requireTopic(topicId);
+        requireBlock(topic, blockId);
+        const held = tasks.filter((task) => task.block === blockId).map((task) => task.id);
+        if (held.length > 0) {
+          throw new ApiError(
+            409,
+            'BLOCK_NOT_EMPTY',
+            `Block "${blockId}" is not empty and cannot be deleted. Move or delete its tasks first.`,
+            { id: blockId, tasks: held },
+          );
+        }
+        topic.blocks = topic.blocks.filter((block) => block.id !== blockId);
+        emit({ type: 'topic.updated', topic: structuredClone(topic) });
       }),
 
     gitStatus: () => record('gitStatus', () => ({ ...(options.git ?? aGitStatus()) })),

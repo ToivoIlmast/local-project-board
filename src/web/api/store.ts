@@ -243,6 +243,16 @@ export interface BoardStore {
   updateTopic(id: string, patch: Parameters<BoardClient['updateTopic']>[1]): Promise<Topic>;
   /** Rejects with the board's own refusal (`TOPIC_NOT_EMPTY`) and leaves the topic on the page. */
   deleteTopic(id: string): Promise<void>;
+  /**
+   * The four writes of the blocks of a topic. The board answers `reorderBlocks` with the topic;
+   * for the others it answers with the block (or nothing) and announces the topic, so the store
+   * puts what the board said into the topic it has — after the answer, never before it.
+   */
+  createBlock(topicId: string, title: string): Promise<Topic['blocks'][number]>;
+  updateBlock(topicId: string, blockId: string, title: string): Promise<Topic['blocks'][number]>;
+  reorderBlocks(topicId: string, order: string[]): Promise<Topic>;
+  /** Rejects with the board's own refusal (`BLOCK_NOT_EMPTY`) and leaves the block on the page. */
+  deleteBlock(topicId: string, blockId: string): Promise<void>;
   /** Reads the versions and the checks of a task, and keeps them current from then on. */
   loadHistory(taskId: string): Promise<void>;
   /** One version with its snapshot; resolves from what was read before when it can. */
@@ -300,6 +310,17 @@ export function createBoardStore(client: BoardClient): BoardStore {
         if (key.startsWith(`${event.taskId}/`)) wantedChecks.delete(key);
     }
     set((current) => applyEvent(current, event));
+  };
+
+  /** The topic the board answered about, with its blocks changed as the answer says. */
+  const changeBlocks = (
+    topicId: string,
+    change: (blocks: Topic['blocks']) => Topic['blocks'],
+  ): void => {
+    const topic = store.getState().topics.find((candidate) => candidate.id === topicId);
+    // A topic the page does not have is the stream's to bring, with its blocks.
+    if (topic !== undefined)
+      apply({ type: 'topic.updated', topic: { ...topic, blocks: change(topic.blocks) } });
   };
 
   /**
@@ -509,6 +530,34 @@ export function createBoardStore(client: BoardClient): BoardStore {
     async deleteTopic(id) {
       await client.deleteTopic(id);
       apply({ type: 'topic.deleted', topicId: id });
+    },
+
+    async createBlock(topicId, title) {
+      const block = await client.createBlock(topicId, { title });
+      changeBlocks(topicId, (blocks) => [
+        ...blocks.filter((other) => other.id !== block.id),
+        block,
+      ]);
+      return block;
+    },
+
+    async updateBlock(topicId, blockId, title) {
+      const block = await client.updateBlock(topicId, blockId, { title });
+      changeBlocks(topicId, (blocks) =>
+        blocks.map((other) => (other.id === blockId ? block : other)),
+      );
+      return block;
+    },
+
+    async reorderBlocks(topicId, order) {
+      const topic = await client.reorderBlocks(topicId, order);
+      apply({ type: 'topic.updated', topic });
+      return topic;
+    },
+
+    async deleteBlock(topicId, blockId) {
+      await client.deleteBlock(topicId, blockId);
+      changeBlocks(topicId, (blocks) => blocks.filter((other) => other.id !== blockId));
     },
 
     async updateWorkflow(overrides) {

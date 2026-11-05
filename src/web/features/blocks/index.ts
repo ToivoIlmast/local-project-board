@@ -1,1 +1,1 @@
-export { BlocksPanel, type BlocksPanelProps } from './ui/BlocksPanel';
+export { BlocksView, type BlocksViewProps } from './ui/BlocksView';
