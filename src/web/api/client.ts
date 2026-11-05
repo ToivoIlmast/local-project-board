@@ -142,6 +142,26 @@ export interface BoardClient {
   updateTopic(id: string, patch: BodyOf<'topics.update'>, options?: RequestOptions): Promise<Topic>;
   /** Refused with `TOPIC_NOT_EMPTY` while the topic holds a task or a block. */
   deleteTopic(id: string, options?: RequestOptions): Promise<void>;
+  /** Created last in its topic. */
+  createBlock(
+    topicId: string,
+    input: BodyOf<'topics.createBlock'>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<'topics.createBlock'>>;
+  updateBlock(
+    topicId: string,
+    blockId: string,
+    patch: BodyOf<'topics.updateBlock'>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<'topics.updateBlock'>>;
+  /** Each block id of the topic once; answers with the topic in its new order. */
+  reorderBlocks(
+    topicId: string,
+    order: BodyOf<'topics.reorderBlocks'>['blocks'],
+    options?: RequestOptions,
+  ): Promise<Topic>;
+  /** Refused with `BLOCK_NOT_EMPTY` while a task is in the block. */
+  deleteBlock(topicId: string, blockId: string, options?: RequestOptions): Promise<void>;
 
   gitStatus(options?: RequestOptions): Promise<GitStatus>;
   gitCommits(limit: number, ref?: string, options?: RequestOptions): Promise<GitCommit[]>;
@@ -280,6 +300,14 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     updateTopic: (id, body, o) => call('topics.update', { params: { id }, body }, o),
     deleteTopic: async (id, o) => {
       await call('topics.delete', { params: { id } }, o);
+    },
+    createBlock: (id, body, o) => call('topics.createBlock', { params: { id }, body }, o),
+    updateBlock: (id, blockId, body, o) =>
+      call('topics.updateBlock', { params: { id, blockId }, body }, o),
+    reorderBlocks: (id, blocks, o) =>
+      call('topics.reorderBlocks', { params: { id }, body: { blocks } }, o),
+    deleteBlock: async (id, blockId, o) => {
+      await call('topics.deleteBlock', { params: { id, blockId } }, o);
     },
 
     gitStatus: (o) => call('git.status', {}, o),

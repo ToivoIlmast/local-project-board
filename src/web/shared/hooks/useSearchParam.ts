@@ -12,6 +12,21 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
+ * Rewrites the address in place — no new entry for the back button — for an address that
+ * only spells something in an older way. `null` removes a value.
+ */
+export function replaceSearchParams(changes: Record<string, string | null>): void {
+  const params = new URLSearchParams(window.location.search);
+  for (const [name, value] of Object.entries(changes)) {
+    if (value === null) params.delete(name);
+    else params.set(name, value);
+  }
+  const search = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}${search ? `?${search}` : ''}`);
+  for (const listener of [...listeners]) listener();
+}
+
+/**
  * One value in the address bar. What the page is looking at — a task, a panel — belongs in
  * the URL: reloading keeps it, and the back button does what it looks like it does.
  */

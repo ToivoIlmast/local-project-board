@@ -196,14 +196,60 @@ for (const scheme of ['light', 'dark'] as const) {
         },
       ],
       [
-        'the blocks with a completed, a waiting and an empty block',
+        'the Blocks View with a completed, a waiting and an empty block',
         async () => {
           await page.keyboard.press('Escape');
-          await page.getByRole('button', { name: 'Blocks', exact: true }).click();
-          const blocks = page.getByRole('complementary', { name: 'Blocks' });
+          await page
+            .getByRole('navigation', { name: 'View' })
+            .getByRole('button', { name: 'Blocks', exact: true })
+            .click();
+          const blocks = page.getByRole('region', { name: 'Blocks', exact: true });
           await expect(blocks.getByText('completed')).toBeVisible();
           await expect(blocks.getByText('waiting for previous Block')).toBeVisible();
           await expect(blocks.getByText('empty', { exact: true })).toBeVisible();
+        },
+      ],
+      ['the menu of a block', () => page.getByRole('button', { name: 'Block K2 actions' }).click()],
+      [
+        'the form that renames a block',
+        () => page.getByRole('button', { name: 'Rename', exact: true }).click(),
+      ],
+      [
+        'the form that adds a block',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Block K2 actions' }).click();
+          await page.getByRole('button', { name: 'Add block', exact: true }).click();
+        },
+      ],
+      [
+        'the position of a block',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Block K2 actions' }).click();
+          await page.getByRole('button', { name: 'Move to position', exact: true }).click();
+        },
+      ],
+      [
+        'the question before a block is deleted',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Block K4 actions' }).click();
+          await page.getByRole('button', { name: 'Delete', exact: true }).click();
+          await expect(page.getByRole('dialog', { name: 'Delete K4?' })).toBeVisible();
+        },
+      ],
+      [
+        'the refusal to delete a block that has a task',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Block K1 actions' }).click();
+          await page.getByRole('button', { name: 'Delete', exact: true }).click();
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Delete', exact: true })
+            .click();
+          await expect(page.getByRole('dialog').getByRole('alert')).toContainText('not empty');
         },
       ],
     ];
