@@ -443,6 +443,14 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
 
     getTopic: async (id) => structuredClone(store.topics.get(id) ?? null),
 
+    listTopics: async () =>
+      [...store.topics.values()]
+        .filter((topic): topic is Topic => topic !== null)
+        .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)))
+        .map((topic) => structuredClone(topic)),
+
+    readTopicSequence: async () => structuredClone(store.topicSequence),
+
     createTopic: async (input) => {
       const id = allocateTopicOrBlockId(TOPIC_ID_PREFIX);
       const topic: Topic = { id, title: input.title, body: input.body, blocks: [] };

@@ -1,4 +1,5 @@
-import type { BoardSnapshot } from '../model/snapshot.js';
+import { BoardError } from '../errors.js';
+import { danglingReferences, type BoardSnapshot } from '../model/snapshot.js';
 import type { Storage } from '../ports.js';
 
 export interface SnapshotProject {
@@ -10,12 +11,27 @@ export interface SnapshotProject {
 /**
  * A portable copy of the board for backup or transfer (ADR-0009). It is read-only and it is
  * not a persistence model: no provider stores a snapshot, and nothing reads one back yet.
+ * A task in a topic or a block the export cannot hold (its topic.md cannot be read, or a hand
+ * edit removed it) refuses the export: a backup never refers to one it does not hold
+ * (ADR-0032 §10).
  */
 export async function createSnapshot(
   storage: Storage,
   project: SnapshotProject,
 ): Promise<BoardSnapshot> {
-  const tasks = await storage.listTasks();
+  const [tasks, topics, sequence] = await Promise.all([
+    storage.listTasks(),
+    storage.listTopics(),
+    storage.readTopicSequence(),
+  ]);
+  const dangling = danglingReferences(tasks, topics);
+  if (dangling.length > 0) {
+    throw new BoardError(
+      'INVALID_PLACEMENT',
+      `The board cannot be exported: ${dangling.join(' ')} Repair or move the task first.`,
+      { references: dangling },
+    );
+  }
 
   const documents: BoardSnapshot['documents'] = [];
   for (const task of tasks) {
@@ -52,11 +68,13 @@ export async function createSnapshot(
   }
 
   return {
-    formatVersion: 3,
+    formatVersion: 4,
     exportedAt: new Date().toISOString(),
     project: { name: project.name, statuses: [...project.statuses], idPrefix: project.idPrefix },
     workflow: await storage.readWorkflow(),
     tasks,
+    topics,
+    sequence,
     documents,
     reports,
     history,

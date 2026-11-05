@@ -40,7 +40,7 @@ describe('createSnapshot', () => {
     const snapshot = await createSnapshot(storage, project);
 
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(snapshot.formatVersion).toBe(3);
+    expect(snapshot.formatVersion).toBe(4);
     expect(snapshot.project).toEqual(project);
     expect(snapshot.tasks).toEqual(await storage.listTasks());
     expect(snapshot.documents).toEqual([
@@ -127,7 +127,7 @@ describe('createSnapshot', () => {
     const snapshot = await createSnapshot(storage, project);
 
     expect(boardSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(snapshot.formatVersion).toBe(3);
+    expect(snapshot.formatVersion).toBe(4);
     const entry = snapshot.history[0];
     expect(entry?.checks[0]).toMatchObject({
       state: 'reported',

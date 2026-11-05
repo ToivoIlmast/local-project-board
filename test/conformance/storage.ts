@@ -747,6 +747,68 @@ export function runStorageConformance(harness: StorageHarness): void {
         });
       });
 
+      describe('listing the topics and reading the counters (export v4, T87)', () => {
+        it('lists every topic it can read, by number, with its blocks in order', async () => {
+          await twoTopics();
+          await harness.addTopicField(storage, 'P2', 'owner', { team: ['a'] });
+          await storage.reorderBlocks('P1', ['K2', 'K1']);
+          expect(await storage.listTopics()).toEqual([
+            {
+              id: 'P1',
+              title: 'first',
+              body: '',
+              blocks: [
+                { id: 'K2', title: 'two' },
+                { id: 'K1', title: 'one' },
+              ],
+            },
+            {
+              id: 'P2',
+              title: 'second',
+              body: '',
+              blocks: [{ id: 'K3', title: 'three' }],
+              extra: { owner: { team: ['a'] } },
+            },
+          ]);
+        });
+
+        it('lists no topics on a board without them', async () => {
+          expect(await storage.listTopics()).toEqual([]);
+        });
+
+        it('leaves out a topic it cannot read; readIssues reports it', async () => {
+          await twoTopics();
+          await harness.breakTopic(storage, 'P1');
+          expect((await storage.listTopics()).map((t) => t.id)).toEqual(['P2']);
+        });
+
+        it('reads the stored counters, not the highest ids that exist (INVARIANT)', async () => {
+          await twoTopics();
+          await storage.deleteBlock('P2', 'K3');
+          await storage.deleteTopic('P2');
+          expect(await storage.readTopicSequence()).toEqual({ topicSequence: 2, blockSequence: 3 });
+          await harness.setSequence(storage, { topicSequence: 7, blockSequence: 9 });
+          expect(await storage.readTopicSequence()).toEqual({ topicSequence: 7, blockSequence: 9 });
+        });
+
+        it.each(['missing', 'invalid'] as const)(
+          'reads %s counters as null and recovers nothing (INVARIANT)',
+          async (state) => {
+            await twoTopics();
+            await harness.setSequence(storage, state);
+            expect(await storage.readTopicSequence()).toBeNull();
+          },
+        );
+
+        it('lists and reads without writing a counter', async () => {
+          await twoTopics();
+          await harness.setSequence(storage, 'missing');
+          await storage.listTopics();
+          await storage.readTopicSequence();
+          expect(await storage.readTopicSequence()).toBeNull();
+        });
+      });
+
       describe('fail-closed when the counters are lost (O-1, INVARIANT)', () => {
         beforeEach(async () => {
           await twoTopics();
