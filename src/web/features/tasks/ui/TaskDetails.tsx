@@ -15,6 +15,8 @@ import {
   versionOptions,
   type Selected,
 } from '../model/history';
+import { needsStatusConfirmation } from '../model/placement';
+import { reasonText } from '../model/readinessText';
 import { useTaskHistory, useVersion } from '../model/useTaskHistory';
 import { CheckReportDialog, type ApplyRequest } from './CheckReportDialog';
 import { NewResearchDialog } from './NewResearchDialog';
@@ -34,7 +36,10 @@ export interface TaskDetailsProps {
 
 /** One task, everything about it, its history, and the documents that belong to it. */
 export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskDetailsProps) {
-  const { store, client } = useBoard();
+  const { store, client, state } = useBoard();
+  const reasons = state.readiness[task.id] ?? [];
+  // A status chosen for a blocked task waits for the answer; until then nothing is sent.
+  const [asking, setAsking] = useState<string | undefined>(undefined);
   const setStatus = useAsyncAction((status: string) => store.updateTask(task.id, { status }));
   const { history, error: historyError, retry } = useTaskHistory(task.id);
 
@@ -133,7 +138,11 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
             options={statuses}
             value={task.status}
             disabled={setStatus.pending}
-            onChange={(event) => void setStatus.run(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (needsStatusConfirmation(task, reasons, next)) setAsking(next);
+              else void setStatus.run(next);
+            }}
           />
         )}
       </Field>
@@ -212,6 +221,26 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       />
 
       <TaskDocuments taskId={task.id} />
+
+      {asking === undefined ? null : (
+        <ConfirmDialog
+          title={`Change the status of ${task.id}?`}
+          message={`${task.id} is blocked. Change its status from ${task.status} to ${asking} by hand? The board will not stop you.`}
+          confirmLabel="Change status"
+          confirmVariant="primary"
+          pending={setStatus.pending}
+          onCancel={() => setAsking(undefined)}
+          onConfirm={() => {
+            void setStatus.run(asking).then(() => setAsking(undefined));
+          }}
+        >
+          <ul>
+            {reasons.map((reason) => (
+              <li key={reasonText(reason)}>{reasonText(reason)}</li>
+            ))}
+          </ul>
+        </ConfirmDialog>
+      )}
 
       {!restoring || viewing === undefined ? null : (
         <ConfirmDialog

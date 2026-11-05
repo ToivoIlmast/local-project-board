@@ -8,7 +8,9 @@ export interface BoardHeaderProps {
   connection: ConnectionStatus;
   onNewTask: () => void;
   onReload: () => void;
-  onShowPanel: (panel: 'reports' | 'topics' | 'git' | 'instructions' | 'settings') => void;
+  onShowPanel: (
+    panel: 'reports' | 'topics' | 'blocks' | 'git' | 'instructions' | 'settings',
+  ) => void;
 }
 
 export function BoardHeader({
@@ -43,6 +45,7 @@ export function BoardHeader({
         </Button>
         <Button onClick={() => onShowPanel('reports')}>Reports</Button>
         <Button onClick={() => onShowPanel('topics')}>Topics</Button>
+        <Button onClick={() => onShowPanel('blocks')}>Blocks</Button>
         <Button onClick={() => onShowPanel('git')}>Git</Button>
         <Button onClick={() => onShowPanel('instructions')}>AI instructions</Button>
         <Button onClick={() => onShowPanel('settings')}>Settings</Button>

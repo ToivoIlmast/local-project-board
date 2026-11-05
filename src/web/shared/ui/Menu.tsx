@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 
@@ -9,6 +9,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** Why the item is what it is, for a hover; not the only place a reason is given. */
   title?: string;
+  /** Why the item is what it is, written under it so that a keyboard and a screen reader get it too. */
+  description?: string;
 }
 
 export interface MenuProps {
@@ -38,6 +40,7 @@ export function Menu({ label, items, children = '⋯', appearance = 'icon' }: Me
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const descriptionId = useId();
 
   useEffect(() => {
     if (!open) return undefined;
@@ -95,6 +98,9 @@ export function Menu({ label, items, children = '⋯', appearance = 'icon' }: Me
             ) : (
               <li key={item.label}>
                 <button
+                  aria-describedby={
+                    item.description === undefined ? undefined : `${descriptionId}-${index}`
+                  }
                   type="button"
                   className={`menu__item menu__item--${item.tone ?? 'normal'}`}
                   disabled={item.disabled === true}
@@ -107,6 +113,11 @@ export function Menu({ label, items, children = '⋯', appearance = 'icon' }: Me
                 >
                   {item.label}
                 </button>
+                {item.description === undefined ? null : (
+                  <p className="menu__description" id={`${descriptionId}-${index}`}>
+                    {item.description}
+                  </p>
+                )}
               </li>
             ),
           )}

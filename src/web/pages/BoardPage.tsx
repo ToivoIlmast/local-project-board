@@ -9,6 +9,7 @@ import {
   filterByTopic,
   type MoveIntent,
 } from '../features/board/index';
+import { BlocksPanel } from '../features/blocks/index';
 import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
 import { ReportsPanel } from '../features/reports/index';
@@ -20,7 +21,7 @@ import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedCh
 import { useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
 
-type Panel = 'reports' | 'topics' | 'git' | 'instructions' | 'settings';
+type Panel = 'reports' | 'topics' | 'blocks' | 'git' | 'instructions' | 'settings';
 
 /**
  * The whole board in one screen: columns on the left, whatever is being looked at on the
@@ -174,6 +175,8 @@ function BoardScreen() {
               if (topicFilter === id) setTopicFilter(null);
             }}
           />
+        ) : panel === 'blocks' ? (
+          <BlocksPanel onClose={closePanel} onOpen={open} />
         ) : panel === 'git' ? (
           <GitPanel onClose={closePanel} />
         ) : panel === 'instructions' ? (
