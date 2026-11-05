@@ -22,6 +22,8 @@ export interface BoardProps {
   onCreate: (status: string) => void;
   /** Where the card should go, said the way the API takes it; the server ranks it. */
   onMove: (id: string, intent: MoveIntent) => void;
+  /** The tasks are a filter's, not the board's: none of them is not "no tasks yet". */
+  filtered?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function Board({
   onDelete,
   onCreate,
   onMove,
+  filtered = false,
 }: BoardProps) {
   const { columns, orphans } = useMemo(() => columnsOf(project, tasks), [project, tasks]);
 
@@ -91,9 +94,13 @@ export function Board({
       )}
 
       {tasks.length === 0 ? (
-        <EmptyState title="No tasks yet">
-          <p>Create one with “New task”, or let an agent create it through the API.</p>
-        </EmptyState>
+        filtered ? (
+          <EmptyState title="No tasks match this filter" />
+        ) : (
+          <EmptyState title="No tasks yet">
+            <p>Create one with “New task”, or let an agent create it through the API.</p>
+          </EmptyState>
+        )
       ) : null}
 
       <div className="board">

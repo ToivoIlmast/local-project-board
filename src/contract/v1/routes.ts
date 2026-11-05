@@ -922,6 +922,16 @@ export const routes = {
   }),
 
   // Topics and blocks (ADR-0032 §4, T84). Structure is the owner's to change: an agent is not told.
+  'topics.list': route({
+    id: 'topics.list',
+    method: 'GET',
+    path: '/topics',
+    summary: 'List the topics with their blocks, by number; one that cannot be read is left out',
+    response: json(z.array(s.topicSchema)),
+    example: { response: [exampleTopic] },
+    ai: { include: false },
+  }),
+
   'topics.create': route({
     id: 'topics.create',
     method: 'POST',

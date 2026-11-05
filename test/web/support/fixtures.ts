@@ -1,5 +1,6 @@
 import type { Project } from '../../../src/core/model/project';
 import type { Task } from '../../../src/core/model/task';
+import type { Topic } from '../../../src/core/model/topic';
 import type { Report } from '../../../src/core/model/report';
 import type { Check } from '../../../src/core/model/history';
 import type { DocumentMeta } from '../../../src/core/model/document';
@@ -38,6 +39,10 @@ export function aTask(overrides: Partial<Task> = {}): Task {
     updatedAt: '2026-09-21T09:00:00.000Z',
     ...overrides,
   };
+}
+
+export function aTopic(overrides: Partial<Topic> = {}): Topic {
+  return { id: 'P1', title: 'M1 Core', body: '', blocks: [], ...overrides };
 }
 
 export function aReport(overrides: Partial<Report> = {}): Report {

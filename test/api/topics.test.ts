@@ -1,4 +1,6 @@
-import { errorResponseSchema, API_BASE_PATH as API } from '../../src/contract/v1/index.js';
+import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { errorResponseSchema, routes, API_BASE_PATH as API } from '../../src/contract/v1/index.js';
 import type { Topic } from '../../src/core/model/index.js';
 import { createTestBoard, type TestBoard } from '../support/httpBoard.js';
 import { cleanTmpDirs } from '../support/tmp.js';
@@ -128,6 +130,39 @@ describe('topics over HTTP', () => {
     await board.patch(`${API}/topics/T1`, { title: 'x' }).expect(400);
     await board.del(`${API}/topics/nope`).expect(400);
     expect(board.events.events).toEqual([]);
+  });
+
+  describe('listing topics (T90)', () => {
+    it('answers every topic with its blocks, by number, and nothing else changes', async () => {
+      await createTopic('first', 'body\n');
+      await createTopic('second');
+      await createBlock('P1', 'A');
+      const before = await state();
+      const response = await board.get(`${API}/topics`).expect(200);
+      expect(response.body).toEqual([
+        { id: 'P1', title: 'first', body: 'body\n', blocks: [{ id: 'K1', title: 'A' }] },
+        { id: 'P2', title: 'second', body: '', blocks: [] },
+      ]);
+      expect(() => routes['topics.list'].response.schema.parse(response.body)).not.toThrow();
+      expect(await state()).toEqual(before);
+    });
+
+    it('answers an empty list for a board without topics', async () => {
+      expect((await board.get(`${API}/topics`).expect(200)).body).toEqual([]);
+    });
+
+    it('leaves out a topic that cannot be read, and keeps the others in order', async () => {
+      await createTopic('first');
+      await createTopic('broken');
+      await createTopic('third');
+      await writeFile(
+        join(board.root, '.board', 'topics', 'P2', 'topic.md'),
+        'A topic.md without frontmatter.\n',
+        'utf8',
+      );
+      const response = await board.get(`${API}/topics`).expect(200);
+      expect((response.body as Topic[]).map((topic) => topic.id)).toEqual(['P1', 'P3']);
+    });
   });
 
   describe('deleting a topic (ADR-0032 §4)', () => {

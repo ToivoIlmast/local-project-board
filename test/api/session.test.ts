@@ -134,6 +134,7 @@ describe('the token on the wire', () => {
       'git.diff': '/git/diff',
       'reports.list': '/reports',
       'reports.read': '/reports/R1',
+      'topics.list': '/topics',
       'session.get': '/session',
       'instructions.get': '/instructions',
     };

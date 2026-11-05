@@ -92,6 +92,7 @@ describe('renderApiDoc', () => {
       'topics.createBlock',
       'topics.delete',
       'topics.deleteBlock',
+      'topics.list',
       'topics.reorderBlocks',
       'topics.update',
       'topics.updateBlock',
