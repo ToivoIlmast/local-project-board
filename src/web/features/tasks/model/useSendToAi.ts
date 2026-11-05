@@ -6,6 +6,7 @@ import { useCopyToClipboard } from '../../../shared/hooks/useCopyToClipboard';
 import type { MenuItem } from '../../../shared/ui/index';
 import { ClaudeCodeLaunch } from '../ui/ClaudeCodeLaunch';
 import type { AgentTarget, DialogTarget, RunTarget } from './agentTarget';
+import { explainError } from './explainError';
 import { reasonText } from './readinessText';
 
 export type { AgentTarget } from './agentTarget';
@@ -44,8 +45,8 @@ export interface SendToAiState {
  * entry is chosen — the page composes nothing, so the text is the API's and the command
  * line's, and has no token (T15).
  *
- * The handoff of a blocked task with no working run is refused by the board (`TASK_BLOCKED`), so
- * the entry is disabled beforehand, with the reasons. That is a courtesy: what the page does not
+ * The handoff and the start of a blocked task with no working run are refused by the board
+ * (`TASK_BLOCKED`), so both entries are disabled beforehand, with the reasons. That is a courtesy: what the page does not
  * know — reasons not read yet — leaves the entry enabled, and the board's answer stays the gate.
  */
 export function useSendToAi(
@@ -72,7 +73,12 @@ export function useSendToAi(
 
   const sending = useAsyncAction(async (target: RunTarget) => {
     setDone(undefined);
-    setDone((await target.run(task.id, { copy, client })) ?? undefined);
+    try {
+      setDone((await target.run(task.id, { copy, client })) ?? undefined);
+    } catch (error) {
+      // A `TASK_BLOCKED` the page did not expect says its reasons, not only that it refused.
+      throw explainError(error);
+    }
   });
 
   const choose = (target: AgentTarget): void => {
@@ -85,13 +91,14 @@ export function useSendToAi(
     setOpen(target);
   };
 
+  const why = `Blocked: ${reasons.map(reasonText).join('; ')}`;
+
   return {
     items: [copyHandoff, ...targets].map((target) => ({
       label: target.label,
-      disabled: sending.pending || (target === copyHandoff && handoffRefused),
-      ...(target === copyHandoff && handoffRefused
-        ? { title: `Blocked: ${reasons.map(reasonText).join('; ')}` }
-        : {}),
+      // A blocked task with no working run cannot be started or handed over: both entries say so.
+      disabled: sending.pending || handoffRefused,
+      ...(handoffRefused ? { title: why, description: why } : {}),
       onSelect: () => choose(target),
     })),
     dialog:

@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { columnsOf } from '../../../api/index';
-import type { BlockingReason, Project, Task } from '../../../../contract/v1/index';
-import { EmptyState } from '../../../shared/ui/index';
-import { TaskCard } from '../../tasks/index';
+import {
+  launchState,
+  type BlockingReason,
+  type Project,
+  type Task,
+} from '../../../../contract/v1/index';
+import { ConfirmDialog, EmptyState } from '../../../shared/ui/index';
+import { TaskCard, needsStatusConfirmation, reasonText } from '../../tasks/index';
 import { intentFor, isNoop, type MoveIntent } from '../model/dnd';
 import { useDrag } from '../model/useDrag';
 import { Column } from './Column';
@@ -43,14 +48,27 @@ export function Board({
   filtered = false,
 }: BoardProps) {
   const { columns, orphans } = useMemo(() => columnsOf(project, tasks), [project, tasks]);
+  /** A status change of a blocked task that waits for the answer to "are you sure"; nothing is sent. */
+  const [asking, setAsking] = useState<{ id: string; intent: MoveIntent; follow: boolean } | null>(
+    null,
+  );
+  const blocked = tasks.filter((task) => launchState(task, readiness[task.id] ?? NONE).blocked);
 
-  /** Whether a move was sent: a drop that changes nothing is not a change, so nothing is. */
-  const move = (id: string, status: string, index: number): boolean => {
+  /**
+   * Whether a move was sent: a drop that changes nothing is not a change, so nothing is. A
+   * different status for a blocked task is asked about first, whichever way it came (a drop, the
+   * menu); staying in the column is a reorder and asks nothing (ADR-0032 §8).
+   */
+  const move = (id: string, status: string, index: number, follow = false): boolean => {
     const column = columns.find((candidate) => candidate.status === status);
     const task = tasks.find((candidate) => candidate.id === id);
     if (!column || !task) return false;
     const intent = intentFor(column.tasks, id, index, status);
     if (isNoop(task, column.tasks, intent)) return false;
+    if (needsStatusConfirmation(task, readiness[id] ?? NONE, intent.status)) {
+      setAsking({ id, intent, follow });
+      return false;
+    }
     onMove(id, intent);
     return true;
   };
@@ -79,8 +97,10 @@ export function Board({
 
   const moveTo = (id: string, status: string): void => {
     const column = columns.find((candidate) => candidate.status === status);
-    if (move(id, status, column?.tasks.length ?? 0)) followedRef.current = id;
+    if (move(id, status, column?.tasks.length ?? 0, true)) followedRef.current = id;
   };
+
+  const asked = asking === null ? undefined : tasks.find((task) => task.id === asking.id);
 
   return (
     <>
@@ -102,6 +122,16 @@ export function Board({
           </EmptyState>
         )
       ) : null}
+
+      {blocked.length === 0 ? null : (
+        <p
+          className="board__blocked"
+          role="status"
+          aria-label={`${blocked.length} blocked ${blocked.length === 1 ? 'task' : 'tasks'}`}
+        >
+          <span aria-hidden="true">🔒 {blocked.length}</span>
+        </p>
+      )}
 
       <div className="board">
         {columns.map((column) => (
@@ -132,6 +162,27 @@ export function Board({
           </Column>
         ))}
       </div>
+
+      {asking === null || asked === undefined ? null : (
+        <ConfirmDialog
+          title={`Change the status of ${asked.id}?`}
+          message={`${asked.id} is blocked. Change its status from ${asked.status} to ${asking.intent.status} by hand? The board will not stop you.`}
+          confirmLabel="Change status"
+          confirmVariant="primary"
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            if (asking.follow) followedRef.current = asked.id;
+            onMove(asked.id, asking.intent);
+            setAsking(null);
+          }}
+        >
+          <ul>
+            {(readiness[asked.id] ?? NONE).map((reason) => (
+              <li key={reasonText(reason)}>{reasonText(reason)}</li>
+            ))}
+          </ul>
+        </ConfirmDialog>
+      )}
     </>
   );
 }

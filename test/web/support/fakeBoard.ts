@@ -271,6 +271,9 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           labels: input.labels ?? [],
           ...(input.branch === undefined ? {} : { branch: input.branch }),
           ...(input.workflow === undefined ? {} : { workflow: { ...input.workflow } }),
+          ...(input.topic === undefined ? {} : { topic: input.topic }),
+          ...(input.block === undefined ? {} : { block: input.block }),
+          ...(input.dependsOn === undefined ? {} : { dependsOn: [...input.dependsOn] }),
           createdAt: NOW,
           updatedAt: NOW,
         };
@@ -284,7 +287,17 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
       record('updateTask', () => {
         patches.push({ id, patch: structuredClone(patch) as Record<string, unknown> });
         const task = require(id);
-        const { branch, workflow, aiRun, ifContentHash, fromCheck, ...rest } = patch;
+        const {
+          branch,
+          workflow,
+          aiRun,
+          ifContentHash,
+          fromCheck,
+          topic,
+          block,
+          dependsOn,
+          ...rest
+        } = patch;
         // The precondition of ADR-0030 §4, on the board's side of the wire.
         if (ifContentHash !== undefined && ifContentHash !== contentHash(contentOf(task))) {
           throw new ApiError(
@@ -311,6 +324,13 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
           });
         }
         if (aiRun === null) delete task.aiRun;
+        // As the server writes them: null clears, a value sets, absent leaves as it was.
+        if (topic === null) delete task.topic;
+        else if (topic !== undefined) task.topic = topic;
+        if (block === null) delete task.block;
+        else if (block !== undefined) task.block = block;
+        if (dependsOn === null) delete task.dependsOn;
+        else if (dependsOn !== undefined) task.dependsOn = [...dependsOn];
         if (branch === null) delete task.branch;
         else if (branch !== undefined) task.branch = branch;
         if (workflow === null) delete task.workflow;

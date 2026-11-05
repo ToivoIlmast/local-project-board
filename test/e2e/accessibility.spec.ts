@@ -35,6 +35,24 @@ for (const scheme of ['light', 'dark'] as const) {
         body: 'Some **bold** text, a [link](https://example.com) and `code`.\n\n```\nconst a = 1;\n```\n',
       },
     });
+    // A topic of blocks in a line: one done, one under way and holding a blocked task, one
+    // waiting for it and one empty; T3 waits for T1 and T4 for the block before its own.
+    for (const title of ['Design', 'Build', 'Review', 'Release']) {
+      await board.api('/api/v1/topics/P2/blocks', { method: 'POST', body: { title } });
+    }
+    const placed = (title: string, status: string, block: string, dependsOn?: string[]) => ({
+      method: 'POST',
+      body: {
+        title,
+        status,
+        topic: 'P2',
+        block,
+        ...(dependsOn === undefined ? {} : { dependsOn }),
+      },
+    });
+    await board.api('/api/v1/tasks', placed('Design is done', 'done', 'K1'));
+    await board.api('/api/v1/tasks', placed('Build waits for T1', 'todo', 'K2', ['T1']));
+    await board.api('/api/v1/tasks', placed('Review waits for Build', 'todo', 'K3'));
     await board.api('/api/v1/tasks/T1/documents/plan.md', {
       method: 'PUT',
       body: { content: '# Plan\n\nA [link](https://example.com) in a document.\n' },
@@ -133,6 +151,61 @@ for (const scheme of ['light', 'dark'] as const) {
           await page.goto(`${board.url.replace(/\/$/, '')}/?task=T99`);
         },
       ],
+      [
+        'the board with blocked cards and their lock count',
+        async () => {
+          await page.goto(board.url);
+          await expect(page.locator('.board__blocked')).toContainText('🔒 2');
+        },
+      ],
+      [
+        'a blocked card with its AI actions disabled and explained',
+        async () => {
+          await page.getByRole('button', { name: 'Actions for T3' }).click();
+          await expect(
+            page.getByRole('button', { name: 'Send to AI: Copy handoff' }),
+          ).toBeDisabled();
+          await expect(
+            page.getByRole('button', { name: 'Send to AI: Claude Code' }),
+          ).toBeDisabled();
+          await expect(page.locator('.menu__description').first()).toBeVisible();
+        },
+      ],
+      [
+        'the question before the status of a blocked task changes',
+        async () => {
+          await page.getByRole('button', { name: 'Move to done' }).click();
+          await expect(page.getByRole('dialog')).toContainText('T3 is blocked');
+        },
+      ],
+      [
+        'the task form with the topic, block and dependency fields',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Actions for T3' }).click();
+          await page.getByRole('button', { name: 'Edit', exact: true }).click();
+          await expect(page.getByLabel('Block', { exact: true })).toBeEnabled();
+        },
+      ],
+      [
+        'the question before a task is moved to another block',
+        async () => {
+          await page.getByLabel('Block', { exact: true }).selectOption('K1');
+          await page.getByRole('button', { name: 'Review changes' }).click();
+          await expect(page.getByRole('region', { name: 'Move' })).toBeVisible();
+        },
+      ],
+      [
+        'the blocks with a completed, a waiting and an empty block',
+        async () => {
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: 'Blocks', exact: true }).click();
+          const blocks = page.getByRole('complementary', { name: 'Blocks' });
+          await expect(blocks.getByText('completed')).toBeVisible();
+          await expect(blocks.getByText('waiting for previous Block')).toBeVisible();
+          await expect(blocks.getByText('empty', { exact: true })).toBeVisible();
+        },
+      ],
     ];
 
     for (const [name, show] of screens) {
@@ -161,7 +234,18 @@ test('the whole board can be used with the keyboard alone, and the focus is neve
   await expect(page.getByLabel('Title')).toBeFocused();
   await keyboard.type('Reached with a keyboard');
   await expect(page.getByLabel('Title')).toHaveValue('Reached with a keyboard');
-  for (const name of ['Status', 'Labels', 'Branch', 'Description', 'Cancel', 'Create', 'Close']) {
+  // The Block waits for a topic and is disabled, so Tab goes past it.
+  for (const name of [
+    'Status',
+    'Topic',
+    'Depends on',
+    'Labels',
+    'Branch',
+    'Description',
+    'Cancel',
+    'Create',
+    'Close',
+  ]) {
     await keyboard.press('Tab');
     await expect(dialog.locator(':focus')).toHaveAccessibleName(name);
   }

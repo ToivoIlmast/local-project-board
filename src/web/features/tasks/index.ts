@@ -6,3 +6,10 @@ export { SendToAi, type SendToAiProps } from './ui/SendToAi';
 export { AGENT_TARGETS } from './model/useSendToAi';
 export type { AgentTarget, DialogTarget, RunTarget, TargetDialogProps } from './model/agentTarget';
 export { TaskAiSettings, type TaskAiSettingsProps } from './ui/TaskAiSettings';
+export { reasonText } from './model/readinessText';
+export {
+  blockSummary,
+  needsStatusConfirmation,
+  placeLabel,
+  type BlockSummary,
+} from './model/placement';

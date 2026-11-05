@@ -36,14 +36,16 @@ describe('a dialog and the keyboard', () => {
     await user.tab();
     expect(within(dialog()).getByLabelText('Title')).toHaveFocus();
 
-    // Every stop on the way round is in the dialog, and there are as many as it has.
+    // Every stop on the way round is in the dialog, and there are as many as it has: the title,
+    // the status, the topic, the dependencies (the block waits for a topic), the labels, the
+    // branch, the description, Cancel, Create and Close.
     const seen = new Set<Element | null>();
-    for (let stop = 0; stop < 12; stop++) {
+    for (let stop = 0; stop < 14; stop++) {
       await user.tab();
       seen.add(document.activeElement);
       expect(dialog()).toContainElement(document.activeElement as HTMLElement);
     }
-    expect(seen.size).toBe(8);
+    expect(seen.size).toBe(10);
   });
 
   it('gives the focus back to what opened it when Escape closes it', async () => {

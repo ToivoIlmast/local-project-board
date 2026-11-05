@@ -41,6 +41,7 @@ export const TaskCard = memo(function TaskCard({
   const sendToAi = useSendToAi(task, undefined, reasons);
   // ● and 🔒 can be shown together: a run that has started is not stopped (ADR-0032 §7).
   const launch = launchState(task, reasons);
+  const blockedWhy = `Blocked: ${reasons.map(reasonText).join('; ')}`;
   const items: (MenuItem | 'separator')[] = [
     { label: 'Open', onSelect: () => onOpen(task.id) },
     { label: 'Edit', onSelect: () => onEdit(task.id) },
@@ -106,8 +107,10 @@ export const TaskCard = memo(function TaskCard({
           </Badge>
         ) : null}
         {launch.blocked ? (
-          <Badge tone="warning" title={`Blocked: ${reasons.map(reasonText).join('; ')}`}>
-            🔒
+          // Only the count is drawn; the reasons are the tooltip and the text for a reader.
+          <Badge tone="warning" title={blockedWhy}>
+            <span aria-hidden="true">🔒 {reasons.length}</span>
+            <span className="visually-hidden">{blockedWhy}</span>
           </Badge>
         ) : null}
         {hasOwnSettings(task.workflow) ? (

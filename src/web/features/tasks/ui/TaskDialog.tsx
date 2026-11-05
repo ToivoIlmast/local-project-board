@@ -4,6 +4,7 @@ import type { FromCheck, Task } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { Modal } from '../../../shared/ui/index';
 import type { TaskDraft } from '../model/history';
+import { placementRefusal, type FieldErrors, type PlacementField } from '../model/placement';
 import { EditReview } from './EditReview';
 import { TaskForm, type TaskValues } from './TaskForm';
 
@@ -46,17 +47,38 @@ export function TaskDialog({
   const [original] = useState(task);
   const [reviewing, setReviewing] = useState<TaskValues | undefined>(undefined);
   const [kept, setKept] = useState<TaskValues | undefined>(undefined);
+  // What the board refused in the topic, the block or the dependencies, said at that field.
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const create = useAsyncAction(async (values: TaskValues) => {
-    const created = await store.createTask({
-      title: values.title,
-      status: values.status,
-      body: values.body,
-      labels: values.labels,
-      ...(values.branch === undefined ? {} : { branch: values.branch }),
-    });
-    createdRef.current = created.id;
+    setFieldErrors({});
+    try {
+      const created = await store.createTask({
+        title: values.title,
+        status: values.status,
+        body: values.body,
+        labels: values.labels,
+        ...(values.branch === undefined ? {} : { branch: values.branch }),
+        ...(values.topic === undefined ? {} : { topic: values.topic }),
+        ...(values.block === undefined ? {} : { block: values.block }),
+        ...(values.dependsOn === undefined || values.dependsOn.length === 0
+          ? {}
+          : { dependsOn: values.dependsOn }),
+      });
+      createdRef.current = created.id;
+    } catch (error) {
+      const refusal = placementRefusal(error);
+      if (refusal !== undefined) setFieldErrors(refusal);
+      throw error;
+    }
   });
+
+  const forget = (field: PlacementField): void => {
+    setFieldErrors(({ [field]: _gone, ...rest }) => rest);
+    // What the board said was about the entry that has just been changed.
+    create.clearError();
+  };
+  const refused = Object.keys(fieldErrors).length > 0;
 
   const dialogTitle = title ?? (task === undefined ? 'New task' : `Edit ${task.id}`);
 
@@ -69,6 +91,17 @@ export function TaskDialog({
               task={task}
               original={original}
               draft={toDraft(reviewing)}
+              placement={{
+                topic: reviewing.topic,
+                block: reviewing.block,
+                dependsOn: reviewing.dependsOn ?? [],
+              }}
+              onRefused={(errors) => {
+                // Back to the form with everything entered, and the refusal at its field.
+                setKept(reviewing);
+                setReviewing(undefined);
+                setFieldErrors(errors);
+              }}
               fromCheck={fromCheck}
               onBack={() => {
                 setKept(reviewing);
@@ -85,10 +118,13 @@ export function TaskDialog({
               defaultStatus={defaultStatus}
               submitLabel={task === undefined ? 'Create' : 'Review changes'}
               pending={create.pending}
-              error={create.error}
+              error={refused ? undefined : create.error}
+              fieldErrors={fieldErrors}
+              onFieldEdited={forget}
               onCancel={onClose}
               onSubmit={(values) => {
                 if (task !== undefined) {
+                  setFieldErrors({});
                   setReviewing(values);
                   return;
                 }

@@ -17,6 +17,7 @@ import {
   runRequest,
   type ModelDraft,
 } from '../model/claudeLaunch';
+import { explainError } from '../model/explainError';
 import { launchNotice } from '../model/history';
 import { LAUNCH_LABELS as L } from '../model/launchLabels';
 import { settingsRequest } from '../model/taskWorkflow';
@@ -69,7 +70,12 @@ export function ClaudeCodeLaunch({
         workflow: settingsRequest(setTaskLanguage(task.workflow ?? {}, language)),
       });
     }
-    await client.runTask(task.id, runRequest(sent, mode));
+    try {
+      await client.runTask(task.id, runRequest(sent, mode));
+    } catch (error) {
+      // A task that became blocked since the page last read it: the reasons are the answer.
+      throw explainError(error);
+    }
     onDone(L.started(task.id));
   });
 

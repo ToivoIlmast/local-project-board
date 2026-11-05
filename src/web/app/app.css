@@ -747,3 +747,112 @@
   gap: 8px;
   margin: 8px 0;
 }
+
+/* The count of blocked tasks, above the columns. */
+.board__blocked {
+  margin: 0 0 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* The Blocks View: a topic, its blocks in their order, and the tasks in them. */
+.blocks__topic {
+  margin-bottom: 20px;
+}
+
+.blocks__topic-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.blocks__block {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.blocks__block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blocks__block-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+
+.blocks__count {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.blocks__tasks {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blocks__task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.blocks__marks {
+  display: inline-flex;
+  gap: 4px;
+  min-width: 2.5em;
+}
+
+.blocks__title {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.blocks__title:hover {
+  text-decoration: underline;
+}
+
+.blocks__deps,
+.blocks__reason {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.blocks__reason {
+  flex-basis: 100%;
+  padding-left: 2.5em;
+}
+
+/* What a move to another topic or block changes, in the review of an edit. */
+.review__move {
+  margin: 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.review__places {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0 0 8px;
+}
+
+.review__places dt {
+  color: var(--ink-muted);
+}
+
+.review__places dd {
+  margin: 0;
+}
