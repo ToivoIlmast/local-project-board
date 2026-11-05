@@ -7,6 +7,8 @@ export interface MenuItem {
   onSelect: () => void;
   tone?: 'normal' | 'danger';
   disabled?: boolean;
+  /** Why the item is what it is, for a hover; not the only place a reason is given. */
+  title?: string;
 }
 
 export interface MenuProps {
@@ -96,6 +98,7 @@ export function Menu({ label, items, children = '⋯', appearance = 'icon' }: Me
                   type="button"
                   className={`menu__item menu__item--${item.tone ?? 'normal'}`}
                   disabled={item.disabled === true}
+                  title={item.title}
                   onClick={() => {
                     setOpen(false);
                     triggerRef.current?.focus();

@@ -55,6 +55,19 @@ describe('renderApiDoc', () => {
     }
   });
 
+  it('states when TASK_BLOCKED answers the handoff and the run of a task (T88)', () => {
+    const doc = renderApiDoc(routeList).replace(/\s+/g, ' ');
+    for (const text of [
+      '`409 TASK_BLOCKED`',
+      '`details.reasons`',
+      '`GET /tasks/:id/handoff`: a blocked task has no handoff, unless its `aiRun.state` is `working`',
+      '`POST /tasks/:id/run` with `kind: work`',
+      '`kind: check` and `kind: research` are not gated',
+    ]) {
+      expect(doc).toContain(text);
+    }
+  });
+
   it('marks each route as given to, or withheld from, AI agents', () => {
     const hidden = routeList.filter((r) => !r.ai.include).map((r) => r.id);
     expect(hidden.sort()).toEqual([

@@ -133,7 +133,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
         <h3 className="ai__title" id={`ai-${task.id}`}>
           AI
         </h3>
-        <SendToAi task={task} targets={targets} />
+        <SendToAi task={task} targets={targets} reasons={state.readiness[task.id]} />
       </div>
 
       {exceptions ? null : (

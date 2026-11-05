@@ -38,7 +38,7 @@ export const TaskCard = memo(function TaskCard({
   onNudge,
   onDragStart,
 }: TaskCardProps) {
-  const sendToAi = useSendToAi(task);
+  const sendToAi = useSendToAi(task, undefined, reasons);
   // ● and 🔒 can be shown together: a run that has started is not stopped (ADR-0032 §7).
   const launch = launchState(task, reasons);
   const items: (MenuItem | 'separator')[] = [

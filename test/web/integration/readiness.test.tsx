@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
@@ -5,7 +6,7 @@ import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
 /**
  * What the page shows of readiness on a real board (T86; ADR-0032 §7–8): a task that is blocked
  * carries 🔒, a task whose run works carries ●, and a task can carry both, because a run that has
- * started is not stopped. "Copy handoff" of a blocked task with no working run says why not.
+ * started is not stopped. "Copy handoff" of a blocked task with no working run is disabled.
  */
 
 const SLOW_MS = 30_000;
@@ -76,19 +77,61 @@ describe('readiness on the cards of a real board', () => {
   );
 
   it(
-    '"Copy handoff" of a blocked task says what the board said, and copies nothing',
+    '"Copy handoff" of a blocked task with no working run is disabled: nothing is asked, nothing is copied',
     async () => {
-      const { server, user } = await withTasks();
+      const { server, client, user } = await withTasks();
+      const handoff = jest.spyOn(client, 'handoff');
       await block(server);
+      await waitFor(() => expect(within(cardOf('Dependant')).getByTitle(/^Blocked/)).toBeVisible());
       await navigator.clipboard.writeText('what was there before');
 
       await user.click(screen.getByRole('button', { name: 'Actions for T2' }));
-      await user.click(screen.getByRole('button', { name: 'Send to AI: Copy handoff' }));
+      const item = screen.getByRole('button', { name: 'Send to AI: Copy handoff' });
+      expect(item).toBeDisabled();
+      await user.click(item);
 
-      const alert = await within(cardOf('Dependant')).findByRole('alert');
-      expect(alert).toHaveTextContent(/blocked/i);
-      expect(alert).toHaveTextContent('T1');
+      expect(handoff).not.toHaveBeenCalled();
       expect(await navigator.clipboard.readText()).toBe('what was there before');
+      expect(within(cardOf('Dependant')).queryByRole('alert')).not.toBeInTheDocument();
+    },
+    SLOW_MS,
+  );
+
+  it(
+    '"Copy handoff" of a blocked task whose run works stays enabled, and copies the handoff',
+    async () => {
+      const { server, user } = await withTasks();
+      await server.post('/api/v1/tasks/T2/ai-run', { sessionId: SESSION, mode: 'new' }).expect(200);
+      await block(server);
+      await waitFor(() => expect(within(cardOf('Dependant')).getByTitle(/^Blocked/)).toBeVisible());
+
+      await user.click(screen.getByRole('button', { name: 'Actions for T2' }));
+      const item = screen.getByRole('button', { name: 'Send to AI: Copy handoff' });
+      expect(item).toBeEnabled();
+      await user.click(item);
+
+      expect(
+        await within(cardOf('Dependant')).findByText('Handoff copied to the clipboard.'),
+      ).toBeVisible();
+      expect(await navigator.clipboard.readText()).toContain('# Task T2: Dependant');
+    },
+    SLOW_MS,
+  );
+
+  it(
+    '"Copy handoff" becomes enabled when the cause of the block is gone, without a reload',
+    async () => {
+      const { server, user } = await withTasks();
+      await block(server);
+      await waitFor(() => expect(within(cardOf('Dependant')).getByTitle(/^Blocked/)).toBeVisible());
+      await user.click(screen.getByRole('button', { name: 'Actions for T2' }));
+      expect(screen.getByRole('button', { name: 'Send to AI: Copy handoff' })).toBeDisabled();
+
+      await server.patch('/api/v1/tasks/T1', { status: 'done' }).expect(200);
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Send to AI: Copy handoff' })).toBeEnabled(),
+      );
     },
     SLOW_MS,
   );
