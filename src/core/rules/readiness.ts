@@ -99,7 +99,7 @@ export function readiness(input: ReadinessInput): Record<string, BlockingReason[
       const open = members.filter((member) => !isDone(member)).map((member) => member.id);
       if (members.length === 0) {
         reasons.push({ code: 'block-empty', topic: task.topic!, block: block.id });
-      } else if (doneKnown && open.length > 0) {
+      } else if (doneKnown && !isBlockDone(members)) {
         reasons.push({
           code: 'block-incomplete',
           topic: task.topic!,
@@ -210,6 +210,11 @@ export function launchState(
     blocked: !done && reasons.length > 0,
     launchable: !done && !running && reasons.length === 0,
   };
+}
+
+/** A block is done when it holds at least one task and every one is done (ADR-0032 §5). */
+export function isBlockDone(members: readonly { status: string }[]): boolean {
+  return members.length > 0 && members.every(isDone);
 }
 
 function idsOf(issues: readonly { file: string }[], file: RegExp): string[] {
