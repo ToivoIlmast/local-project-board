@@ -222,7 +222,12 @@ test('research from the keyboard: ask, read the report, reject with a reason', a
   await page.keyboard.type('The plan is not ours.');
   await report.getByRole('button', { name: 'Confirm rejecting r1' }).focus();
   await page.keyboard.press('Enter');
-  await expect(report.getByText(/The plan is not ours\./)).toBeVisible();
+  // The typed reason also sits in the open textarea, so it proves nothing: the form closes only
+  // once the decision is saved, and then the decision line shows it.
+  await expect(report.getByLabel('Why reject r1? (optional)')).toBeHidden();
+  const decision = report.locator('.check__decision');
+  await expect(decision).toContainText('Rejected');
+  await expect(decision).toContainText('— The plan is not ours.');
 
   const decided = (await board.api('/api/v1/tasks/T1/checks/1')) as {
     decisions: { recommendation: string; decision: string; note?: string }[];
