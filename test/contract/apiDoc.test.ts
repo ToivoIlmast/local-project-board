@@ -87,6 +87,7 @@ describe('renderApiDoc', () => {
       'instructions.get',
       'runs.stream',
       'tasks.run',
+      'tasks.runFailure',
       // Structure of the board is the owner's to change (ADR-0032 §4), so an agent is not told.
       'topics.create',
       'topics.createBlock',

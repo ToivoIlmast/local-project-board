@@ -7,7 +7,9 @@ import {
   type ResponseOf,
   type RouteId,
 } from '../../../contract/v1/index.js';
+import { randomUUID } from 'node:crypto';
 import { BoardError, type Project } from '../../../core/index.js';
+import { LAUNCH_MESSAGE_MAX_LENGTH } from '../../../core/model/launch.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
 import { noRunner } from '../runs.js';
@@ -50,6 +52,17 @@ export type Handlers = {
 
 const deleted = { deleted: true } as const;
 
+/**
+ * One line a page can show (K10): control characters, newlines included, become spaces, the
+ * session token becomes `[token]`, and the rest is trimmed. Nothing left is no message.
+ */
+function cleanMessage(message: string, token: string): string | undefined {
+  // eslint-disable-next-line no-control-regex -- control characters are what is removed here.
+  const line = message.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ');
+  const cleaned = line.split(token).join('[token]').trim().slice(0, LAUNCH_MESSAGE_MAX_LENGTH);
+  return cleaned === '' ? undefined : cleaned;
+}
+
 /** What the instructions and the handoff say about the board itself. */
 const boardFacts = (project: Project): BoardFacts => ({
   name: project.name,
@@ -89,7 +102,7 @@ export const handlers: Handlers = {
   'tasks.workflow': (context, { params }) => context.workflow.forTask(params.id),
 
   // Send to AI → Claude Code: the task must exist, and then it goes to one waiting runner or
-  // to none. Nothing is started here and nothing on the board changes (ADR-0029, T27).
+  // to none. Nothing is started here (ADR-0029, T27); a work run writes only its `launch` (T94).
   'tasks.run': async (context, { params, body }) => {
     await context.tasks.get(params.id);
     if (body.kind === 'check' || body.kind === 'research') {
@@ -110,24 +123,35 @@ export const handlers: Handlers = {
       if (handed !== 'handed') throw noRunner(params.id, handed);
       return check;
     }
-    // Refused here, before any runner is asked: no run of any mode starts while one works
-    // (T45), and Resume needs a session that is over (T36).
-    await context.aiRun.requireIdle(params.id);
-    if (body.mode === 'resume') await context.aiRun.requireResumable(params.id);
-    // And Restart needs a run that is over, to start its work over (T37).
-    if (body.mode === 'restart') await context.aiRun.requireRestartable(params.id);
-    // Only then readiness, in every mode, so the refusals above answer as they did (F4); and
-    // before the runner is asked, because asking it is already telling it (ADR-0029 T78, L1).
-    await context.aiRun.requireReady(params.id);
+    // A work run is one action under the lock of the task (ADR-0029 T94, K6): the refusals of
+    // L1 in their order — a run works (T45), Resume needs a session that is over (T36), Restart
+    // a run that is over (T37), then readiness (T78) — then one runner is reserved, `launch` is
+    // written, and only then is the runner told. Asking a runner is already telling it.
     const request = {
       taskId: params.id,
       agent: body.agent,
       ...(body.model === undefined ? {} : { model: body.model }),
       ...(body.mode === undefined || body.mode === 'new' ? {} : { mode: body.mode }),
     };
-    const handed = context.runs.hand(request);
-    if (handed !== 'handed') throw noRunner(params.id, handed);
+    const handed = await context.aiRun.requestWork(
+      params.id,
+      { mode: body.mode ?? 'new', requestId: randomUUID() },
+      () => context.runs.reserve(request),
+    );
+    if (handed === undefined) throw noRunner(params.id);
     return request;
+  },
+
+  // The runner's word that the work run of a request did not begin (ADR-0029 T94, K8). Its
+  // message is cleaned before anything keeps it, and the body is never logged (K10).
+  'tasks.runFailure': (context, { params, body }) => {
+    const message =
+      body.message === undefined ? undefined : cleanMessage(body.message, context.session.token);
+    return context.aiRun.runFailure(params.id, {
+      requestId: body.requestId,
+      kind: body.kind,
+      ...(message === undefined ? {} : { message }),
+    });
   },
 
   // One text for one task, generated on every request from what the services read now and

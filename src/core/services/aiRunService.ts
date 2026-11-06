@@ -1,7 +1,9 @@
 import type { AiRun, AiRunReport } from '../model/aiRun.js';
 import type { EventSink, Storage } from '../ports.js';
 import { BoardError } from '../errors.js';
+import type { Launch, LaunchFailureKind } from '../model/launch.js';
 import type { Task } from '../model/task.js';
+import { isLaunchCurrent } from '../rules/launch.js';
 import { reasonsOf, taskBlocked } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
@@ -35,8 +37,52 @@ export interface AbandonInput {
   message: string;
 }
 
+/**
+ * One waiting runner, taken out of the waiting list for one request of work (ADR-0029 T94, K6).
+ * Nobody else can be handed it until it is sent or released.
+ */
+export interface RunnerReservation {
+  /** The runner declared `signals=run-failure` (K11). */
+  reports: boolean;
+  /** Tells the runner; false when its connection closed meanwhile, and nothing was sent. */
+  send(requestId: string): boolean;
+  /** Puts the runner back in the waiting list as it was; it was told nothing. */
+  release(): void;
+}
+
+export interface RequestWorkInput {
+  mode: 'new' | 'resume' | 'restart';
+  /** Made by the board for this request, never taken from a body (K2). */
+  requestId: string;
+}
+
+export interface RunFailureInput {
+  requestId: string;
+  kind: LaunchFailureKind;
+  /** Cleaned already (K10); absent when nothing was left of it. */
+  message?: string | undefined;
+}
+
 export interface AiRunService {
   begin(taskId: string, input: BeginInput): Promise<AiRun>;
+  /**
+   * `/run` of a work run, as one action under the lock of the task (ADR-0029 T94, K6): the
+   * refusals of L1, then a runner is reserved, then `launch` is written, then the runner is told.
+   * Resolves to the task as written, or to nothing when no runner waits: then nothing was written.
+   */
+  requestWork(
+    taskId: string,
+    input: RequestWorkInput,
+    reserve: () => RunnerReservation | undefined,
+  ): Promise<Task | undefined>;
+  /**
+   * A runner's report that the work run of a request did not begin (K8): a compare-and-set on the
+   * current `launch` and its `requestId`. The first accepted report stays.
+   */
+  runFailure(
+    taskId: string,
+    input: RunFailureInput,
+  ): Promise<{ recorded: boolean; launch: Launch }>;
   end(taskId: string, runId: number, input: EndInput): Promise<AiRun>;
   report(taskId: string, runId: number, input: AiRunReport): Promise<Task>;
   /**
@@ -139,6 +185,79 @@ export function createAiRunService({
   }
 
   return {
+    // One action under the lock of the task (ADR-0029 T94, K6). The lock is not re-entrant, so
+    // the refusals of L1 are checked here, in their order, and not through the `require*` above.
+    requestWork: (taskId, input, reserve) =>
+      locks.run(taskId, async () => {
+        const task = await requireTask(taskId);
+        if (task.aiRun?.state === 'working') throw inProgress(taskId);
+        if (input.mode === 'resume' && task.aiRun?.sessionId === undefined) throw noSession(taskId);
+        if (input.mode === 'restart' && task.aiRun === undefined) throw noRun(taskId);
+        await assertReady(taskId);
+
+        // No await between taking the runner and holding it: no other task can take it (I4).
+        const runner = reserve();
+        if (runner === undefined) return undefined;
+
+        const launch: Launch = {
+          requestId: input.requestId,
+          requestedAt: now(),
+          afterRunId: currentRunId(task.aiRun),
+          reports: runner.reports,
+        };
+        let written: Task;
+        try {
+          written = await storage.updateTask(taskId, { launch });
+        } catch (error) {
+          // Nothing was written and the runner was told nothing: it waits as it did.
+          runner.release();
+          throw error;
+        }
+
+        if (!runner.send(input.requestId)) {
+          // The runner went away during the write: no runner holds this request. If this write
+          // fails too, the launch names a request nobody holds, shown as waiting (K17).
+          await storage.updateTask(taskId, { launch: task.launch ?? null });
+          return undefined;
+        }
+        events?.publish({ type: 'task.updated', task: written });
+        return written;
+      }),
+
+    // A compare-and-set on the current launch and its request (K8); it never reads a runner and
+    // never changes aiRun.
+    runFailure: (taskId, input) =>
+      locks.run(taskId, async () => {
+        const task = await requireTask(taskId);
+        const launch = task.launch;
+        if (
+          launch === undefined ||
+          launch.requestId !== input.requestId ||
+          !isLaunchCurrent(task)
+        ) {
+          throw new BoardError(
+            'STALE_LAUNCH_REQUEST',
+            `The request is not the current start of task "${taskId}": another request came, ` +
+              'or a run has begun since.',
+            { id: taskId },
+          );
+        }
+        // The first accepted report stays, whatever a repeat says.
+        if (launch.failure !== undefined) return { recorded: false, launch };
+
+        const failed: Launch = {
+          ...launch,
+          failure: {
+            kind: input.kind,
+            ...(input.message === undefined ? {} : { message: input.message }),
+            at: now(),
+          },
+        };
+        const updated = await storage.updateTask(taskId, { launch: failed });
+        events?.publish({ type: 'task.updated', task: updated });
+        return { recorded: true, launch: failed };
+      }),
+
     requireResumable: (taskId) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
@@ -190,7 +309,10 @@ export function createAiRunService({
           ...(input.model !== undefined ? { model: input.model } : {}),
           startedAt: input.startedAt ?? now(),
         };
-        return (await write(taskId, newRun)).aiRun!;
+        // The run begins and the request it answers is gone, in one write, whoever begins (K5).
+        const updated = await storage.updateTask(taskId, { aiRun: newRun, launch: null });
+        events?.publish({ type: 'task.updated', task: updated });
+        return updated.aiRun!;
       }),
 
     end: (taskId, runId, input) =>

@@ -221,7 +221,7 @@ describe('the buttons that recover a run (T39)', () => {
       ]),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(await within(block()).findByText(/Claude Code is starting on T1/)).toBeVisible();
+    expect(await within(block()).findByText(/^Sent T1 to the runner /)).toBeVisible();
   });
 
   it('says in the confirmation what the board said when Restart is refused', async () => {

@@ -7,6 +7,11 @@ import {
   checkVerdictSchema,
   fromCheckSchema,
 } from '../../core/model/history.js';
+import {
+  LAUNCH_FAILURE_KINDS,
+  LAUNCH_MESSAGE_MAX_LENGTH,
+  launchSchema,
+} from '../../core/model/launch.js';
 import { taskIdSchema, taskSchema } from '../../core/model/task.js';
 import type { BlockingReason } from '../../core/rules/readiness.js';
 import { blockIdSchema, topicIdSchema } from '../../core/model/topic.js';
@@ -39,6 +44,8 @@ export {
   gitPathSchema,
   gitRefSchema,
   gitStatusSchema,
+  launchFailureSchema,
+  launchSchema,
   projectSchema,
   recommendationEditSchema,
   recommendationSchema,
@@ -63,6 +70,8 @@ export {
   CONTENT_FIELDS,
   DECISIONS,
   EVIDENCE_KINDS,
+  LAUNCH_FAILURE_KINDS,
+  LAUNCH_MESSAGE_MAX_LENGTH,
   RECOMMENDATION_BASES,
   VERSION_SOURCES,
 } from '../../core/model/index.js';
@@ -103,6 +112,9 @@ export type {
   GitFileChange,
   GitStatus,
   Evidence,
+  Launch,
+  LaunchFailure,
+  LaunchFailureKind,
   Finding,
   FromCheck,
   Project,
@@ -330,16 +342,29 @@ export const runRequestSchema = z
     mode: z.enum(['resume', 'restart']).optional(),
     kind: otherRunKindSchema.optional(),
     comment: researchCommentSchema.optional(),
+    /**
+     * The id of a request of work, for the runner's `run-failure` (ADR-0029 T94, K2). Sent only
+     * to a runner that declared `signals=run-failure`: an earlier runner parses this strictly and
+     * would drop the whole request (K11).
+     */
+    requestId: z.uuid().optional(),
   })
   .refine((request) => request.comment === undefined || request.kind === 'research', {
     message: 'A comment belongs to a research.',
     path: ['comment'],
+  })
+  .refine((request) => request.requestId === undefined || request.kind === undefined, {
+    message: 'Only a request of work has an id (ADR-0029 T94, K1).',
+    path: ['requestId'],
   });
 
 /**
  * What a runner says it can start, on `GET /runs?accepts=check,research` (D13, ADR-0029 T54): a
  * list of the kinds besides `work`, of closed form. Without it the runner is one of an earlier
  * version and is handed work only; every runner starts work.
+ *
+ * `signals=run-failure` says that it reports a work run that did not begin (ADR-0029 T94, K11).
+ * A closed list, parsed as strictly as `accepts`; without it the runner is of an earlier version.
  */
 export const runsQuerySchema = z.strictObject({
   accepts: z
@@ -347,6 +372,27 @@ export const runsQuerySchema = z.strictObject({
     .regex(/^(check|research)(,(check|research))*$/, 'A list of kinds: check, research')
     .transform((list) => [...new Set(list.split(','))] as ('check' | 'research')[])
     .optional(),
+  signals: z
+    .string()
+    .regex(/^run-failure(,run-failure)*$/, 'A list of signals: run-failure')
+    .transform((list) => [...new Set(list.split(','))] as 'run-failure'[])
+    .optional(),
+});
+
+/**
+ * Runner → the board: the work run of this request did not begin (ADR-0029 T94, K8). Not given
+ * to agents. The message is at most 500 characters on the wire; the board cleans it (K10).
+ */
+export const runFailureRequestSchema = z.strictObject({
+  requestId: z.uuid(),
+  kind: z.enum(LAUNCH_FAILURE_KINDS),
+  message: z.string().max(LAUNCH_MESSAGE_MAX_LENGTH).optional(),
+});
+
+/** `recorded: false` when a report was already there: the first one stays, and is answered. */
+export const runFailureResponseSchema = z.strictObject({
+  recorded: z.boolean(),
+  launch: launchSchema,
 });
 
 /** One reason a task may not start yet, as `readiness` computes it (ADR-0032 §7). */
@@ -534,5 +580,7 @@ export type RunTaskRequest = z.infer<typeof runTaskRequestSchema>;
 export type RunStarted = z.infer<typeof runStartedSchema>;
 export type RunRequest = z.infer<typeof runRequestSchema>;
 export type RunsQuery = z.infer<typeof runsQuerySchema>;
+export type RunFailureRequest = z.infer<typeof runFailureRequestSchema>;
+export type RunFailureResponse = z.infer<typeof runFailureResponseSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

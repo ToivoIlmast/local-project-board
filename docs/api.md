@@ -390,6 +390,43 @@ Response — 200, application/json:
 }
 ```
 
+### POST /api/v1/tasks/:id/run-failure
+
+Runner: the work run of this request did not begin; recorded once, on the current request only
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/run-failure
+
+Request body:
+
+```json
+{
+  "requestId": "b7e1c0d2-3f4a-4b5c-9d6e-7f8091a2b3c4",
+  "kind": "claude-missing",
+  "message": "Claude Code was not found: there is no `claude` in the PATH."
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "recorded": true,
+  "launch": {
+    "requestId": "b7e1c0d2-3f4a-4b5c-9d6e-7f8091a2b3c4",
+    "requestedAt": "2026-09-21T09:00:00.000Z",
+    "afterRunId": 0,
+    "reports": true,
+    "failure": {
+      "kind": "claude-missing",
+      "message": "Claude Code was not found: there is no `claude` in the PATH.",
+      "at": "2026-09-21T09:00:01.000Z"
+    }
+  }
+}
+```
+
 ## AI workflow
 
 ### GET /api/v1/workflow
@@ -1712,6 +1749,7 @@ nothing else. The code is one of:
 - NO_SESSION_TO_RESUME
 - NO_RUN_TO_RESTART
 - TASK_BLOCKED
+- STALE_LAUNCH_REQUEST
 - AI_RUN_NOT_CLEARABLE
 - INVALID_REQUEST
 - VERSION_NOT_FOUND

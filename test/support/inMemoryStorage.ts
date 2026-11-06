@@ -116,7 +116,7 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
   /** The task as `patch` leaves it, its place checked, and nothing written; inside `exclusive`. */
   async function patched(id: string, patch: TaskPatch): Promise<Task> {
     const task = requireTask(id);
-    const { branch, workflow, aiRun, topic, block, dependsOn, ...rest } = patch;
+    const { branch, workflow, aiRun, launch, topic, block, dependsOn, ...rest } = patch;
     await assertPlaced(task, { topic, block, dependsOn });
     const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
     if (topic === null) delete updated.topic;
@@ -131,6 +131,8 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     else if (workflow !== undefined) updated.workflow = { ...workflow };
     if (aiRun === null) delete updated.aiRun;
     else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
+    if (launch === null) delete updated.launch;
+    else if (launch !== undefined) updated.launch = structuredClone(launch);
     return updated;
   }
 

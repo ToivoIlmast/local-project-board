@@ -400,6 +400,41 @@ export const routes = {
     ai: { include: false },
   }),
 
+  'tasks.runFailure': route({
+    id: 'tasks.runFailure',
+    method: 'POST',
+    path: '/tasks/:id/run-failure',
+    summary:
+      'Runner: the work run of this request did not begin; recorded once, on the current request only',
+    params: taskParams,
+    request: s.runFailureRequestSchema,
+    response: json(s.runFailureResponseSchema),
+    example: {
+      params: { id: 'T12' },
+      body: {
+        requestId: 'b7e1c0d2-3f4a-4b5c-9d6e-7f8091a2b3c4',
+        kind: 'claude-missing',
+        message: 'Claude Code was not found: there is no `claude` in the PATH.',
+      },
+      response: {
+        recorded: true,
+        launch: {
+          requestId: 'b7e1c0d2-3f4a-4b5c-9d6e-7f8091a2b3c4',
+          requestedAt: '2026-09-21T09:00:00.000Z',
+          afterRunId: 0,
+          reports: true,
+          failure: {
+            kind: 'claude-missing',
+            message: 'Claude Code was not found: there is no `claude` in the PATH.',
+            at: '2026-09-21T09:00:01.000Z',
+          },
+        },
+      },
+    },
+    // Sent by `local-project-board claude --wait`, never by an agent at work (ADR-0029 T94).
+    ai: { include: false },
+  }),
+
   'ai-run.begin': route({
     id: 'ai-run.begin',
     method: 'POST',

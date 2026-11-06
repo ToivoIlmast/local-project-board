@@ -1,5 +1,6 @@
 import type { RequestHandler, Response } from 'express';
 import { parseQuery, routes, type RunRequest, type RunsQuery } from '../../contract/v1/index.js';
+import type { RunnerReservation } from '../../core/services/aiRunService.js';
 import { HttpError, invalidRequest } from './errors.js';
 import { hasSessionToken } from './security.js';
 import { SSE_HEARTBEAT_MS, SSE_RETRY_MS } from './sse.js';
@@ -23,7 +24,15 @@ export interface RunDispatch {
    * Hands the request to one waiting runner that can start its kind, and lets it go. `nobody`
    * when none waits, `outdated` when some wait but none of them can start this kind.
    */
-  hand(request: Omit<RunRequest, 'type'>): Handed;
+  hand(request: Omit<RunRequest, 'type' | 'requestId'>): Handed;
+  /**
+   * A work run (ADR-0029 T94, K6): takes one waiting runner out of the list in one synchronous
+   * step, and tells it nothing yet. Nothing when none waits. The board writes `launch` between
+   * this and `send`; a runner that declared `signals` is then sent the request with its id.
+   */
+  reserve(
+    request: Omit<RunRequest, 'type' | 'requestId' | 'kind' | 'comment'>,
+  ): RunnerReservation | undefined;
   /** The route a runner waits on; only the holder of the token may wait there. */
   handler(token: string, options?: { heartbeatMs?: number | undefined }): RequestHandler;
 }
@@ -35,6 +44,10 @@ type RunKind = NonNullable<RunRequest['kind']> | 'work';
 interface Waiting {
   response: Response;
   accepts: ReadonlySet<RunKind>;
+  /** It declared `signals=run-failure` (K11): only such a runner is sent a `requestId`. */
+  reports: boolean;
+  /** Its connection closed: whatever is sent to it now is lost, so nothing is. */
+  closed: boolean;
 }
 
 export function createRunDispatch(): RunDispatch {
@@ -57,6 +70,31 @@ export function createRunDispatch(): RunDispatch {
       return 'handed';
     },
 
+    reserve(request) {
+      // Every runner starts work; the one that came last is the one the person just started.
+      const index = waiting.length - 1;
+      const runner = waiting[index];
+      if (runner === undefined) return undefined;
+      waiting.splice(index, 1);
+      return {
+        reports: runner.reports,
+        send(requestId) {
+          if (runner.closed) return false;
+          // An earlier runner parses the event strictly: it gets exactly the one it knows.
+          const event: RunRequest = {
+            type: 'run.requested',
+            ...request,
+            ...(runner.reports ? { requestId } : {}),
+          };
+          runner.response.end(`data: ${JSON.stringify(event)}\n\n`);
+          return true;
+        },
+        release() {
+          if (!runner.closed) waiting.splice(Math.min(index, waiting.length), 0, runner);
+        },
+      };
+    },
+
     handler(token, { heartbeatMs = SSE_HEARTBEAT_MS } = {}) {
       return (request, response) => {
         // A GET needs no token anywhere else. This one does: whoever waits here is told to
@@ -66,19 +104,27 @@ export function createRunDispatch(): RunDispatch {
         }
         const query = parseQuery(routes['runs.stream'], request.query);
         if (!query.ok) throw invalidRequest(query.issues);
-        const { accepts = [] } = query.data as RunsQuery;
+        const { accepts = [], signals = [] } = query.data as RunsQuery;
         response.status(200).set({
           'Content-Type': 'text/event-stream; charset=utf-8',
           Connection: 'keep-alive',
         });
         response.flushHeaders();
         response.write(`retry: ${SSE_RETRY_MS}\n\n`);
-        waiting.push({ response, accepts: new Set<RunKind>(['work', ...accepts]) });
+        const runner: Waiting = {
+          response,
+          accepts: new Set<RunKind>(['work', ...accepts]),
+          reports: signals.includes('run-failure'),
+          closed: false,
+        };
+        waiting.push(runner);
 
         const heartbeat = setInterval(() => response.write(':ping\n\n'), heartbeatMs);
         heartbeat.unref();
         const stop = (): void => {
           clearInterval(heartbeat);
+          // Also when it is reserved and out of the list: it must not be sent nor put back.
+          runner.closed = true;
           forget(response);
         };
         request.on('close', stop);

@@ -10,6 +10,7 @@ import { identify, procProbe } from './processProbe.js';
 import { startCheckSession, type Research } from './checkSession.js';
 import { deliverPendingCheckEnds } from './checkEnd.js';
 import { deliverEnd, deliverPendingEnds } from './runEnd.js';
+import { NotBegun, notBegun } from './runFailure.js';
 import { boardMessage, findRunningBoard, get, post } from './running.js';
 import type { RuntimeState } from './runtime.js';
 import { spawnSession } from './spawnSession.js';
@@ -102,10 +103,18 @@ export async function startSession(
   // Resume continues the session the board recorded for the last run, never a new one (T36);
   // Restart, like a new run, always makes a new one (T37).
   const resuming = mode === 'resume';
-  const sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
   const prompt = resuming ? continuationPrompt(id, boardUrl) : claudeCodePrompt(id, boardUrl);
 
-  const runId = await beginRun(board, id, sessionId, model, mode);
+  // Two stages, split at the successful begin (ADR-0029 T94, K9): whatever stops the start
+  // before it is a `NotBegun`, which `claude --wait` may report; nothing after it ever is.
+  let sessionId: string;
+  let runId: number;
+  try {
+    sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
+    runId = await beginRun(board, id, sessionId, model, mode);
+  } catch (error) {
+    throw notBegun(error);
+  }
 
   // The prompt stays the last argument.
   const args = [
@@ -177,7 +186,8 @@ async function sessionToResume(board: RuntimeState, taskId: string): Promise<str
   const task = (await answer.json()) as { aiRun?: { sessionId?: unknown; state?: unknown } };
   const sessionId = task.aiRun?.sessionId;
   if (typeof sessionId !== 'string' || task.aiRun?.state === 'working') {
-    throw new Error(`Task ${taskId} has no finished session of Claude Code to resume.`);
+    const text = `Task ${taskId} has no finished session of Claude Code to resume.`;
+    throw new NotBegun('resume-refused', text, text);
   }
   return sessionId;
 }
@@ -223,11 +233,14 @@ async function beginRun(
     );
   }
   if (!response.ok) {
-    throw new Error(await boardMessage(response));
+    // The board's own words: fixed text with task and topic ids, which the page may show (K10).
+    const text = await boardMessage(response);
+    throw new NotBegun('begin-refused', text, text);
   }
   const body = (await response.json()) as { runId?: number };
   if (typeof body.runId !== 'number') {
-    throw new Error(`The board returned an unexpected response for begin on ${taskId}.`);
+    const text = `The board returned an unexpected response for begin on ${taskId}.`;
+    throw new NotBegun('begin-refused', text, text);
   }
   return body.runId;
 }

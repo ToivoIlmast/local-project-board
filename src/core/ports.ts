@@ -13,6 +13,7 @@ import type {
   GitCommit,
   GitDiff,
   GitStatus,
+  Launch,
   Report,
   RepoState,
   ResearchReportContent,
@@ -58,6 +59,8 @@ export interface TaskPatch {
   branch?: string | null | undefined;
   workflow?: TaskWorkflowOverrides | null | undefined;
   aiRun?: AiRun | null | undefined;
+  /** The board's record of the last request of a work run (ADR-0029 T94); null removes it. */
+  launch?: Launch | null | undefined;
   topic?: string | null | undefined;
   block?: string | null | undefined;
   dependsOn?: string[] | null | undefined;

@@ -3,6 +3,7 @@ export * from './document.js';
 export * from './git.js';
 export * from './history.js';
 export * from './language.js';
+export * from './launch.js';
 export * from './project.js';
 export * from './report.js';
 export * from './snapshot.js';

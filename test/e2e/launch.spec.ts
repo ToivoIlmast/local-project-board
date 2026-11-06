@@ -38,7 +38,7 @@ test('the dialog of a start of Claude Code is used from the keyboard, and the ru
   await dialog.getByRole('button', { name: 'Start' }).focus();
   await page.keyboard.press('Enter');
 
-  await expect(details.getByText(/^Claude Code is starting on T1 /)).toBeVisible();
+  await expect(details.getByText(/^Sent T1 to the runner /)).toBeVisible();
   await expect(dialog).toBeHidden();
   await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();
   expect(await runner.request).toEqual({

@@ -248,7 +248,7 @@ describe('the menu grows without being rebuilt', () => {
 
 describe('Send to AI → Claude Code (T27)', () => {
   const claudeItem = () => screen.getByRole('button', { name: 'Claude Code' });
-  const STARTING = /^Claude Code is starting on T1 in the terminal where/;
+  const STARTING = /^Sent T1 to the runner in the terminal where/;
 
   async function sendToClaude(rendered: RenderedBoard): Promise<void> {
     await rendered.user.click(sendMenu());
@@ -282,7 +282,7 @@ describe('Send to AI → Claude Code (T27)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T2' });
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
 
-    await within(panel).findByText(/^Claude Code is starting on T2 /);
+    await within(panel).findByText(/^Sent T2 to the runner /);
     expect(rendered.board.runs).toEqual([{ taskId: 'T2', agent: 'claude-code' }]);
   });
 
@@ -354,7 +354,9 @@ describe('Send to AI → Claude Code (T27)', () => {
     const release = rendered.board.hold('runTask');
 
     await sendToClaude(rendered);
-    const start = within(screen.getByRole('dialog')).getByRole('button', { name: /^Start/ });
+    const start = within(screen.getByRole('dialog')).getByRole('button', {
+      name: /^(Start|Sending)/,
+    });
     expect(start).toBeDisabled();
     await rendered.user.click(start);
     release();

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isTaskId } from '../rules/ids.js';
 import { isValidRank } from '../rules/rank.js';
 import { aiRunSchema } from './aiRun.js';
+import { launchSchema } from './launch.js';
 import { blockIdSchema, topicIdSchema } from './topic.js';
 import { taskWorkflowSchema } from './workflow.js';
 
@@ -26,6 +27,8 @@ export const taskSchema = z
     workflow: taskWorkflowSchema.optional(),
     /** What the last agent on this task reported about its run (T27). */
     aiRun: aiRunSchema.optional(),
+    /** The last request of a work run handed to a runner; the board's alone (ADR-0029 T94). */
+    launch: launchSchema.optional(),
     /** Where the task is placed (ADR-0032 §3). None of the three is content: no version (ADR-0030 §1). */
     topic: topicIdSchema.optional(),
     /** Only together with `topic`; that the topic holds the block is checked by the storage. */

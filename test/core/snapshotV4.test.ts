@@ -470,3 +470,45 @@ describe('the restore helper hides no format error', () => {
     expect(await target.storage.listTopics()).toEqual([]);
   });
 });
+
+describe('export v4 keeps the launch of a task as stored (ADR-0029 T94, K15, INVARIANT)', () => {
+  const launch = {
+    requestId: 'b7e1c0d2-3f4a-4b5c-9d6e-7f8091a2b3c4',
+    requestedAt: '2026-11-06T09:00:00.000Z',
+    afterRunId: 2,
+    reports: true,
+    failure: {
+      kind: 'begin-refused' as const,
+      message: 'Task "T1" is blocked.',
+      at: '2026-11-06T09:00:01.000Z',
+    },
+  };
+
+  it('holds the launch in tasks, unchanged, and stays formatVersion 4: the tasks as listTasks reads them', async () => {
+    const { storage } = await board();
+    await storage.createTask(newTask('Ship it'));
+    await storage.createTask(newTask('Other'));
+    await storage.updateTask('T1', { launch });
+
+    const snapshot = boardSnapshotSchema.parse(await exported(storage));
+
+    expect(snapshot.formatVersion).toBe(4);
+    expect(snapshot.tasks.find((task) => task.id === 'T1')?.launch).toEqual(launch);
+    expect(snapshot.tasks.find((task) => task.id === 'T2')).not.toHaveProperty('launch');
+    expect(snapshot.tasks).toEqual(JSON.parse(JSON.stringify(await storage.listTasks())));
+  });
+
+  it('keeps it through a restore of the export, as a field of the task and not as an unknown one', async () => {
+    const { storage } = await board();
+    await storage.createTask(newTask('Ship it'));
+    await storage.updateTask('T1', { launch });
+
+    const target = await tmpDir();
+    await restoreSnapshot(target, await exported(storage));
+    const { storage: restored } = await board(target);
+
+    const task = await restored.getTask('T1');
+    expect(task?.launch).toEqual(launch);
+    expect(task?.extra).toBeUndefined();
+  });
+});
