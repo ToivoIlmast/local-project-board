@@ -35,6 +35,11 @@ export const taskSchema = z
     block: blockIdSchema.optional(),
     /** Tasks this one waits for, in the form of `tasks.idPrefix`, which the storage checks. */
     dependsOn: z.array(taskIdSchema).optional(),
+    /**
+     * When the task entered `done`; written on the way in and removed on the way out, under the
+     * lock of the task (T96). A task done before it existed here has none: it is not made up.
+     */
+    doneAt: isoDateTimeSchema.optional(),
     createdAt: isoDateTimeSchema,
     /** Updates are last-write-wins (ADR-0018). */
     updatedAt: isoDateTimeSchema,

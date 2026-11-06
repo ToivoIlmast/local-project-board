@@ -7,7 +7,7 @@ import type { EventSink, Storage } from '../ports.js';
 import { applyContentPatch, changedFields, contentOf } from '../rules/history.js';
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import type { BlockingReason } from '../rules/readiness.js';
-import { assertKnownStatus } from '../rules/status.js';
+import { assertKnownStatus, isDone } from '../rules/status.js';
 import { assertContentHash, assertFromCheck, planSync } from './taskHistory.js';
 import { readBoardReadiness } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
@@ -19,6 +19,8 @@ export interface TaskServiceOptions {
   statuses: string[];
   /** The locks of the AI run lifecycle, shared with the aiRun service (T45). */
   locks?: TaskLocks | undefined;
+  /** The clock of `doneAt`, as an ISO datetime; the time of the machine by default. */
+  now?: (() => string) | undefined;
 }
 
 export interface CreateTaskInput {
@@ -81,6 +83,7 @@ export function createTaskService({
   events,
   statuses,
   locks = createTaskLocks(),
+  now = () => new Date().toISOString(),
 }: TaskServiceOptions): TaskService {
   async function column(status: string): Promise<Task[]> {
     return (await storage.listTasks()).filter((task) => task.status === status);
@@ -90,6 +93,16 @@ export function createTaskService({
     const task = await storage.getTask(id);
     if (!task) throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
     return task;
+  }
+
+  /**
+   * What a change of status does to `doneAt` (T96): entering `done` writes it, leaving removes it,
+   * any other change, and the same status again, leaves it as it is. Called inside the lock.
+   */
+  function doneAtFor(current: Task, status: string | undefined): { doneAt?: string | null } {
+    if (status === undefined || status === current.status) return {};
+    if (isDone({ status })) return { doneAt: now() };
+    return isDone(current) ? { doneAt: null } : {};
   }
 
   /** Who is told what a write did: the versions it appended, then the task itself. */
@@ -134,6 +147,7 @@ export function createTaskService({
     const changed = changedFields(before, after);
     const write = {
       ...patch,
+      ...doneAtFor(current, patch.status),
       // A plain status change lands at the end of the new column; /move places it precisely.
       ...(movedToAnotherColumn
         ? { rank: rankForPosition(await column(patch.status as string), {}, id) }
@@ -239,19 +253,24 @@ export function createTaskService({
         patch.body !== undefined ||
         patch.labels !== undefined ||
         patch.ifContentHash !== undefined ||
-        patch.fromCheck !== undefined;
+        patch.fromCheck !== undefined ||
+        patch.status !== undefined;
       return locked ? locks.run(id, () => change(id, patch)) : change(id, patch);
     },
 
-    async move(id, { status, after, before }) {
-      await require(id);
-      assertKnownStatus(status, statuses);
-      const task = await storage.updateTask(id, {
-        status,
-        rank: rankForPosition(await column(status), { after, before }, id),
+    move(id, { status, after, before }) {
+      // A change of status takes the lock of the task, as `doneAt` goes with it (T96).
+      return locks.run(id, async () => {
+        const current = await require(id);
+        assertKnownStatus(status, statuses);
+        const task = await storage.updateTask(id, {
+          status,
+          rank: rankForPosition(await column(status), { after, before }, id),
+          ...doneAtFor(current, status),
+        });
+        events.publish({ type: 'task.updated', task });
+        return task;
       });
-      events.publish({ type: 'task.updated', task });
-      return task;
     },
 
     async remove(id) {

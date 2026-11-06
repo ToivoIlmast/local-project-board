@@ -705,6 +705,32 @@ describe('markdown storage: workflow settings', () => {
   });
 });
 
+describe('task.md and doneAt (T96)', () => {
+  const file = (status: string, doneAt = ''): string =>
+    `---\nid: T7\ntitle: Handwritten\nstatus: ${status}\nrank: a0\nlabels: []\n${doneAt}createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\nBody.\n`;
+
+  it('reads and writes a done task without `doneAt` byte for byte, and makes none (INVARIANT)', () => {
+    const parsed = parseTask('T7', file('done'));
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.doneAt).toBeUndefined();
+    expect(parsed.task.extra).toBeUndefined();
+    expect(serializeTask(parsed.task)).toBe(file('done'));
+  });
+
+  it('reads and writes `doneAt` byte for byte, and not as an unknown field', () => {
+    const text = file('done', 'doneAt: 2026-11-06T10:00:00.000Z\n');
+    const parsed = parseTask('T7', text);
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.doneAt).toBe('2026-11-06T10:00:00.000Z');
+    expect(parsed.task.extra).toBeUndefined();
+    expect(serializeTask(parsed.task)).toBe(text);
+  });
+
+  it('does not read a `doneAt` that is not a datetime', () => {
+    expect(parseTask('T7', file('done', 'doneAt: yesterday\n'))).toHaveProperty('error');
+  });
+});
+
 describe('task.md and aiRun runner fields (T31)', () => {
   let root2: string;
   let storage2: Storage;
