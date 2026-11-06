@@ -390,3 +390,303 @@ What this costs: nothing new to run or configure. What it does not give:
 - An earlier version of the board applies no gate.
 - The gate is on the start of a run, not on the task. An agent that holds the token can still
   read the task, work on it and change tasks through the API (ADR-0008, ADR-0032 §9).
+
+## Amendment (T94, 2026-11-06, accepted): a refused start of a work run is reported to the board
+
+Status of this amendment: **accepted** (2026-11-06). The owner chose, for T94 (B3/C1), a separate
+signal from the runner to the board. The rules are numbered K1–K17. This amendment
+replaces nothing above. For a **work** run only, it adds to:
+
+- the rule of T27 "Nothing on the board changes": a request that is handed now writes `launch`
+  (K5); a request that is refused still changes nothing;
+- L5 of T78, the sentence "No field is added to any of them": the query `signals`, the field
+  `requestId` of `run.requested` and the route `run-failure` are added (K8, K11);
+- the last bullet of L5, "Until T94 … seen only in the runner's terminal": for a runner that
+  declares `signals`, a refusal of begin is now also seen on the page (K9, K12).
+
+**Why.** `POST /tasks/:id/run` writes nothing, and the board keeps no pending request. `200` means
+"handed to one waiting runner" and nothing more. After that the runner can still stop before the
+session starts. This can happen in three places, and the runner reports it only in its own terminal:
+
+- `findClaude` finds no `claude` in the PATH (it was there when the runner began to wait);
+- `sessionToResume` finds no finished session (Resume of a task that has none any more);
+- `beginRun` is refused: `TASK_BLOCKED` (T78 L2), `AI_RUN_IN_PROGRESS`, `NO_SESSION_TO_RESUME`,
+  `NO_RUN_TO_RESTART`, `400`.
+
+The page says "Claude Code is starting …", and nothing follows. `end` cannot carry these failures:
+it needs a run, and a run exists only after a successful begin.
+
+- **K1. Scope: `kind: work` only.** A check and a research (T46, T54) are **not changed**:
+  - their request has no `requestId`;
+  - the board writes no `launch` for them;
+  - the runner sends no `run-failure` for them;
+  - their `/run` still uses `hand()` as before;
+  - a start that fails is still seen only in the terminal.
+
+  Nothing in K2–K17 applies to them.
+- **K2. A request has an id.** `/run` of a work run makes a `requestId` (UUID v4) for each request it
+  hands. The board makes the id; it is never taken from a body. The id is carried in `launch` (K3),
+  and in `run.requested` only for a runner that declared `signals` (K11). **The answer of `/run` does
+  not carry it:** `runStartedSchema` is unchanged. The page reads the request from the task (K12),
+  and a page loaded from an earlier board parses that answer strictly.
+- **K3. `launch` in the task.** This is one optional field, written only by the board:
+
+  ```
+  launch?: {                      // strict
+    requestId: uuid,
+    requestedAt: iso datetime,
+    afterRunId: int >= 0,         // runId of the task's run when the request was made; 0 if none
+    reports: boolean,             // the runner that took it declared `signals=run-failure` (K11)
+    failure?: {                   // strict
+      kind: 'claude-missing' | 'resume-refused' | 'begin-refused' | 'runner-error',
+      message?: string,           // one line, 1–500 characters after cleaning (K10)
+      at: iso datetime
+    }
+  }
+  ```
+
+  - It is stored in `task.md` as the frontmatter key `launch`, which is one more name in `KNOWN` of
+    the task file. So it survives a reload and a restart.
+  - **It is not content** (ADR-0030 §1): it makes no version, it is not in `contentHash`, and
+    `contentOf` does not read it. `PATCH /tasks/:id` does not accept it, because the body is strict.
+    It is not given to agents.
+  - Like every write of the storage, a write of `launch` sets `updatedAt`, as a write of `aiRun`
+    already does.
+- **K4. When `launch` is current: one predicate, not a state.** A `launch` is *current* when both
+  hold:
+  - `currentRunId(task.aiRun) === launch.afterRunId`;
+  - `task.aiRun?.state !== 'working'`.
+
+  Otherwise it is *stale*.
+  - A stale `launch` is shown as nothing (K12). `run-failure` refuses it (K8). Nothing acts on it.
+    It stays in the file until the next request replaces it.
+  - `runId` changes only through begin: `end`, `report` and `abandon` keep it, and `PATCH` can
+    only clear an `aiRun` that has no `runId` (T45). So "a run has begun since this request" is
+    exactly "`runId` has moved". This holds for every board version and every begin: `claude <ID>`
+    and begins on an earlier board (K14) too.
+  - There is no status field, no timer, no lease and no version marker. "Waiting" is a current
+    `launch` without `failure` (T45: the age of a request is not evidence).
+- **K5. Who writes `launch`, and nobody else does.**
+  - **`/run` of a work run** writes it whole for each request it hands (K6). It replaces the
+    previous `launch`, together with that request's failure.
+  - **`run-failure`** adds `failure` once, to the current `launch` with the same `requestId` (K8).
+  - **Begin removes it.** This happens in the same `updateTask` that makes `aiRun.state: working`
+    (`{aiRun, launch: null}`, one file write), whoever calls begin. This keeps the file tidy;
+    K4 already makes it stale.
+  - Every other write of the task leaves it as it is. The storage reads and writes a task in one
+    ordered section, and no other patch names `launch`.
+- **K6. The order of `/run` for a work run: one action under the lock of the task.** The action
+  runs under the same `TaskLocks` as begin, end, abandon and `run-failure` (T45):
+  1. **The refusals of L1, in their order:** `404`, `AI_RUN_IN_PROGRESS`, then
+     `NO_SESSION_TO_RESUME` / `NO_RUN_TO_RESTART`, then `TASK_BLOCKED`. The lock is not
+     re-entrant, so these checks run inside the action and not as the public `require*`, each of
+     which takes the lock again.
+  2. **Reserve a runner.** The dispatcher takes one waiting runner that accepts work out of the
+     waiting list, in one synchronous step. It records whether that runner declared `signals`. If
+     none waits, the answer is `409 NO_AGENT_RUNNER`, and nothing is written.
+  3. **Write `launch`** with a new `requestId`, `afterRunId` and `reports` of the reserved runner.
+     The write either replaces `task.md` whole or fails and leaves it as it was (`writeFileAtomic`).
+     If it fails, the runner goes back to the waiting list as it was, and the answer is `500`. No
+     runner was told.
+  4. **Send** `run.requested` to the reserved runner and end its stream. The event carries
+     `requestId` only if the runner declared `signals` (K11).
+     - If that runner's connection closed during step 3, nothing is sent. The previous `launch` is
+       written back, and the answer is `409 NO_AGENT_RUNNER`.
+     - If writing it back fails, the answer is `500`. `launch` then names a request that no runner
+       holds, and the page shows it as in K12. This is the one case that needs two failures at
+       once; see K17.
+  5. **Publish `task.updated`, answer `200`, and release the lock.**
+
+  A check and a research keep `hand()` (K1). The dispatcher splits "pick" and "send" only for work.
+- **K7. What K6 guarantees.**
+  - **I1.** A runner learns of request *n* only in step 4. By then `launch(n)` is on disk.
+  - **I2.** All that runner then sends about *n* (begin, `run-failure`) arrives after step 4. It
+    takes the same lock and so runs after the action of *n*. The lock is a promise chain in the
+    order of the calls (`taskLocks.ts`), so the runner always finds `launch(n)` or what came after
+    it, never what came before.
+  - **I3.** No `launch` is written for a request that was refused. The one exception is the double
+    failure of K6 step 4.
+  - **I4.** Two `/run` of one task are serialized. Two `/run` of different tasks cannot take the
+    same runner, because step 2 has no `await`.
+  - **I5.** At most one `launch` is current per task, and it belongs to the last handed request.
+- **K8. `POST /api/v1/tasks/:id/run-failure`: runner → board; not given to agents.**
+  - **Auth:** the session token, as for every change (`Authorization: Bearer`, ADR-0008), and the
+    Host/Origin checks. Without the token: `401 UNAUTHORIZED`.
+  - **Body** (strict): `{requestId: uuid, kind: 'claude-missing' | 'resume-refused' |
+    'begin-refused' | 'runner-error', message?: string}`. `message` is at most 500 characters on
+    the wire; above that the answer is `400`.
+  - **Under the lock of the task**, a compare-and-set:
+
+    | State under the lock | Answer | Writes |
+    |---|---|---|
+    | `launch` current (K4), same `requestId`, no `failure` | `200 {recorded: true, launch}` | `failure`; `task.updated` |
+    | current, same `requestId`, `failure` already there (any `kind` or `message`) | `200 {recorded: false, launch}`: the first accepted report wins; the answer shows the stored one | nothing |
+    | no `launch`; another `requestId`; or `launch` stale (a run has begun since) | `409 STALE_LAUNCH_REQUEST` (new code; fixed text; only `{id}` echoed) | nothing |
+    | task missing | `404 TASK_NOT_FOUND` | nothing |
+    | body malformed | `400 INVALID_REQUEST` | nothing |
+
+  - **It never reads a runner and never changes `aiRun`.**
+- **K9. The runner reports, and only when nothing began.** For a request that carries a
+  `requestId`, `claude --wait` sends `run-failure` when the start stopped **before `beginRun`
+  returned 2xx with a run**. The four kinds are:
+  - `claude-missing`: `findClaude` failed;
+  - `resume-refused`: the board answered `sessionToResume`, and the answer has no finished session;
+  - `begin-refused`: the board answered begin with a non-2xx, or with a body that is not a run;
+  - `runner-error`: any other failure before a successful begin, including a board that did not
+    answer.
+
+  Then the runner waits again, as it does now, and the text still goes to its terminal.
+  - **Two stages.** The start is split at the successful begin. For one request, at most one of
+    "begin succeeded" and "`run-failure` sent" happens. A failure after begin is never reported
+    this way.
+  - **T33 stands:** begin comes before spawn, and `end` is always sent for a run that began. A spawn
+    that fails after begin is still `end{launchError}`.
+  - **A begin that was taken, whose answer was lost:** the report finds a stale `launch` (K4) and is
+    answered `409`, so it is not shown as a failure.
+  - **Delivery:** up to three tries, 500 ms apart, on a network error, a timeout or `5xx`. Before
+    each try the runner looks for the board again in `runtime.json`, as `end` does (T45). A board
+    restarted on the same `.board/` still holds `launch` and can take the report. `2xx`, `400`,
+    `401`, `404` and `409` end the delivery. If the report is not delivered, the runner says so in
+    its terminal, and the page keeps showing the request as in K12.
+  - **No journal:** a journal serves a runner that may die (T45). This runner is alive and tells the
+    person in its terminal.
+  - `claude <ID>` has no request and sends nothing: its error is the answer in its own terminal.
+- **K10. What a message may hold.**
+  - **The runner composes `message`** only from fixed words of its own, or from the `message` of a
+    board answer, which is fixed text with task and topic ids. It never uses the `error.message` of
+    an exception, the environment, `argv`, the prompt, a path or the token (ADR-0008 T70). For
+    `runner-error` the text is always "The runner could not start Claude Code; see its terminal."
+    The runner cuts the text to 500 characters before it sends it.
+  - **The board cleans the text** before it stores it:
+    - control characters, newlines included, become spaces;
+    - any occurrence of the session token becomes `[token]`;
+    - the result is trimmed;
+    - if nothing is left, no `message` is stored.
+  - The body is never logged. The page shows the message as text, never as HTML.
+- **K11. Compatibility is declared like `accepts` (D13), not by a version.**
+  - **A runner declares it:** `GET /runs?accepts=check,research&signals=run-failure`. `signals` is a
+    closed list (today one value), parsed strictly like `accepts`. A runner without it is of an
+    earlier version.
+  - **`run.requested` carries `requestId` only for a runner that declared it.** For any other
+    runner, the event is exactly the old one. The `runRequestSchema` of an earlier runner is
+    strict: a field it does not know makes the runner drop the event after the stream has ended,
+    and the request would be lost while the page says "handed" (the gap D13 closed for `kind`).
+  - **For an earlier runner, the board still writes `launch`, with `reports: false`.** That runner
+    uses begin, end and abandon exactly as before, and it sends no `run-failure`.
+  - **A newer runner with an earlier board:**
+    - The earlier board answers `400 INVALID_REQUEST` to the unknown query name. Its query schema
+      is strict, and it parses the query before it counts the runner as waiting, so nothing can
+      have been handed.
+    - The runner then asks again at once, without `signals`. It tells the person once: "This board
+      is of an earlier version: it will not show a failed start on the page." It does not offer
+      `signals` again to the board with that token, and it forgets this when it finds a board with
+      another token.
+    - This is one step, not a loop, and no request is lost.
+    - Every other answer of `GET /runs` keeps today's handling. This amendment does not change it.
+  - No `formatVersion`, no handshake route and no acknowledgement of the request are added.
+- **K12. The page** reads `task.launch` and `task.aiRun`, and nothing else. It keeps no state of its
+  own about a request (ADR-0025). Its cases are:
+
+  | Board state | The page shows |
+  |---|---|
+  | `aiRun.state: working` | the existing display, and nothing of `launch`. Only this says that Claude Code has started. |
+  | `launch` stale, or none | nothing about a request |
+  | `launch` current, no `failure`, `reports: true` | neutral and static: "Sent to a runner at {time}. Claude Code has not begun, and the runner has reported no problem. The board cannot tell whether the runner is still there; if nothing begins, look at its terminal." |
+  | `launch` current, no `failure`, `reports: false` | "Sent at {time} to a runner of an earlier version, which cannot report a failed start. If nothing begins, look at its terminal." |
+  | `launch` current, with `failure` | "Claude Code did not start", then a text of the page for its `kind`, the runner's `message` as a detail, and the time |
+
+  - No spinner, no "is starting", no elapsed-time judgement. A request without a report is never
+    called a failure.
+  - Start stays available in every case except `working`. A new request replaces `launch`.
+  - The note after a `200` from `/run` says that the request was sent to a runner, not that Claude
+    Code is starting.
+- **K13. Races and repeats, as K4–K9 decide them.** Every case below runs under the lock of the
+  task, in the order the actions took it.
+
+  | Order | Result |
+  |---|---|
+  | `/run`(n) → `run-failure`(n) | recorded |
+  | `/run`(n) → `run-failure`(n) → the same again, or with another `kind` or `message` | `200 recorded: false`; the first report stays |
+  | `/run`(n) → begin (any caller) → `run-failure`(n) | `409`: a run has begun; the page shows it |
+  | `/run`(n) → `run-failure`(n) → begin (a later request, or `claude <ID>`) | the failure is no longer current, because a run has begun since; begin removes it |
+  | `/run`(n) → `/run`(n+1) → `run-failure`(n) | `409`; the page shows request n+1 |
+  | `/run`(n) → `run-failure`(n) → `/run`(n+1) | the failure of n is replaced: it is no longer the last request |
+  | begin → `/run` | `AI_RUN_IN_PROGRESS` while the run works; otherwise the new request has the new `afterRunId` |
+  | `/run`(n) → end, report or abandon of the run before it | `launch` stays current: `runId` did not move |
+  | `/run` on two tasks with one runner | one gets the runner, the other gets `NO_AGENT_RUNNER` (K7 I4) |
+
+  - A runner sends `run-failure` for a request only after its own begin for that request has
+    failed or was never made, and at most once per request (K9).
+  - When `claude <ID>` begins while a request waits, begin removes `launch`. The handed runner is
+    refused at begin (`AI_RUN_IN_PROGRESS`), reports, and gets `409`. Its text stays in its
+    terminal.
+- **K14. An earlier board on the same `.board/` (downgrade).** This is tolerated, not supported:
+  an earlier board shows no request and no failure.
+  - It keeps `launch` as an unknown frontmatter field (`extra`) and writes it back unchanged.
+  - Its begin does not remove `launch`, but its begin moves `runId`. So when a board of this
+    version reads the file again, the `launch` is stale (K4) and is not shown.
+  - If no run began meanwhile, the `launch` is still current and is shown as it was. That is true:
+    no run has begun since that request.
+  - Its page never shows `launch`, so it shows no false "waiting".
+- **K15. Export.** `launch` is a field of the task as stored, as `aiRun` is. A snapshot holds it in
+  `tasks`, unchanged, and the snapshot stays `formatVersion: 4` (ADR-0032 §10: "the tasks with
+  their new fields"). A stale `launch` in a backup means nothing, by K4. *(Owner decision Q4,
+  2026-11-06: included, as the export contract of T87 says.)*
+- **K16. Security.**
+  - The route needs the token, takes a strict body, and keeps at most 500 cleaned characters. It
+    never changes `aiRun`, never starts or stops anything, and is not given to agents.
+  - `requestId` is not a secret: `GET /tasks/:id` shows it in `launch`. A holder of the token who
+    reads it can mark a waiting request as failed. That holder can already change and delete the
+    task (ADR-0008), so the route gives no right that the token does not already give. The worst
+    effect is a failure shown for a request that may still begin; begin then removes it.
+  - Tokens, prompts, `argv` and the environment reach neither the route, the stored field nor a log.
+- **K17. What does not change, and what this costs.**
+  - **Unchanged:**
+    - the server starts nothing;
+    - a request goes to exactly one runner;
+    - end, abandon, report, the journals of T45/T46 and the gates of T78 are as they were.
+  - **What changes:**
+    - begin only also removes `launch`, in its one write;
+    - `/run` of a work run becomes the one action of K6 and holds the lock for its checks (which
+      read the whole board, ADR-0019) and one write.
+  - **An earlier runner stays silent** (K11), and an earlier board shows nothing (K14). To see a
+    failure, the board, the page and the runner have to be updated. None of them stops working
+    alone.
+  - **A page loaded from an earlier board** parses tasks strictly and does not accept a task that
+    has `launch`, as for any new field of a task (T85). It has to be reloaded.
+  - **The page shows a waiting request with nothing after it** when a report is not delivered, a
+    runner dies after the hand, or the board restarts between the hand and begin. It says so
+    honestly (K12) and never resolves it by itself. The next request or begin replaces it.
+  - **K6 step 4 can leave a request that no runner holds.** This needs two failures at once: the
+    runner's connection closes during the write, and the write back fails. The page then shows it
+    as waiting, which is the same display as a runner that died.
+  - A failed start of a check or a research is still seen only in the terminal (K1).
+
+**Not chosen.**
+
+- **Hand first, then write (v2).** After a failed write, a runner holds a request that the board
+  has no record of. A stale `launch` of an earlier request can then stay on the page for a request
+  that is running.
+- **Write first, then `hand()` with undo.** `reports` is not known before a runner is chosen. "No
+  runner" is the most common answer, so it would cost a write and an undo, and a failed undo would
+  show a false "waiting". Between the write and `hand()`, another task can also take the only
+  runner. K6 reserves before the write instead.
+- **Handshake (the runner acknowledges a request).** It would say that a runner took the request,
+  which the hand already says, and still not why it did not start. It needs an ack route and a
+  timeout: a lifecycle of requests. The same `requestId` stays available to it later.
+- **Existing `begin` + `end(launchError)`.** This would make a run for a session that never existed
+  (`runId + 1`, an unused `sessionId`), and Resume would then refuse. It cannot carry
+  `resume-refused` or `begin-refused`.
+- **A version marker for downgrade.** `afterRunId` (K4) decides staleness from what every board
+  version already writes.
+- **A timeout on a waiting request.** Not allowed in T94 (T45: age is not evidence).
+- **Fixing the endless reconnect of the runner for any non-2xx of `GET /runs`.** This is outside
+  T94, and a separate task is proposed.
+
+**Other ADRs (not changed here).**
+
+- ADR-0030 §1 lists what is not content: `launch` is one more entry there.
+- The bullet of ADR-0032 "Refusals of begin are seen only in the terminal until T94" becomes
+  outdated for a work run of a runner that declares `signals`. So does the last bullet of L5 above.
+
+The owner decides these separately.

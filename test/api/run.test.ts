@@ -117,15 +117,23 @@ describe('POST /tasks/:id/run with a runner waiting', () => {
     expect(code(response.body)).toBe('NO_AGENT_RUNNER');
   });
 
-  it('changes nothing on the board: the agent is the one that moves the task and reports', async () => {
+  it('changes nothing on the board but the launch of the request: the agent moves the task and reports (ADR-0029 T94, K5)', async () => {
     await runner();
-    const before = (await board.get(`${API}/tasks`).expect(200)).body as unknown;
+    const before = (await board.get(`${API}/tasks`).expect(200)).body as Record<string, unknown>[];
     const published = board.events.events.length;
 
     await start('T1').expect(200);
 
-    expect((await board.get(`${API}/tasks`).expect(200)).body).toEqual(before);
-    expect(board.events.events).toHaveLength(published);
+    const after = (await board.get(`${API}/tasks`).expect(200)).body as Record<string, unknown>[];
+    const withoutLaunch = (tasks: Record<string, unknown>[]) =>
+      tasks.map(({ launch: _launch, updatedAt: _updatedAt, ...task }) => task);
+    expect(withoutLaunch(after)).toEqual(withoutLaunch(before));
+    expect(after.find((task) => task['id'] === 'T2')).toEqual(
+      before.find((task) => task['id'] === 'T2'),
+    );
+    expect(board.events.events.slice(published).map((event) => event.type)).toEqual([
+      'task.updated',
+    ]);
   });
 });
 

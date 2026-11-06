@@ -21,9 +21,10 @@ export const RUN_LABELS = {
         ? `The old branch is renamed to …-attempt-${attempt}`
         : `The old branch ${branch} is renamed to ${branch}-attempt-${attempt}`
     }, and the work starts over in a new session from the base branch. Nothing is deleted.`,
-  starting: (taskId: string) =>
-    `Claude Code is starting on ${taskId} in the terminal where ` +
-    '`local-project-board claude --wait` runs.',
+  sent: (taskId: string) =>
+    `Sent ${taskId} to the runner in the terminal where ` +
+    '`local-project-board claude --wait` runs. Claude Code has not begun yet: the task shows ' +
+    'it when it does.',
   failure: {
     launch: 'Claude Code could not be started.',
     exit: (code: number | undefined) =>

@@ -71,7 +71,7 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
     const model = chosenModel(initialModel(run));
     await client.runTask(task.id, runRequest(model ?? undefined, 'restart'));
     setRestarting(false);
-    setNote(L.starting(task.id));
+    setNote(L.sent(task.id));
   });
 
   if (run === undefined) return null;

@@ -4,6 +4,7 @@ import { boardNotRunning, findClaude, startSession } from './claude.js';
 import { deliverPendingCheckEnds } from './checkEnd.js';
 import { startCheckSession } from './checkSession.js';
 import { deliverPendingEnds } from './runEnd.js';
+import { NotBegun, reportRunFailure } from './runFailure.js';
 import { findRunningBoard } from './running.js';
 import type { RuntimeState } from './runtime.js';
 
@@ -12,6 +13,9 @@ const RECONNECT_MS = 500;
 
 /** The kinds this runner starts besides work (ADR-0029 T54). */
 const ACCEPTS = 'check,research';
+
+/** What this runner reports to the board (ADR-0029 T94, K11). */
+const SIGNALS = 'run-failure';
 
 export interface WaitEnvironment {
   env: NodeJS.ProcessEnv;
@@ -55,6 +59,9 @@ export async function waitForRuns(
   process.on('SIGTERM', abort);
 
   let toldGone = false;
+  // The token of a board that refused `signals`: one of an earlier version. It is not offered
+  // `signals` again, and a board with another token is (K11).
+  let earlierBoard: string | undefined;
   try {
     while (!stop.signal.aborted) {
       running ??= await findRunningBoard(board.root);
@@ -70,7 +77,8 @@ export async function waitForRuns(
       // deliver: the board is here now (T45).
       await deliverPendingEnds(board.root);
       await deliverPendingCheckEnds(board.root);
-      const next = await nextRequest(current, stop.signal, () => {
+      const signals = earlierBoard !== current.token;
+      const next = await nextRequest(current, stop.signal, signals, () => {
         toldGone = false;
         write(
           `Waiting for Send to AI → Claude Code on the board at ${current.url}. ` +
@@ -78,6 +86,12 @@ export async function waitForRuns(
         );
       });
       if (next === 'stopped') break;
+      if (next === 'earlier') {
+        // Refused before it counted this runner, so nothing was handed: ask again at once.
+        earlierBoard = current.token;
+        write('This board is of an earlier version: it will not show a failed start on the page.');
+        continue;
+      }
       if (next === 'lost') {
         // The board went away or was restarted with another address and token: find it again.
         running = undefined;
@@ -95,7 +109,10 @@ export async function waitForRuns(
       inSession = true;
       try {
         // Looked for again: `claude` may have gone since the wait began.
-        const program = await findClaude(env);
+        const program = await findClaude(env).catch((error: unknown) => {
+          const text = error instanceof Error ? error.message : String(error);
+          throw new NotBegun('claude-missing', text, text);
+        });
         // A check and a research begin through the check routes, never through aiRun; the
         // comment of a research goes to the begin, not to the command line (ADR-0029 T54).
         const code =
@@ -123,6 +140,16 @@ export async function waitForRuns(
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
         writeError(error instanceof Error ? error.message : String(error));
+        // Only a request of work has an id, and only a start that never began is reported (K9).
+        if (error instanceof NotBegun && next.requestId !== undefined) {
+          const delivery = await reportRunFailure(board.root, next.taskId, next.requestId, error);
+          if (delivery === 'undelivered' || delivery === 'refused') {
+            writeError(
+              `The board was not told that Claude Code did not start on ${next.taskId}; ` +
+                'its page still shows the request as sent.',
+            );
+          }
+        }
       } finally {
         inSession = false;
       }
@@ -142,8 +169,9 @@ export async function waitForRuns(
 async function nextRequest(
   board: RuntimeState,
   signal: AbortSignal,
+  signals: boolean,
   onWaiting: () => void,
-): Promise<RunRequest | 'lost' | 'stopped'> {
+): Promise<RunRequest | 'lost' | 'stopped' | 'earlier'> {
   // A stop that came while the ends were delivered fires no event any more: it is read here.
   if (signal.aborted) return 'stopped';
   const connection = new AbortController();
@@ -151,10 +179,13 @@ async function nextRequest(
   signal.addEventListener('abort', abort);
   try {
     // Says what this runner can start, so that the board hands it nothing it cannot (D13).
-    const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?accepts=${ACCEPTS}`, {
+    const query = `accepts=${ACCEPTS}${signals ? `&signals=${SIGNALS}` : ''}`;
+    const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?${query}`, {
       headers: { authorization: `Bearer ${board.token}` },
       signal: connection.signal,
     });
+    // A board of an earlier version parses the query strictly and refuses `signals` (K11).
+    if (signals && response.status === 400) return 'earlier';
     if (!response.ok || response.body === null) return 'lost';
     // The board counts this runner from the moment it answered; only now is it true.
     onWaiting();

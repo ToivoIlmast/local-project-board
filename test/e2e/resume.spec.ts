@@ -39,7 +39,7 @@ test('a failed run is resumed from the page, and the runner is asked to continue
   await expect(dialog.getByLabel('Session')).toHaveValue('resume');
   await dialog.getByRole('button', { name: 'Start' }).click();
 
-  await expect(block.getByText(/^Claude Code is starting on T1 /)).toBeVisible();
+  await expect(block.getByText(/^Sent T1 to the runner /)).toBeVisible();
   expect(await runner.request).toEqual({
     type: 'run.requested',
     taskId: 'T1',

@@ -50,6 +50,7 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'tasks.workflow': { path: '/tasks/T1/workflow' },
   'tasks.handoff': { path: '/tasks/T1/handoff' },
   'tasks.run': 'needs a runner',
+  'tasks.runFailure': 'needs a runner',
   'workflow.get': { path: '/workflow' },
   'workflow.update': {
     path: '/workflow',
@@ -172,6 +173,7 @@ describe('every route in the contract', () => {
     expect(notCalled('streamed')).toEqual(['events.stream', 'runs.stream']);
     expect(notCalled('needs a runner')).toEqual([
       'tasks.run',
+      'tasks.runFailure',
       'ai-run.begin',
       'ai-run.end',
       'ai-run.abandon',

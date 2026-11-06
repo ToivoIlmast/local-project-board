@@ -4,6 +4,7 @@ export * from './claudeCode.js';
 export * from './handoff.js';
 export * from './history.js';
 export * from './instructions.js';
+export * from './launch.js';
 export * from './readiness.js';
 export * from './routes.js';
 export * from './schemas.js';

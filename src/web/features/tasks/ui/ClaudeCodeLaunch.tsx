@@ -76,7 +76,7 @@ export function ClaudeCodeLaunch({
       // A task that became blocked since the page last read it: the reasons are the answer.
       throw explainError(error);
     }
-    onDone(L.started(task.id));
+    onDone(L.sent(task.id));
   });
 
   const submit = (event: FormEvent): void => {
@@ -97,7 +97,7 @@ export function ClaudeCodeLaunch({
             variant="primary"
             disabled={working || sent === null || start.pending}
           >
-            {start.pending ? L.starting : L.start}
+            {start.pending ? L.sending : L.start}
           </Button>
         </>
       }

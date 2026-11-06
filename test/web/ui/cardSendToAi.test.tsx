@@ -137,11 +137,9 @@ describe('"Send to AI → Claude Code" in the menu of a card (T19, T27)', () => 
     const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T2' });
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
 
+    expect(await within(cardOf('Other task')).findByText(/^Sent T2 to the runner /)).toBeVisible();
     expect(
-      await within(cardOf('Other task')).findByText(/^Claude Code is starting on T2 /),
-    ).toBeVisible();
-    expect(
-      within(cardOf('Ship it')).queryByText(/Claude Code is starting/),
+      within(cardOf('Ship it')).queryByText(/to the runner in the terminal/),
     ).not.toBeInTheDocument();
     expect(rendered.board.runs).toEqual([{ taskId: 'T2', agent: 'claude-code' }]);
     expect(rendered.board.calls).not.toContain('handoff');

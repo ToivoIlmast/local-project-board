@@ -24,7 +24,7 @@ const aRun = (extra: Partial<AiRun> = {}): AiRun => ({
 const details = () => screen.getByRole('complementary', { name: 'Task T1' });
 const dialog = () => screen.getByRole('dialog', { name: 'Start Claude Code on T1' });
 const start = () => within(dialog()).getByRole('button', { name: 'Start' });
-const STARTING = /^Claude Code is starting on T1 in the terminal where/;
+const STARTING = /^Sent T1 to the runner in the terminal where/;
 
 async function openLaunch(extra: Partial<Task> = {}, options = {}): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [todo(extra)], ...options });

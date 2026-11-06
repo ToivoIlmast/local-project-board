@@ -64,6 +64,8 @@ describe('generated AI instructions', () => {
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).
       'runs.stream',
       'tasks.run',
+      // The runner's report of a start that did not begin (ADR-0029 T94, K16).
+      'tasks.runFailure',
       // Structure of the board is the owner's to change (ADR-0032 §4), so an agent is not told.
       'topics.create',
       'topics.createBlock',

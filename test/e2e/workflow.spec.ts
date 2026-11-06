@@ -494,7 +494,7 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
   await dialog.getByRole('button', { name: 'Start' }).focus();
   await page.keyboard.press('Enter');
 
-  await expect(details.getByText(/Claude Code is starting on T1/)).toBeVisible();
+  await expect(details.getByText(/Sent T1 to the runner/)).toBeVisible();
   await expect(details.getByRole('button', { name: 'Send to AI' })).toBeFocused();
 
   // The runner started `claude` with the prompt of T1, in the project, and the session read

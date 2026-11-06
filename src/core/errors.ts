@@ -51,6 +51,11 @@ export const BOARD_ERROR_CODES = [
    * to start yet; `details.reasons` holds them (ADR-0032 §8, ADR-0029 T78, T86).
    */
   'TASK_BLOCKED',
+  /**
+   * A runner reported a failed start for a request that is not the current `launch` of the task:
+   * another request came since, or a run has begun since (ADR-0029 T94, K8).
+   */
+  'STALE_LAUNCH_REQUEST',
   /** PATCH aiRun: null on a run with a runId, in any state: its runId must not restart (T45). */
   'AI_RUN_NOT_CLEARABLE',
   /** A request that can only be judged against the state of the board (ADR-0030 §7). */

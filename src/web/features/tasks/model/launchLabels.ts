@@ -29,10 +29,11 @@ export const LAUNCH_LABELS = {
   },
   working: 'Claude Code is working on this task. Wait until the run ends before you start another.',
   start: 'Start',
-  starting: 'Starting…',
+  sending: 'Sending…',
   cancel: 'Cancel',
   retry: 'Try again',
-  started: (taskId: string) =>
-    `Claude Code is starting on ${taskId} in the terminal where ` +
-    '`local-project-board claude --wait` runs.',
+  sent: (taskId: string) =>
+    `Sent ${taskId} to the runner in the terminal where ` +
+    '`local-project-board claude --wait` runs. Claude Code has not begun yet: the task shows ' +
+    'it when it does.',
 } as const;

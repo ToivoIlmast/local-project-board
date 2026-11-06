@@ -21,6 +21,7 @@ import { useTaskHistory, useVersion } from '../model/useTaskHistory';
 import { CheckReportDialog, type ApplyRequest } from './CheckReportDialog';
 import { NewResearchDialog } from './NewResearchDialog';
 import { TaskAiRun } from './TaskAiRun';
+import { TaskLaunch } from './TaskLaunch';
 import { TaskAiSettings } from './TaskAiSettings';
 import { TaskChecks } from './TaskChecks';
 import { TaskDialog } from './TaskDialog';
@@ -189,6 +190,7 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       )}
 
       <TaskAiSettings task={task} />
+      <TaskLaunch task={task} />
       <TaskAiRun task={task} />
 
       <div className="panel__body">
