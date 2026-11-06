@@ -601,3 +601,153 @@ while the research is `working`.
 - **D10** (T58): where the "Check actuality" button sits on the page. It is the interface of the
   page, not a rule of this ADR, and no closed Decision task decided it.
 - The **limits of D12** are initial values, not measured.
+
+## Amendment (T95, 2026-11-06): the trigger of an actuality check, and Revalidation
+
+Status of this amendment: **accepted**. The owner sets `accepted`. Its source is §2.5 of the
+approved plan of M1 (2026-11-01), and the form of the trigger from §2.6. The question codes in
+brackets are the plan's. The rules are numbered V1–V12. They are apart from R1–R10 of T54, and from
+the V-rules of the amendment of T95 to ADR-0029, which carries the other half: how the trigger is
+requested and handed to a runner. A rule of that amendment is named here "ADR-0029 V<n>".
+
+This amendment replaces nothing above. It adds to:
+
+- §2, the record `begin` of a check: the optional field `trigger` (V1, V2);
+- §6: a check may be started with a trigger, and its handoff holds it (V2);
+- §9: `POST /tasks/:id/checks` and the check summaries gain `trigger?`. No route, error code or
+  event is added (V12).
+
+It relies on, and does not change:
+
+- §6: a check is not refused while another check is `working`, and a check that never ends stays
+  `working` and blocks nothing (V8, V9);
+- §7: how a recommendation is applied (V11);
+- ADR-0032 §5 and §7: when a task and a block are done, the order of blocks, and
+  `block-order-unknown` (V4, V5).
+
+**`doneAt`.** The rules below use the task's `doneAt`: an optional time of the task's completion,
+an ISO datetime. This amendment does not decide when `doneAt` is written or cleared (see "Not
+decided in this amendment").
+
+- **V1. The trigger.** `trigger` is a strict object
+  `{reason: 'task-done', task, doneAt, commit?}`:
+  - `reason` has the one value `'task-done'`;
+  - `task` is **required**: the id of the task whose completion started the check (the *source
+    task*);
+  - `doneAt` is **required**: the `doneAt` of the source task when the trigger was made, as it is
+    stored;
+  - `commit` is **optional**: the `aiRun.commit` of the source task, of the same form. It is the
+    agent's self-report. The board does not look it up in git; the agent that runs the check
+    verifies it through git.
+
+  The trigger has no other field. It never holds a transcript, a copy of the text of a task or a
+  document, or a token. Only an actuality check (a `begin` without `kind`) has a trigger; a
+  research never has one.
+- **V2. Where the trigger is kept and shown.**
+  - The runner sends the trigger in the body of `POST /tasks/:id/checks` exactly as it received it
+    (ADR-0029 V4). The board stores it in the record `begin` as `trigger`. Like every history file
+    (§2), the record is written once and never changed.
+  - A check without a trigger, and every check begun before this amendment, has no `trigger`. No
+    migration is made.
+  - The check summary (`GET /tasks/:id/checks`) carries the `trigger` of its `begin`.
+  - The handoff of a check (`GET /tasks/:id/checks/:n/handoff`) is built by the server from the
+    record `begin`. When that record has a trigger, the handoff holds it, and says that `commit` is
+    a self-report that the agent verifies through git.
+  - The trigger never reaches the arguments or the environment of `claude`. The agent reads it
+    only from the handoff.
+- **V3. The series.** The series of a task S is the pair `(S, d)`, where `d` is the current
+  `doneAt` of S.
+  - A task without `doneAt` has no series.
+  - When the `doneAt` of S changes, the series is another one: checks whose trigger names the
+    earlier `doneAt` do not belong to it.
+  - The series, its scope (V4) and what is checked in it (V6) are **derived from the board's
+    data only**, on each read. Nothing about a series is stored. So a series looks the same after a
+    reload and in another tab (Q9a).
+- **V4. The scope of a series** (Q9e, Q3). The scope of the series of S holds, in this order:
+  1. the **direct dependents** of S: the tasks whose `dependsOn` names S;
+  2. the tasks of the block of S that are **not done**;
+  3. if S is the task that completed its block (V5): the tasks of the **next block** that are **not
+     done**. The next block is the one after the block of S in the ordered list of blocks of the
+     topic of S. If the block of S is the last one, there is no next block.
+
+  Within each group the tasks are in the order of `rank`.
+  - **No transitive dependencies**: a dependent of a dependent is not in the scope unless one of
+    the three groups names it.
+  - **Blocked tasks are in the scope** (ADR-0032 §7): being blocked excludes nothing.
+  - **A source task without a topic, or without a block, has group 1 only.**
+  - **A task named by more than one group is in the scope once**, in the place of the first group
+    that names it in the order above.
+  - S itself is never in its scope.
+  - **Excluded tasks** stay in the scope and are shown with their reason. They are offered no
+    check. A task is excluded when it is done, or when its `aiRun` is `working`.
+- **V5. The task that completed a block** (Q9e-C, Q9e-T). A task S completed its block when both
+  hold:
+  - the block is done now (ADR-0032 §5);
+  - the key of S, `(doneAt, numeric part of the id, prefix of the id)`, is the greatest among the
+    tasks of the block. The parts are compared in that order. A task without `doneAt` is earlier
+    than every task with one.
+
+  Ids are unique, so a done block has exactly one such task. When it cannot be known whether the
+  block is done (`block-order-unknown`, ADR-0032 §7, C-2), the block counts as not done: no task
+  completed it, and the next block is not in any scope.
+- **V6. A task of the series is checked** when it has a check whose `begin.trigger` has
+  `task` equal to S and `doneAt` equal to `d` (the same string), and whose state is `reported`.
+  - A report counts whether or not it has recommendations.
+  - A check that is `working` or `failed` does not count.
+  - A late report of a check that was left `working` counts from the moment it is accepted (§6
+    accepts it while the check is `working`).
+  - A check without a trigger, or with the trigger of another series, does not count.
+- **V7. Every check is started by a click of the owner** (Q9, Q9b, Q9c).
+  - **"Check"** is offered for each task of the scope that is not excluded.
+  - **"Check next"** starts a check of the first task in the order of the scope that is neither
+    excluded nor checked.
+  - **"Retry"** is offered in place of "Check" for a task that is not checked and whose latest
+    check in the series is `failed`.
+  - Each of them sends one `POST /tasks/:id/run` with `kind: 'check'` for that task and the
+    trigger of the series: `task` S, `doneAt` `d`, and `commit` only when S has an
+    `aiRun.commit`.
+  - There is no limit on the number of checks, no queue, no automatic start and no Web Locks.
+- **V8. A `working` check does not block the buttons** (Q9c, C-1 = D).
+  - While a check of the series is `working`, "Check", "Check next" and "Retry" stay available.
+  - While at least one check of the series is `working`, every new start needs the owner's
+    explicit confirmation.
+  - The confirmation names each working check of the series: its number, its task, and since when
+    it is `working`. When there are several, it lists all of them.
+  - It says: if the session of a working check is still running, the new check runs in parallel
+    and repeats the cost.
+  - Without the confirmation nothing is sent.
+  - The server and the runner protocol are not changed by this rule: §6 already allows parallel
+    checks.
+- **V9. A check that hangs stays `working`** (§6): it blocks nothing and has no report. Its age
+  changes nothing. No route is added to end it, and `claude --recover` is not extended.
+- **V10. Where Revalidation is shown** (Q9d', Q8).
+  - **The panel of the source task**, while the task is done, is the entry to the series. It shows
+    the scope, with excluded tasks and their reasons, which tasks are checked, and the buttons of
+    V7.
+  - **Blocks View** shows the indicator `↻ x/y` on the source task:
+    - `x` is the number of tasks of the scope that are checked (V6);
+    - `y` is the number of all tasks of the scope, **excluded tasks included**, since they stay in
+      the scope (V4);
+    - counting an excluded task in `y` does not offer it a check (V4, V7).
+  - **Kanban** shows nothing of Revalidation.
+  - **There is no setting.** The offer is passive, and it is shown only when the scope is not
+    empty.
+- **V11. A check only recommends.** Its recommendations are applied by a click, only through §7:
+  `ifContentHash`, `fromCheck`, `STALE_CHECK`. Revalidation adds no other way to change a task.
+- **V12. Compatibility.**
+  - No migration. The field `trigger` is optional everywhere.
+  - An earlier board reads a `begin` with `trigger` as a read issue (ADR-0022, strict schemas) and
+    does not overwrite it. Its number is not reused (§2).
+  - A page loaded from an earlier board parses the check summaries strictly, so it has to be
+    reloaded.
+  - Export carries the record `begin` as stored, with its trigger. This amendment does not change
+    the format version of export.
+  - No route, error code or event is added. Changes of a check stay `check.updated`.
+
+### Not decided in this amendment
+
+- **When `doneAt` is written and cleared.** The rules above use it as V3 and V5 say, but do not
+  say what writes it (T96), and whether a task that is not done can keep one.
+- **Whether the board checks a trigger against the board.** That is, whether `/run` refuses a
+  trigger whose `task` does not exist, is not done, or has another `doneAt`, or whose `commit`
+  differs from the source task's `aiRun.commit`. ADR-0029 V-rules check its form only.

@@ -690,3 +690,123 @@ it needs a run, and a run exists only after a successful begin.
   outdated for a work run of a runner that declares `signals`. So does the last bullet of L5 above.
 
 The owner decides these separately.
+
+## Amendment (T95, 2026-11-06): the trigger of a check, and `accepts=trigger`
+
+Status of this amendment: **accepted**. The owner sets `accepted`. Its source is
+§2.6 of the approved plan of M1 (2026-11-01), "Trigger and the compatibility of the runner" (Q6
+"Refusal"). The rules are numbered V1–V6:
+
+- V1–V5 are the rules V1–V5 of §2.6.
+- V6 is not in §2.6. It is proposed by T95 to order V2 with K11 of T94 (see "Why V6").
+
+They are apart from L1–L6 of T78 and K1–K17 of T94. What the trigger is, where it is stored and
+what it means for a series of checks is in the amendment of T95 to ADR-0030. A rule of that
+amendment is named here "ADR-0030 V<n>".
+
+This amendment replaces nothing above. It adds to:
+
+- T46 and ADR-0030 §6: `POST /tasks/:id/run` with `kind: 'check'` may carry a trigger;
+- D13 of T54, the closed form of `accepts`: it gains the value `trigger` (V1);
+- L5 of T78, "No field is added to any of them", as T94 already amended it: the value `trigger` of
+  `accepts` (V1), the field `trigger` of `run.requested` (V3) and the field `trigger` of the begin
+  of a check (V4) are added;
+- K11 of T94: the order in which the runner drops what a board refuses (V6).
+
+**The trigger in the request.**
+
+- **`POST /tasks/:id/run` gains `trigger?`**, of the form of ADR-0030 V1:
+  `{reason: 'task-done', task, doneAt, commit?}`. `task` and `doneAt` are required; `commit` is
+  optional.
+  - It is allowed **only with `kind: 'check'`**. With `work`, with `research`, or without `kind`,
+    the answer is `400 INVALID_REQUEST`, **before a runner is asked**.
+  - A trigger that is not of that form is `400 INVALID_REQUEST` too, before a runner is asked. This
+    covers a missing `task` or `doneAt`, another `reason`, a `commit` that is not of the form of
+    `aiRun.commit`, and any other field.
+- **The trigger travels** from `/run` to `run.requested` (V3), from there into the body of the
+  begin of the check, `POST /tasks/:id/checks` (V4), into the record `begin`, and into the check
+  summary (ADR-0030 V2).
+  - Begin accepts `trigger?` only for an actuality check, that is, without `kind`. With
+    `kind: 'research'` the answer is `400 INVALID_REQUEST`, and nothing is written.
+  - `commit` is the self-report of the `aiRun` of the source task. The agent verifies it through
+    git.
+  - No transcript, no copy of a text and no token travels with the trigger (O-3). It never
+    reaches the arguments or the environment of `claude`.
+- **K1 of T94 stands for a check with a trigger.**
+  - Its request has no `requestId`, and the board writes no `launch` for it.
+  - The runner sends no `run-failure` for it, and `/run` hands it with `hand()`.
+  - A start that fails before begin is seen only in the runner's terminal. No `begin` is written,
+    so the task stays not checked in its series (ADR-0030 V6).
+
+**The rules.**
+
+- **V1. The runner declares the trigger:** `GET /api/v1/runs?accepts=check,research,trigger`.
+  - The closed form of `accepts` becomes a list of values from `check`, `research` and `trigger`.
+  - `trigger` is not a kind of run. It says that the runner carries the trigger of a check from
+    `run.requested` into begin (V4).
+  - A runner without `trigger` in `accepts` is one of an earlier version for the trigger.
+- **V2. Fallback.** When `GET /runs` with `trigger` in `accepts` is answered
+  `400 INVALID_REQUEST`, the runner asks once more at once, with `accepts=check,research`.
+  - This is one retry, not a loop.
+  - The runner keeps no memory of this refusal: **every new connection** to `GET /runs` asks with
+    `trigger` again.
+- **V3. The trigger is handed only to a runner that declared it.** `run.requested` carries
+  `trigger` only when the request has one and the runner that receives it declared `trigger` in
+  `accepts`. For any other runner, the event is exactly the one it knows.
+- **V4. The runner copies the trigger into begin byte for byte.**
+  - The runner sends, in the body of `POST /tasks/:id/checks`, the `trigger` it received in
+    `run.requested`, unchanged. It adds, drops and rewrites nothing in it.
+  - The handoff of the check is built by the server from the record `begin` (ADR-0030 V2), not
+    from the request and not by the runner.
+- **V5. A check with a trigger and only earlier runners** → `409 NO_AGENT_RUNNER` (`outdated`).
+  - The board hands a check with a trigger only to a waiting runner whose `accepts` holds both
+    `check` and `trigger`.
+  - If runners wait but none of them holds both, the answer is `409 NO_AGENT_RUNNER` with the
+    existing text for a runner of an earlier version (`outdated`). If no runner waits at all, the
+    answer is `409 NO_AGENT_RUNNER` as today.
+  - Either way **nothing is handed to any runner and nothing is written**.
+  - The board never drops the trigger to hand the check to an earlier runner.
+  - A check without a trigger is handed as before, to a runner that accepts `check`, and its
+    `run.requested` has no `trigger`.
+- **V6. The order of V2 and K11 in one attempt to connect.** An attempt is one wait on
+  `GET /runs`, from its first request until a stream is open. Within one attempt the runner sends
+  at most three requests, in this order:
+  1. `accepts=check,research,trigger`, and `signals=run-failure` if K11 has not marked this
+     board's token.
+  2. Only if request 1 is answered `400 INVALID_REQUEST`: `accepts=check,research`, with the same
+     `signals` as request 1 (V2).
+  3. Only if request 2 had `signals` and is answered `400 INVALID_REQUEST` too: K11 applies. The
+     runner marks the token, tells the person once, and asks once more with
+     `accepts=check,research` and without `signals`.
+
+  - **K11's conclusion "this board refuses `signals`" is drawn only from a `400` to request 2**,
+    a request without `trigger`. A `400` to request 1 never marks the token.
+  - **If the token is already marked**, request 1 has no `signals`, and `trigger` is still tried
+    (V2). Request 2 then has no `signals` either, and there is no request 3.
+  - **No request follows the last one.** A `400` to request 3, or to request 2 without
+    `signals`, starts no further retry in this attempt.
+  - **Every other answer**, to any of the requests, is handled as K11 says: "Every other answer of
+    `GET /runs` keeps today's handling".
+
+  So in one attempt `trigger` is dropped at most once and `signals` at most once, and there is no
+  loop. The next attempt begins with `trigger` again (V2), and with `signals` only if the token is
+  not marked (K11).
+
+**Why V6.** A board of T94 knows `signals` but not `trigger`. It answers `400` to the first request
+of V1. Before V6, K11 read every `400` to a request with `signals` as "a board of an earlier
+version that refuses `signals`". So a runner would stop offering `signals` to a board that knows
+them, and a failed start of a work run would not be shown on the page. A board that knows
+`trigger` is later than T94 and knows `signals`, so a `400` to the request of step 1 says nothing
+about `signals`.
+
+**What does not change.**
+
+- The server starts nothing.
+- A request goes to exactly one runner.
+- `work` and `research` are unchanged.
+- A check without a trigger is unchanged.
+- End, report and the journal of a check are unchanged; the journal holds no trigger.
+- K1–K17 of T94 stand, except the order of V6.
+
+**What this costs.** To start a check with a trigger, the runner has to be updated (V5). An earlier
+runner keeps starting work, checks without a trigger and research.
