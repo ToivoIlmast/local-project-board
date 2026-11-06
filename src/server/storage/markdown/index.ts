@@ -332,7 +332,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
   /** The task as `patch` leaves it, its place checked, and nothing written; inside `exclusive`. */
   async function patched(id: string, patch: TaskPatch): Promise<Task> {
     const task = await requireTask(id);
-    const { branch, workflow, aiRun, launch, topic, block, dependsOn, ...rest } = patch;
+    const { branch, workflow, aiRun, launch, topic, block, dependsOn, doneAt, ...rest } = patch;
     await assertPlaced(task, { topic, block, dependsOn });
     const updated: Task = { ...task, ...prune(rest), updatedAt: now() };
     if (topic === null) delete updated.topic;
@@ -341,6 +341,8 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
     else if (block !== undefined) updated.block = block;
     if (dependsOn === null) delete updated.dependsOn;
     else if (dependsOn !== undefined) updated.dependsOn = [...dependsOn];
+    if (doneAt === null) delete updated.doneAt;
+    else if (doneAt !== undefined) updated.doneAt = doneAt;
     if (branch === null) delete updated.branch;
     else if (branch !== undefined) updated.branch = branch;
     if (workflow === null) delete updated.workflow;

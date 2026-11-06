@@ -17,6 +17,7 @@ const KNOWN = [
   'topic',
   'block',
   'dependsOn',
+  'doneAt',
   'createdAt',
   'updatedAt',
 ];

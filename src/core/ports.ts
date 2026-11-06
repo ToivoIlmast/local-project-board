@@ -64,6 +64,8 @@ export interface TaskPatch {
   topic?: string | null | undefined;
   block?: string | null | undefined;
   dependsOn?: string[] | null | undefined;
+  /** Written and removed by the task service only, with a change of status (T96). */
+  doneAt?: string | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 
