@@ -253,6 +253,7 @@ export function historyFiles(options: {
         ...(input.kind === undefined ? {} : { kind: input.kind }),
         ...(input.comment === undefined ? {} : { comment: input.comment }),
         ...(input.documents === undefined ? {} : { documents: input.documents }),
+        ...(input.trigger === undefined ? {} : { trigger: input.trigger }),
       });
       if ((await createOnce(checkFile(taskId, number, 'begin'), begin)) === 'exists') {
         throw new Error(`Check ${number} of task ${taskId} exists already; it is not rewritten.`);

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { claudeCheckPrompt, researchPrompt } from '../../contract/v1/index.js';
+import { claudeCheckPrompt, researchPrompt, type CheckTrigger } from '../../contract/v1/index.js';
 import { deliverCheckEnd } from './checkEnd.js';
 import { writeCheckJournal, type CheckJournal } from './checkJournal.js';
 import { boardMessage, post } from './running.js';
@@ -26,7 +26,9 @@ const END_RETRY_INITIAL_DELAY_MS = 200;
  * A research is a check of its own kind (ADR-0030 R1, ADR-0029 T54): `research` makes the begin
  * say so and carry the person's comment, and the prompt is `researchPrompt`. The comment goes
  * into the JSON body of the begin and nowhere else: not into the argv or the environment of
- * `claude`, and not into the journal.
+ * `claude`, and not into the journal. The trigger of an actuality check travels the same way
+ * (ADR-0029 T95, V4): the begin gets it as the board handed it, and the agent reads it only
+ * from the handoff, which the board builds from the begin.
  *
  * Resolves to the exit code of the session, so the command ends as `claude` did.
  */
@@ -38,10 +40,11 @@ export async function startCheckSession(
   env: NodeJS.ProcessEnv,
   model?: string,
   research?: Research,
+  trigger?: CheckTrigger,
 ): Promise<number> {
   const boardUrl = board.url.replace(/\/+$/, '');
   const sessionId = randomUUID();
-  const check = await beginCheck(board, id, sessionId, model, research);
+  const check = await beginCheck(board, id, sessionId, model, research, trigger);
   const prompt =
     research === undefined
       ? claudeCheckPrompt(id, check, boardUrl)
@@ -84,6 +87,7 @@ async function beginCheck(
   sessionId: string,
   model: string | undefined,
   research: Research | undefined,
+  trigger: CheckTrigger | undefined,
 ): Promise<number> {
   const response = await post(board, `/tasks/${taskId}/checks`, {
     agent: AGENT,
@@ -91,6 +95,7 @@ async function beginCheck(
     ...(model === undefined ? {} : { model }),
     ...(research === undefined ? {} : { kind: 'research' }),
     ...(research?.comment === undefined ? {} : { comment: research.comment }),
+    ...(trigger === undefined ? {} : { trigger }),
   });
   if (response === undefined) {
     throw new Error(

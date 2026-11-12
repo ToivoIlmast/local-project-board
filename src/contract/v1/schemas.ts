@@ -4,6 +4,7 @@ import {
   COMMENT_MAX_LENGTH,
   checkKindSchema,
   checkReportContentSchema,
+  checkTriggerSchema,
   checkVerdictSchema,
   fromCheckSchema,
 } from '../../core/model/history.js';
@@ -30,6 +31,7 @@ export {
   checkReportSchema,
   checkSchema,
   checkSummarySchema,
+  checkTriggerSchema,
   checkVerdictSchema,
   decisionSchema,
   documentMetaSchema,
@@ -100,6 +102,7 @@ export type {
   CheckReportContent,
   CheckState,
   CheckSummary,
+  CheckTrigger,
   CheckVerdict,
   ContentField,
   Decision,
@@ -301,6 +304,11 @@ export const runTaskRequestSchema = z
     mode: z.enum(['new', 'resume', 'restart']).optional(),
     /** Only with `research`: the person's focus, carried by the runner into the begin. */
     comment: researchCommentSchema.optional(),
+    /**
+     * Only with `check`: why the check is asked, from a task that is done (ADR-0029 T95). It is
+     * handed to a runner that declared `trigger`, and the runner copies it into the begin.
+     */
+    trigger: checkTriggerSchema.optional(),
   })
   .refine(
     (request) =>
@@ -316,6 +324,10 @@ export const runTaskRequestSchema = z
   .refine((request) => request.comment === undefined || request.kind === 'research', {
     message: 'A comment belongs to a research: send kind "research" with it.',
     path: ['comment'],
+  })
+  .refine((request) => request.trigger === undefined || request.kind === 'check', {
+    message: 'A trigger belongs to a check: send kind "check" with it.',
+    path: ['trigger'],
   });
 
 /** The request was handed to a runner; the session is its business from here on. */
@@ -343,6 +355,11 @@ export const runRequestSchema = z
     kind: otherRunKindSchema.optional(),
     comment: researchCommentSchema.optional(),
     /**
+     * Only with `check`, and only to a runner that declared `trigger` in `accepts`: an earlier
+     * runner parses this strictly and would drop the whole request (ADR-0029 T95, V3).
+     */
+    trigger: checkTriggerSchema.optional(),
+    /**
      * The id of a request of work, for the runner's `run-failure` (ADR-0029 T94, K2). Sent only
      * to a runner that declared `signals=run-failure`: an earlier runner parses this strictly and
      * would drop the whole request (K11).
@@ -353,14 +370,19 @@ export const runRequestSchema = z
     message: 'A comment belongs to a research.',
     path: ['comment'],
   })
+  .refine((request) => request.trigger === undefined || request.kind === 'check', {
+    message: 'A trigger belongs to a check (ADR-0029 T95).',
+    path: ['trigger'],
+  })
   .refine((request) => request.requestId === undefined || request.kind === undefined, {
     message: 'Only a request of work has an id (ADR-0029 T94, K1).',
     path: ['requestId'],
   });
 
 /**
- * What a runner says it can start, on `GET /runs?accepts=check,research` (D13, ADR-0029 T54): a
- * list of the kinds besides `work`, of closed form. Without it the runner is one of an earlier
+ * What a runner says it can start, on `GET /runs?accepts=check,research,trigger` (D13, ADR-0029
+ * T54, T95 V1): a list of the kinds besides `work`, of closed form, and `trigger`, which is not a
+ * kind: it says that the runner carries the trigger of a check into the begin. Without it the runner is one of an earlier
  * version and is handed work only; every runner starts work.
  *
  * `signals=run-failure` says that it reports a work run that did not begin (ADR-0029 T94, K11).
@@ -369,8 +391,11 @@ export const runRequestSchema = z
 export const runsQuerySchema = z.strictObject({
   accepts: z
     .string()
-    .regex(/^(check|research)(,(check|research))*$/, 'A list of kinds: check, research')
-    .transform((list) => [...new Set(list.split(','))] as ('check' | 'research')[])
+    .regex(
+      /^(check|research|trigger)(,(check|research|trigger))*$/,
+      'A list of values: check, research, trigger',
+    )
+    .transform((list) => [...new Set(list.split(','))] as ('check' | 'research' | 'trigger')[])
     .optional(),
   signals: z
     .string()
@@ -515,10 +540,16 @@ export const checkBeginRequestSchema = z
     kind: checkKindSchema.optional(),
     /** The focus of a research, as sent: at most 4 000 characters, no NUL (R2, D12). */
     comment: researchCommentSchema.optional(),
+    /** Only an actuality check, as the runner received it in `run.requested` (ADR-0029 V4). */
+    trigger: checkTriggerSchema.optional(),
   })
   .refine((request) => request.comment === undefined || request.kind !== undefined, {
     message: 'A comment belongs to a research: send kind "research" with it.',
     path: ['comment'],
+  })
+  .refine((request) => request.trigger === undefined || request.kind === undefined, {
+    message: 'A trigger belongs to an actuality check: send no kind with it.',
+    path: ['trigger'],
   });
 
 export const checkBeginResponseSchema = z.strictObject({

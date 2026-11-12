@@ -209,6 +209,8 @@ interface StubBoard {
   state: RuntimeState;
   queries: string[];
   reports: { body: unknown; authorization: string | undefined }[];
+  /** The bodies of `POST /tasks/:id/checks` as text, exactly as the runner sent them. */
+  begins: string[];
   /** Answers to `run-failure`, in order; the last one repeats. */
   answers: number[];
   /** Requests not yet handed: the next runner that waits gets the first. */
@@ -229,8 +231,20 @@ const runsQueryBeforeT94 = z.strictObject({
     .optional(),
 });
 
+/**
+ * The query of `GET /runs` as a board of T94 parses it: `signals` is known, `trigger` is not
+ * (ADR-0029 T95). A board before T94 knows neither.
+ */
+const runsQueryOfT94 = z.strictObject({
+  accepts: z
+    .string()
+    .regex(/^(check|research)(,(check|research))*$/)
+    .optional(),
+  signals: z.literal('run-failure').optional(),
+});
+
 async function stubBoard(
-  options: { earlier?: boolean; answers?: number[] } = {},
+  options: { earlier?: boolean; withoutTrigger?: boolean; answers?: number[] } = {},
 ): Promise<StubBoard> {
   const root = await resolveBoardRoot(await initRepo(await tmpDir()));
   await mkdir(join(root, '.board'), { recursive: true });
@@ -239,6 +253,7 @@ async function stubBoard(
     root,
     queries: [] as string[],
     reports: [] as StubBoard['reports'],
+    begins: [] as string[],
     answers: options.answers ?? [200],
     queue: [] as unknown[],
     waiting: [] as ServerResponse[],
@@ -260,7 +275,10 @@ async function stubBoard(
       if (url.pathname === '/api/v1/runs') {
         stub.queries.push(url.search);
         const query = Object.fromEntries(url.searchParams);
-        if (options.earlier === true && !runsQueryBeforeT94.safeParse(query).success) {
+        const refused =
+          (options.earlier === true && !runsQueryBeforeT94.safeParse(query).success) ||
+          (options.withoutTrigger === true && !runsQueryOfT94.safeParse(query).success);
+        if (refused) {
           return json(response, 400, {
             error: { code: 'INVALID_REQUEST', message: 'The request does not match.', details: {} },
           });
@@ -281,6 +299,10 @@ async function stubBoard(
       if (/^\/api\/v1\/tasks\/T\d+\/ai-run$/.test(url.pathname)) {
         const { sessionId } = JSON.parse(text) as { sessionId: string };
         return json(response, 200, { agent: 'runner', state: 'working', runId: 1, sessionId });
+      }
+      if (/^\/api\/v1\/tasks\/T\d+\/checks$/.test(url.pathname) && request.method === 'POST') {
+        stub.begins.push(text);
+        return json(response, 200, { number: stub.begins.length, version: 1 });
       }
       if (/\/end$/.test(url.pathname)) return json(response, 200, {});
       return json(response, 404, { error: { code: 'NOT_FOUND', message: 'No.', details: {} } });
@@ -411,12 +433,22 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       await runner.printed(/^The session on T1 ended/);
       await runner.printed(WAITING, 2);
 
-      expect(stub.queries[0]).toBe('?accepts=check,research&signals=run-failure');
-      // From then on, to the board with this token, never signals again.
-      expect(stub.queries.slice(1)).toEqual(
-        stub.queries.slice(1).map(() => '?accepts=check,research'),
+      // Trigger first (V1), then the same without it (V2), then without signals too (V6, K11).
+      expect(stub.queries.slice(0, 3)).toEqual([
+        '?accepts=check,research,trigger&signals=run-failure',
+        '?accepts=check,research&signals=run-failure',
+        '?accepts=check,research',
+      ]);
+      // From then on, to the board with this token, never signals again: trigger is tried, and
+      // dropped, on every new connection.
+      expect(stub.queries.slice(3)).toEqual(
+        stub.queries
+          .slice(3)
+          .map((_query, index) =>
+            index % 2 === 0 ? '?accepts=check,research,trigger' : '?accepts=check,research',
+          ),
       );
-      expect(stub.queries.length).toBeGreaterThanOrEqual(3);
+      expect(stub.queries.length).toBeGreaterThanOrEqual(5);
       const notes = runner.out.filter((line) => /earlier version/.test(line));
       expect(notes).toEqual([
         'This board is of an earlier version: it will not show a failed start on the page.',
@@ -435,8 +467,8 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
       await runner.printed(WAITING, 2);
       expect(stub.queries.slice(0, 2)).toEqual([
-        '?accepts=check,research&signals=run-failure',
-        '?accepts=check,research&signals=run-failure',
+        '?accepts=check,research,trigger&signals=run-failure',
+        '?accepts=check,research,trigger&signals=run-failure',
       ]);
       expect(runner.out.join('\n')).not.toMatch(/earlier version/);
     } finally {
@@ -454,6 +486,127 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       stub.hand({ type: 'run.requested', taskId: 'T1', agent: 'claude-code' });
       await runner.printed(/`claude`.*PATH/);
       expect(stub.reports).toEqual([]);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+});
+
+describe('the trigger of a check in the runner (ADR-0029 T95, V1–V5)', () => {
+  const TRIGGER = { reason: 'task-done', task: 'T7', doneAt: '2026-11-06T10:00:00.000Z' };
+  const check = (trigger?: object) => ({
+    type: 'run.requested',
+    taskId: 'T1',
+    agent: 'claude-code',
+    kind: 'check',
+    ...(trigger === undefined ? {} : { trigger }),
+  });
+
+  it('a board that knows trigger: asked with it, and the trigger goes to begin byte for byte (V1, V4, INVARIANT)', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      const sent = { ...TRIGGER, commit: 'abc1234def' };
+      stub.queue.push(check(sent));
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+
+      expect(stub.queries[0]).toBe('?accepts=check,research,trigger&signals=run-failure');
+      expect(stub.begins).toHaveLength(1);
+      const body = JSON.parse(stub.begins[0] ?? '') as { trigger?: unknown; kind?: unknown };
+      expect(JSON.stringify(body.trigger)).toBe(JSON.stringify(sent));
+      // An actuality check: no kind, and nothing else of the trigger is a field of begin.
+      expect(body.kind).toBeUndefined();
+      expect(Object.keys(body).sort()).toEqual(['agent', 'sessionId', 'trigger']);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('a trigger without a commit reaches begin without one', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(check(TRIGGER));
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+      expect((JSON.parse(stub.begins[0] ?? '') as { trigger: unknown }).trigger).toEqual(TRIGGER);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('a check without a trigger begins as before: no trigger field (INVARIANT)', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(check());
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+      expect(Object.keys(JSON.parse(stub.begins[0] ?? '') as object).sort()).toEqual([
+        'agent',
+        'sessionId',
+      ]);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('the trigger and the token stay out of the arguments and the environment of claude', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(check({ ...TRIGGER, commit: 'abc1234def' }));
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+      const [call] = await claude.calls();
+      const seen = JSON.stringify([call?.argv, call?.env]);
+      for (const secret of [TRIGGER.doneAt, 'abc1234def', 'task-done', stub.state.token]) {
+        expect(seen).not.toContain(secret);
+      }
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('a board of T94 answers 400 to trigger: one retry at once without it, signals kept, no note (V2, V6)', async () => {
+    const stub = await stubBoard({ withoutTrigger: true });
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push({ type: 'run.requested', taskId: 'T1', agent: 'claude-code' });
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await until(claude.calls, (calls) => calls.length === 1);
+      await runner.printed(/^The session on T1 ended/);
+      await runner.printed(WAITING, 2);
+
+      expect(stub.queries.slice(0, 2)).toEqual([
+        '?accepts=check,research,trigger&signals=run-failure',
+        '?accepts=check,research&signals=run-failure',
+      ]);
+      // No permanent refusal: every new connection tries trigger again.
+      expect(stub.queries.slice(2, 4)).toEqual([
+        '?accepts=check,research,trigger&signals=run-failure',
+        '?accepts=check,research&signals=run-failure',
+      ]);
+      // A 400 to the request with trigger says nothing about signals.
+      expect(runner.out.join('\n')).not.toMatch(/earlier version/);
+      expect(stub.queries.some((query) => query === '?accepts=check,research')).toBe(false);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('after the fallback, ordinary work requests keep coming', async () => {
+    const stub = await stubBoard({ withoutTrigger: true });
+    try {
+      const claude = await fakeClaude();
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(WAITING);
+      stub.hand({ type: 'run.requested', taskId: 'T1', agent: 'claude-code' });
+      await runner.printed(/^The session on T1 ended/);
+      await runner.printed(WAITING, 2);
+      stub.hand({ type: 'run.requested', taskId: 'T2', agent: 'claude-code' });
+      await runner.printed(/^The session on T2 ended/);
     } finally {
       await closeStub(stub);
     }

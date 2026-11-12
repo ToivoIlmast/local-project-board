@@ -4,6 +4,7 @@ import type {
   CheckKind,
   CheckReportContent,
   CheckSummary,
+  CheckTrigger,
   CheckVerdict,
   Decision,
   RepoState,
@@ -43,6 +44,8 @@ export interface BeginCheckInput {
   kind?: CheckKind | undefined;
   /** The focus of a research, as sent (ADR-0030 R2). */
   comment?: string | undefined;
+  /** Only an actuality check; stored as the runner sent it (ADR-0029 T95 V4). */
+  trigger?: CheckTrigger | undefined;
 }
 
 /**
@@ -222,6 +225,13 @@ export function createHistoryService({
     beginCheck: (taskId, input) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
+        if (input.trigger !== undefined && input.kind !== undefined) {
+          throw new BoardError(
+            'INVALID_REQUEST',
+            'A trigger belongs to an actuality check: send no kind with it.',
+            { issues: [{ path: 'trigger', message: 'Not with a research.' }] },
+          );
+        }
         // Pinned to a version that exists and equals what is on disk (ADR-0030 §6).
         const appended = await syncHistory(storage, taskId, contentOf(task));
         const pinned = latestVersion([...(await storage.listVersions(taskId))]) as TaskVersion;
@@ -248,6 +258,7 @@ export function createHistoryService({
           ...(input.kind === undefined ? {} : { kind: input.kind }),
           ...(input.comment === undefined ? {} : { comment: input.comment }),
           ...(documents === undefined ? {} : { documents }),
+          ...(input.trigger === undefined ? {} : { trigger: input.trigger }),
         });
         announceVersions(taskId, appended);
         events.publish({ type: 'check.updated', taskId, number: begin.number });
