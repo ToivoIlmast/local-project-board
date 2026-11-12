@@ -14,6 +14,9 @@ const RECONNECT_MS = 500;
 /** The kinds this runner starts besides work (ADR-0029 T54). */
 const ACCEPTS = 'check,research';
 
+/** Said besides the kinds: this runner carries the trigger of a check into begin (T95, V1). */
+const TRIGGER = 'trigger';
+
 /** What this runner reports to the board (ADR-0029 T94, K11). */
 const SIGNALS = 'run-failure';
 
@@ -78,20 +81,35 @@ export async function waitForRuns(
       await deliverPendingEnds(board.root);
       await deliverPendingCheckEnds(board.root);
       const signals = earlierBoard !== current.token;
-      const next = await nextRequest(current, stop.signal, signals, () => {
+      const onWaiting = (): void => {
         toldGone = false;
         write(
           `Waiting for Send to AI → Claude Code on the board at ${current.url}. ` +
             'Press Ctrl+C to stop.',
         );
-      });
-      if (next === 'stopped') break;
-      if (next === 'earlier') {
-        // Refused before it counted this runner, so nothing was handed: ask again at once.
+      };
+      // One attempt is at most three requests, each after a `400` to the one before, and
+      // nothing was handed by a request that was refused (ADR-0029 T95, V2 and V6):
+      // 1. with `trigger` and, unless this board's token is marked, `signals`;
+      // 2. without `trigger`, with the same `signals`: a board of T94 knows `signals` only;
+      // 3. only when 2 had `signals`: without them, and the board is marked as earlier (K11).
+      // The refusal of `trigger` is not remembered: the next attempt asks with it again.
+      let next = await nextRequest(current, stop.signal, { trigger: true, signals }, onWaiting);
+      if (next === 'refused') {
+        next = await nextRequest(current, stop.signal, { trigger: false, signals }, onWaiting);
+      }
+      if (next === 'refused' && signals) {
         earlierBoard = current.token;
         write('This board is of an earlier version: it will not show a failed start on the page.');
-        continue;
+        next = await nextRequest(
+          current,
+          stop.signal,
+          { trigger: false, signals: false },
+          onWaiting,
+        );
       }
+      if (next === 'stopped') break;
+      if (next === 'refused') next = 'lost';
       if (next === 'lost') {
         // The board went away or was restarted with another address and token: find it again.
         running = undefined;
@@ -117,7 +135,16 @@ export async function waitForRuns(
         // comment of a research goes to the begin, not to the command line (ADR-0029 T54).
         const code =
           next.kind === 'check'
-            ? await startCheckSession(program, next.taskId, current, board.root, env, next.model)
+            ? await startCheckSession(
+                program,
+                next.taskId,
+                current,
+                board.root,
+                env,
+                next.model,
+                undefined,
+                next.trigger,
+              )
             : next.kind === 'research'
               ? await startCheckSession(
                   program,
@@ -169,9 +196,9 @@ export async function waitForRuns(
 async function nextRequest(
   board: RuntimeState,
   signal: AbortSignal,
-  signals: boolean,
+  declare: { trigger: boolean; signals: boolean },
   onWaiting: () => void,
-): Promise<RunRequest | 'lost' | 'stopped' | 'earlier'> {
+): Promise<RunRequest | 'lost' | 'stopped' | 'refused'> {
   // A stop that came while the ends were delivered fires no event any more: it is read here.
   if (signal.aborted) return 'stopped';
   const connection = new AbortController();
@@ -179,13 +206,15 @@ async function nextRequest(
   signal.addEventListener('abort', abort);
   try {
     // Says what this runner can start, so that the board hands it nothing it cannot (D13).
-    const query = `accepts=${ACCEPTS}${signals ? `&signals=${SIGNALS}` : ''}`;
+    const accepts = declare.trigger ? `${ACCEPTS},${TRIGGER}` : ACCEPTS;
+    const query = `accepts=${accepts}${declare.signals ? `&signals=${SIGNALS}` : ''}`;
     const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?${query}`, {
       headers: { authorization: `Bearer ${board.token}` },
       signal: connection.signal,
     });
-    // A board of an earlier version parses the query strictly and refuses `signals` (K11).
-    if (signals && response.status === 400) return 'earlier';
+    // A board of an earlier version parses the query strictly and refuses what it does not know:
+    // `signals` (K11) or `trigger` (T95). Which one is for the caller to conclude.
+    if (response.status === 400) return 'refused';
     if (!response.ok || response.body === null) return 'lost';
     // The board counts this runner from the moment it answered; only now is it true.
     onWaiting();

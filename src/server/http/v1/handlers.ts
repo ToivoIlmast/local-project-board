@@ -53,6 +53,30 @@ export type Handlers = {
 const deleted = { deleted: true } as const;
 
 /**
+ * A trigger names a task that is done, and the `doneAt` of its completion. One that does not
+ * match the board now was made for a completion that is gone (the task was reopened, or done
+ * again): a request that can be judged only against the board, so `400 INVALID_REQUEST` and
+ * nobody is asked (ADR-0029 T95).
+ */
+async function requireCurrentTrigger(
+  context: RouteContext,
+  trigger: NonNullable<BodyOf<'tasks.run'>['trigger']>,
+): Promise<void> {
+  const source = await context.tasks.get(trigger.task).catch((error: unknown) => {
+    if (error instanceof BoardError && error.code === 'TASK_NOT_FOUND') return undefined;
+    throw error;
+  });
+  if (source?.doneAt === trigger.doneAt) return;
+  const why =
+    source === undefined
+      ? `The task "${trigger.task}" of the trigger does not exist.`
+      : `The trigger names a completion of ${trigger.task} at ${trigger.doneAt}, which is not the one the board has now.`;
+  throw new BoardError('INVALID_REQUEST', why, {
+    issues: [{ path: 'trigger.doneAt', message: why }],
+  });
+}
+
+/**
  * One line a page can show (K10): control characters, newlines included, become spaces, the
  * session token becomes `[token]`, and the rest is trimmed. Nothing left is no message.
  */
@@ -116,9 +140,14 @@ export const handlers: Handlers = {
         kind: body.kind,
         ...(body.model === undefined ? {} : { model: body.model }),
       };
+      // The trigger is judged against the board before a runner is asked (ADR-0029 T95): the
+      // task that is done must be the one it names, with the `doneAt` it names. `commit` is a
+      // self-report that the agent verifies through git; the board does not look it up.
+      if (body.trigger !== undefined) await requireCurrentTrigger(context, body.trigger);
       const handed = context.runs.hand({
         ...check,
         ...(body.comment === undefined ? {} : { comment: body.comment }),
+        ...(body.trigger === undefined ? {} : { trigger: body.trigger }),
       });
       if (handed !== 'handed') throw noRunner(params.id, handed);
       return check;

@@ -528,6 +528,7 @@ export function summarizeCheck(check: Check): CheckSummary {
     ...(check.begin.comment === undefined
       ? {}
       : { comment: summarizeComment(check.begin.comment) }),
+    ...(check.begin.trigger === undefined ? {} : { trigger: check.begin.trigger }),
     ...(check.report?.verdict === undefined ? {} : { verdict: check.report.verdict }),
     ...(decisions === undefined ? {} : { decisions }),
     ...(check.end === undefined ? {} : { endedAt: check.end.endedAt }),

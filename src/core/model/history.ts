@@ -212,6 +212,25 @@ export const begunDocumentSchema = z.strictObject({
 });
 export type BegunDocument = z.infer<typeof begunDocumentSchema>;
 
+/**
+ * Why an actuality check was started, when it was started by the completion of a task (ADR-0030
+ * V1, ADR-0029 T95). `commit` is the agent's self-report from the `aiRun` of the source task;
+ * the board does not look it up. Never a transcript, a copy of a text or a token. The keys are in
+ * the order the board hands them, so that a copy of it is the same text.
+ */
+export const checkTriggerSchema = z.strictObject({
+  reason: z.literal('task-done'),
+  /** The source task: the one whose completion started the check. */
+  task: taskIdSchema,
+  /** Its `doneAt` when the trigger was made, as it is stored. */
+  doneAt: isoDateTimeSchema,
+  commit: z
+    .string()
+    .regex(/^[0-9a-f]{7,64}$/, 'Must be a commit SHA')
+    .optional(),
+});
+export type CheckTrigger = z.infer<typeof checkTriggerSchema>;
+
 export const checkBeginSchema = z
   .strictObject({
     taskId: taskIdSchema,
@@ -233,12 +252,18 @@ export const checkBeginSchema = z
       .refine((text) => !text.includes('\0'), 'Must not contain NUL')
       .optional(),
     documents: z.array(begunDocumentSchema).optional(),
+    /** Only an actuality check has one (ADR-0030 V1); absent in every check begun without. */
+    trigger: checkTriggerSchema.optional(),
   })
   .refine(
     (begin) =>
       begin.kind !== undefined || (begin.comment === undefined && begin.documents === undefined),
     { message: 'A comment and documents belong to a research only', path: ['kind'] },
-  );
+  )
+  .refine((begin) => begin.kind === undefined || begin.trigger === undefined, {
+    message: 'A trigger belongs to an actuality check, not to a research',
+    path: ['trigger'],
+  });
 export type CheckBegin = z.infer<typeof checkBeginSchema>;
 
 /** The markdown file of a research report, described by the record written after it. */
@@ -328,6 +353,8 @@ export const checkSummarySchema = z.strictObject({
   kind: checkKindSchema.optional(),
   /** The first line of the comment of a research, cut short; the whole is in the begin. */
   comment: z.string().min(1).optional(),
+  /** The trigger of the `begin`, as stored (ADR-0030 V2). */
+  trigger: checkTriggerSchema.optional(),
   verdict: checkVerdictSchema.optional(),
   /** Present once the check has a report. */
   decisions: decisionCountsSchema.optional(),

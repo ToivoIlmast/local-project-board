@@ -17,12 +17,15 @@ import { SSE_HEARTBEAT_MS, SSE_RETRY_MS } from './sse.js';
  *
  * A runner says which kinds it can start besides work (`?accepts=check,research`, D13): one of
  * an earlier version says nothing and is handed work only, so that a request it cannot read is
- * never handed to it and lost while the page is told "started".
+ * never handed to it and lost while the page is told "started". `trigger` is no kind but a
+ * word of the same list (ADR-0029 T95, V1): the runner carries the trigger of a check into the
+ * begin, and only such a runner is handed a check that has one.
  */
 export interface RunDispatch {
   /**
    * Hands the request to one waiting runner that can start its kind, and lets it go. `nobody`
-   * when none waits, `outdated` when some wait but none of them can start this kind.
+   * when none waits, `outdated` when some wait but none of them can start this kind (with the
+   * trigger of the request, if it has one: it is never dropped to hand the request on, V5).
    */
   hand(request: Omit<RunRequest, 'type' | 'requestId'>): Handed;
   /**
@@ -41,9 +44,12 @@ export type Handed = 'handed' | 'nobody' | 'outdated';
 
 type RunKind = NonNullable<RunRequest['kind']> | 'work';
 
+/** What a runner may declare: the kinds it starts, and `trigger` (ADR-0029 T95, V1). */
+type Accepted = RunKind | 'trigger';
+
 interface Waiting {
   response: Response;
-  accepts: ReadonlySet<RunKind>;
+  accepts: ReadonlySet<Accepted>;
   /** It declared `signals=run-failure` (K11): only such a runner is sent a `requestId`. */
   reports: boolean;
   /** Its connection closed: whatever is sent to it now is lost, so nothing is. */
@@ -62,7 +68,11 @@ export function createRunDispatch(): RunDispatch {
     hand(request) {
       if (waiting.length === 0) return 'nobody';
       const kind: RunKind = request.kind ?? 'work';
-      const index = waiting.findLastIndex((runner) => runner.accepts.has(kind));
+      const index = waiting.findLastIndex(
+        (runner) =>
+          runner.accepts.has(kind) &&
+          (request.trigger === undefined || runner.accepts.has('trigger')),
+      );
       if (index === -1) return 'outdated';
       const [runner] = waiting.splice(index, 1);
       const event: RunRequest = { type: 'run.requested', ...request };
@@ -113,7 +123,7 @@ export function createRunDispatch(): RunDispatch {
         response.write(`retry: ${SSE_RETRY_MS}\n\n`);
         const runner: Waiting = {
           response,
-          accepts: new Set<RunKind>(['work', ...accepts]),
+          accepts: new Set<Accepted>(['work', ...accepts]),
           reports: signals.includes('run-failure'),
           closed: false,
         };
