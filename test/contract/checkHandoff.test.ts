@@ -108,6 +108,66 @@ describe('the handoff of a check (ADR-0030 §6)', () => {
   });
 });
 
+describe('the trigger in the handoff of a check (T99)', () => {
+  const trigger = {
+    reason: 'task-done' as const,
+    task: 'T7',
+    doneAt: '2026-11-10T09:00:00.000Z',
+    commit: '9f1c1a2b3c',
+  };
+  const BASE = 'http://127.0.0.1:7432/api/v1';
+
+  it('is the same text as before without a trigger (INVARIANT)', () => {
+    const plain = generateCheckHandoff(options());
+    expect(plain).not.toContain('## Why this check');
+    expect(plain).not.toContain('## Topic context');
+    expect(plain).not.toContain('T7');
+  });
+
+  it('says why the check was made and links the done task, its report and its commit', () => {
+    const text = generateCheckHandoff(options({ trigger }));
+    expect(text).toContain('## Why this check');
+    expect(text).toContain('## Topic context');
+    expect(text).toContain('task T7');
+    expect(text).toContain(trigger.doneAt);
+    expect(text).toContain(`GET ${BASE}/tasks/T7`);
+    expect(text).toContain(`GET ${BASE}/tasks/T7/documents/report.md`);
+    expect(text).toContain('git show 9f1c1a2b3c');
+  });
+
+  it('names no commit link when the trigger has no commit', () => {
+    const { commit: _commit, ...bare } = trigger;
+    const text = generateCheckHandoff(options({ trigger: bare }));
+    expect(text).toContain('## Topic context');
+    expect(text).toContain(`GET ${BASE}/tasks/T7/documents/report.md`);
+    expect(text).not.toContain('Its commit');
+  });
+
+  it('holds links, never a copy of the text of the task or of its report (INVARIANT)', () => {
+    // Whatever the done task says is not an input of the handoff: only the trigger is.
+    const text = generateCheckHandoff(options({ trigger }));
+    const section = text.slice(
+      text.indexOf('## Why this check'),
+      text.indexOf('## The task under review'),
+    );
+    expect(section.length).toBeGreaterThan(0);
+    expect(Object.keys(trigger).sort()).toEqual(['commit', 'doneAt', 'reason', 'task']);
+    // The sections hold the identifiers of the trigger and routes, nothing longer.
+    expect(section).not.toMatch(/Title:|Body:|```/);
+  });
+
+  it('keeps the token rule, and holds no token', () => {
+    const text = generateCheckHandoff(options({ trigger }));
+    expect(text).toContain(TOKEN_RULE);
+    expect(text).not.toMatch(/Bearer [0-9a-f]{20,}/);
+  });
+
+  it('is not part of a research', () => {
+    const text = generateCheckHandoff(options({ trigger, kind: 'research' }));
+    expect(text).not.toContain('## Why this check');
+  });
+});
+
 describe('claudeCheckPrompt', () => {
   it('names the handoff of this check and nothing else', () => {
     expect(claudeCheckPrompt('T12', 3, 'http://127.0.0.1:7432')).toBe(

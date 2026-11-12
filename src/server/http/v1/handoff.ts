@@ -89,6 +89,7 @@ export async function composeCheckHandoff(
     documents: attached,
     reportLanguage: effective.values.reportLanguage,
     ...(research ? { kind: 'research' as const } : {}),
+    ...(check.begin.trigger === undefined ? {} : { trigger: check.begin.trigger }),
     ...(check.begin.comment === undefined ? {} : { comment: check.begin.comment }),
     // What the task had before is for a research to read; a check is told nothing of it.
     ...(research ? { history: await pastOf(history, id, number) } : {}),

@@ -279,3 +279,39 @@ describe('POST /tasks/:id/checks with a trigger, and the summary (ADR-0030 V2)',
     expect(await checksDir(target.id)).toEqual([]);
   });
 });
+
+describe('GET /tasks/:id/checks/:n/handoff of a triggered check (T99)', () => {
+  const begin = (id: string, body: object = {}) =>
+    board.post(`${API}/tasks/${id}/checks`, { agent: 'claude-code', sessionId: SESSION, ...body });
+  const handoff = async (id: string): Promise<string> =>
+    (await board.get(`${API}/tasks/${id}/checks/1/handoff`).expect(200)).text;
+
+  it('links the done task, its report and its commit, and copies none of their text (INVARIANT)', async () => {
+    const source = await createTask({ title: 'SourceTitleMarker', body: 'SourceBodyMarker' });
+    await board
+      .put(`${API}/tasks/${source.id}/documents/report.md`, { content: 'ReportTextMarker' })
+      .expect(200);
+    const done = (await board.patch(`${API}/tasks/${source.id}`, { status: 'done' }).expect(200))
+      .body as { doneAt: string };
+    const target = await createTask();
+    await begin(target.id, {
+      trigger: trigger({ id: source.id, doneAt: done.doneAt }, { commit: 'abc1234def' }),
+    }).expect(200);
+    const text = await handoff(target.id);
+    expect(text).toContain('## Why this check');
+    expect(text).toContain(`${API}/tasks/${source.id}/documents/report.md`);
+    expect(text).toContain('git show abc1234def');
+    for (const marker of ['SourceTitleMarker', 'SourceBodyMarker', 'ReportTextMarker']) {
+      expect(text).not.toContain(marker);
+    }
+    expect(text).not.toContain(board.token);
+  });
+
+  it('a check without a trigger has the handoff it always had', async () => {
+    const target = await createTask();
+    await begin(target.id).expect(200);
+    const text = await handoff(target.id);
+    expect(text).not.toContain('## Why this check');
+    expect(text).not.toContain('## Topic context');
+  });
+});
