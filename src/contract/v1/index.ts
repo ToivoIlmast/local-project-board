@@ -6,6 +6,7 @@ export * from './history.js';
 export * from './instructions.js';
 export * from './launch.js';
 export * from './readiness.js';
+export * from './revalidation.js';
 export * from './routes.js';
 export * from './schemas.js';
 export * from './tokenRule.js';

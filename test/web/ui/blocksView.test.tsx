@@ -359,18 +359,11 @@ describe('the row of a task', () => {
     expect(within(row('T3')).queryByText(/not done/)).toBeNull();
   });
 
-  it('shows the progress of dependencies as ↻ done/total', async () => {
+  it('no longer shows dependencies done as ↻: that sign is the series of checks (T100)', async () => {
     await openBlocks();
 
-    expect(within(row('T5')).getByText('↻ 1/2')).toBeVisible();
-    expect(within(row('T3')).getByText('↻ 2/2')).toBeVisible();
-    expect(within(row('T1')).queryByText(/↻/)).toBeNull();
-  });
-
-  it('says the same in words for a screen reader', async () => {
-    await openBlocks();
-
-    expect(within(row('T5')).getByText('1 of 2 dependencies done')).toHaveClass('visually-hidden');
+    expect(within(stack()).queryByText(/↻/)).toBeNull();
+    expect(within(stack()).queryByText(/dependencies done/)).toBeNull();
   });
 
   it('opens the task when its title is pressed', async () => {

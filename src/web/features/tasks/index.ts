@@ -13,3 +13,4 @@ export {
   placeLabel,
   type BlockSummary,
 } from './model/placement';
+export { useSeries, type SeriesView } from './model/useSeries';
