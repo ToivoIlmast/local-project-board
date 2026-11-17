@@ -772,15 +772,30 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
   };
 }
 
+/**
+ * Process state of a running board, not board data: `runtime.json` (pid, port, token), the
+ * temp file it is written through, and the runner journal. Writing them is not a change of the
+ * board, so it must not make every open page reread it.
+ */
+export function isRuntimeFile(filename: string | null): boolean {
+  if (filename === null) return false;
+  const parts = filename.split(/[\\/]/);
+  if (parts[0] === 'runner') return true;
+  return (
+    parts.length === 1 && (parts[0] === 'runtime.json' || /^\.[0-9a-f]{12}\.tmp$/.test(parts[0]!))
+  );
+}
+
 function startWatching(boardDir: string, options: MarkdownStorageOptions): AbortController {
   const controller = new AbortController();
   void (async () => {
     try {
       let pending: NodeJS.Timeout | undefined;
-      for await (const _event of watch(boardDir, {
+      for await (const event of watch(boardDir, {
         recursive: true,
         signal: controller.signal,
       })) {
+        if (isRuntimeFile(event.filename)) continue;
         if (pending) clearTimeout(pending);
         // Several writes arrive as several events; one refresh is enough.
         pending = setTimeout(() => options.onExternalChange?.(), 50);

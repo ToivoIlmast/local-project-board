@@ -11,6 +11,7 @@ import {
 import { defaultConfig } from '../../src/server/config/schema.js';
 import { createStorage } from '../../src/server/storage/index.js';
 import { writeFileAtomic } from '../../src/server/storage/markdown/atomic.js';
+import { isRuntimeFile } from '../../src/server/storage/markdown/index.js';
 import { runStorageConformance } from '../conformance/storage.js';
 import { cleanTmpDirs, tmpDir } from '../support/tmp.js';
 
@@ -403,6 +404,37 @@ describe('markdown storage on disk', () => {
     await watched.close();
     expect(changes.length).toBeGreaterThan(0);
   }, 20_000);
+
+  it('does not report runtime.json, but still reports task.md', async () => {
+    const changes: number[] = [];
+    const watched = markdownStorage({ root, onExternalChange: () => changes.push(Date.now()) });
+    await watched.init();
+    const created = await watched.createTask(task);
+    // Let the events of creating the task settle before counting.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    changes.length = 0;
+    const runtime = join(root, '.board', 'runtime.json');
+    await writeFile(runtime, '{}\n', 'utf8');
+    await rm(runtime);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(changes).toEqual([]);
+    await writeFile(join(root, '.board', 'tasks', created.id, 'task.md'), 'x', 'utf8');
+    for (let i = 0; i < 100 && changes.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await watched.close();
+    expect(changes.length).toBeGreaterThan(0);
+  }, 20_000);
+
+  it('recognises the runtime files of a board', () => {
+    expect(isRuntimeFile('runtime.json')).toBe(true);
+    expect(isRuntimeFile('.0123456789ab.tmp')).toBe(true);
+    expect(isRuntimeFile('runner/T1.json')).toBe(true);
+    expect(isRuntimeFile('tasks/T1/task.md')).toBe(false);
+    expect(isRuntimeFile('tasks/T1/runtime.json')).toBe(false);
+    expect(isRuntimeFile('workflow.yaml')).toBe(false);
+    expect(isRuntimeFile(null)).toBe(false);
+  });
 });
 
 describe('markdown storage: workflow settings', () => {
