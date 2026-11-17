@@ -74,7 +74,17 @@ test('check, decide, apply, save and restore, from the page', async ({ page, boa
 
   // 3. One recommendation is accepted; the other is advice and only read.
   await report.getByRole('button', { name: 'Accept r1' }).click();
-  await expect(report.getByText('Accepted')).toBeVisible();
+  // Wait on r1's own decision, which the page shows only once the board has it. A bare
+  // getByText('Accepted') also matches the "Apply accepted" button, which is there before the
+  // click, and so would let the read below race the decision.
+  const r1 = report
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('button', { name: 'Accept r1' }) });
+  await expect(r1.getByTitle('Decision')).toHaveText('Accepted');
+  await expect(r1.getByRole('button', { name: 'Accept r1' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   const decided = (await board.api('/api/v1/tasks/T1/checks/1')) as {
     decisions: { recommendation: string; decision: string }[];
   };
