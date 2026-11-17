@@ -262,6 +262,63 @@ for (const scheme of ['light', 'dark'] as const) {
   });
 }
 
+for (const scheme of ['light', 'dark'] as const) {
+  test(`axe finds nothing on the series panel, the question before a second check and the Blocks View indicator in the ${scheme} theme`, async ({
+    page,
+    board,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await board.api('/api/v1/topics', { method: 'POST', body: { title: 'Series' } });
+    await board.api('/api/v1/topics/P1/blocks', { method: 'POST', body: { title: 'Build' } });
+    const place = { topic: 'P1', block: 'K1' };
+    await board.api('/api/v1/tasks', {
+      method: 'POST',
+      body: { title: 'Finished work', status: 'todo', ...place },
+    });
+    for (const title of ['Check me', 'And me']) {
+      await board.api('/api/v1/tasks', {
+        method: 'POST',
+        body: { title, status: 'todo', ...place },
+      });
+    }
+    // `doneAt` comes with the change of status, not with the creation of a task.
+    const done = (await board.api('/api/v1/tasks/T1', {
+      method: 'PATCH',
+      body: { status: 'done' },
+    })) as { doneAt: string };
+    // A check of T2 for this completion that is still marked as working.
+    await board.api('/api/v1/tasks/T2/checks', {
+      method: 'POST',
+      body: {
+        agent: 'claude-code',
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        trigger: { reason: 'task-done', task: 'T1', doneAt: done.doneAt },
+      },
+    });
+
+    await page.goto(board.url);
+    await page.getByRole('button', { name: 'Finished work' }).click();
+    const panel = page.getByRole('region', { name: 'Series of checks' });
+    await expect(panel.getByText('0 of 2 checked')).toBeVisible();
+    await expect(panel.getByText('Working')).toBeVisible();
+    expect(await violations(page), `the series panel, ${scheme} theme`).toEqual([]);
+
+    await panel.getByRole('button', { name: 'Check T2' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Check #1 for task T2 is still marked');
+    expect(await violations(page), `the question before a second check, ${scheme} theme`).toEqual(
+      [],
+    );
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await page
+      .getByRole('navigation', { name: 'View' })
+      .getByRole('button', { name: 'Blocks', exact: true })
+      .click();
+    await expect(page.getByTitle('Series of checks')).toContainText('↻ 0/2');
+    expect(await violations(page), `the Blocks View with a series, ${scheme} theme`).toEqual([]);
+  });
+}
+
 test('the whole board can be used with the keyboard alone, and the focus is never lost', async ({
   page,
   board,

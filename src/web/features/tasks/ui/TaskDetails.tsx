@@ -23,6 +23,7 @@ import { NewResearchDialog } from './NewResearchDialog';
 import { TaskAiRun } from './TaskAiRun';
 import { TaskLaunch } from './TaskLaunch';
 import { TaskAiSettings } from './TaskAiSettings';
+import { SeriesPanel } from './SeriesPanel';
 import { TaskChecks } from './TaskChecks';
 import { TaskDialog } from './TaskDialog';
 import { TaskVersions } from './TaskVersions';
@@ -214,6 +215,7 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
         onRetry={retry}
         onView={(next) => setChosen(next)}
       />
+      <SeriesPanel task={task} />
       <TaskChecks
         task={task}
         checks={history?.checks}

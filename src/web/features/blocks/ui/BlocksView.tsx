@@ -8,7 +8,7 @@ import {
 import { useBoard } from '../../../api/react';
 import { Badge, EmptyState } from '../../../shared/ui/index';
 import { NO_TOPIC } from '../../board/index';
-import { blockSummary, reasonText, type BlockSummary } from '../../tasks/index';
+import { blockSummary, reasonText, useSeries, type BlockSummary } from '../../tasks/index';
 import { BlockMenu } from './BlockMenu';
 
 export interface BlocksViewProps {
@@ -73,12 +73,7 @@ export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
           {unplaced.length === 0 ? (
             <p className="blocks__none">No tasks without a topic and a block.</p>
           ) : (
-            <TaskRows
-              tasks={unplaced}
-              all={state.tasks}
-              readiness={state.readiness}
-              onOpen={onOpen}
-            />
+            <TaskRows tasks={unplaced} readiness={state.readiness} onOpen={onOpen} />
           )}
         </section>
       ) : null}
@@ -124,7 +119,7 @@ function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocks
               )}
               <BlockMenu topic={topic} block={block} position={index} onDeleted={onDeleted} />
             </header>
-            <TaskRows tasks={inBlock} all={tasks} readiness={readiness} onOpen={onOpen} />
+            <TaskRows tasks={inBlock} readiness={readiness} onOpen={onOpen} />
           </section>
         );
       })}
@@ -133,7 +128,7 @@ function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocks
           <header className="blocks__block-head">
             <h4 className="blocks__block-title">Not in a block</h4>
           </header>
-          <TaskRows tasks={loose} all={tasks} readiness={readiness} onOpen={onOpen} />
+          <TaskRows tasks={loose} readiness={readiness} onOpen={onOpen} />
         </section>
       )}
     </section>
@@ -142,24 +137,19 @@ function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocks
 
 interface TaskRowsProps {
   tasks: readonly Task[];
-  /** Every task of the board: a dependency may be anywhere. */
-  all: readonly Task[];
   readiness: Readonly<Record<string, readonly BlockingReason[]>>;
   onOpen: (id: string) => void;
 }
 
-function TaskRows({ tasks, all, readiness, onOpen }: TaskRowsProps) {
+function TaskRows({ tasks, readiness, onOpen }: TaskRowsProps) {
+  const { views } = useSeries(tasks);
   if (tasks.length === 0) return null;
   return (
     <ul className="blocks__tasks">
       {tasks.map((task) => {
         const reasons = readiness[task.id] ?? NONE;
         const launch = launchState(task, reasons);
-        const dependencies = [...new Set(task.dependsOn ?? [])];
-        const doneDependencies = dependencies.filter((id) => {
-          const dependency = all.find((candidate) => candidate.id === id);
-          return dependency !== undefined && launchState(dependency, []).done;
-        }).length;
+        const series = views.get(task.id);
         const why = `Blocked: ${reasons.map(reasonText).join('; ')}`;
         const first = reasons[0];
         return (
@@ -174,13 +164,15 @@ function TaskRows({ tasks, all, readiness, onOpen }: TaskRowsProps) {
               {task.title}
             </button>
             <Badge>{task.id}</Badge>
-            {dependencies.length === 0 ? null : (
-              <span className="blocks__deps" title="Dependencies done">
+            {series === undefined ? null : (
+              <span className="blocks__deps" title="Series of checks">
                 <span aria-hidden="true">
-                  ↻ {doneDependencies}/{dependencies.length}
+                  ↻ {series.loaded ? series.checked : '…'}/{series.total}
                 </span>
                 <span className="visually-hidden">
-                  {doneDependencies} of {dependencies.length} dependencies done
+                  {series.loaded
+                    ? `${series.checked} of ${series.total} checked`
+                    : `checks of ${task.id} loading`}
                 </span>
               </span>
             )}
