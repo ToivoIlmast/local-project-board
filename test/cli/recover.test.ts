@@ -14,6 +14,7 @@ import {
   writeJournal,
   type RunJournal,
 } from '../../src/server/cli/runJournal.js';
+import { RUNNER_LOG } from '../../src/server/cli/runnerLog.js';
 import { cli, cliInBackground, stopBoards } from '../support/cli.js';
 import { fakeClaude } from '../support/fakeClaude.js';
 import { freePort, releasePorts } from '../support/ports.js';
@@ -29,6 +30,12 @@ afterEach(async () => {
   await releasePorts();
   await cleanTmpDirs();
 });
+
+/** The journals left in `.board/runner/`; the runner log beside them stays by design (T76 B2). */
+const journalFiles = async (root: string): Promise<string[]> =>
+  (await readdir(journalDir(root)).catch(() => [] as string[])).filter(
+    (name) => name !== RUNNER_LOG,
+  );
 
 const SESSION = '3d0f71eb-97a5-476d-8ea4-e7b3eb0c5bfc';
 
@@ -130,7 +137,7 @@ describe('claude --recover <ID> (T45)', () => {
     const run = await aiRun(state);
     expect(run).toMatchObject({ state: 'failed', runId: 1, sessionId: SESSION });
     expect(run?.failure).toMatchObject({ kind: 'lost', message: expect.stringMatching(/101/) });
-    expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+    expect(await journalFiles(root)).toEqual([]);
   });
 
   it('unknown without --confirm-stopped: nothing changes, and it says how to confirm (INVARIANT)', async () => {
@@ -186,7 +193,7 @@ describe('claude --recover <ID> (T45)', () => {
       failure: { kind: 'exit', exitCode: 3 },
       endedAt: '2026-10-11T10:00:00.000Z',
     });
-    expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+    expect(await journalFiles(root)).toEqual([]);
   });
 
   it('prints no token', async () => {
@@ -214,7 +221,7 @@ describe('the runner journal (T45)', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     expect(await aiRun(state)).toMatchObject({ state: 'failed', failure: { exitCode: 2 } });
-    expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+    expect(await journalFiles(root)).toEqual([]);
     await waiting.stop();
   });
 
@@ -231,7 +238,7 @@ describe('the runner journal (T45)', () => {
     await recover(root, machine());
 
     expect(await aiRun(state)).toEqual(current);
-    expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+    expect(await journalFiles(root)).toEqual([]);
   });
 
   describe('a journal without an outcome, for a run the board already has as over (T71)', () => {
@@ -372,7 +379,7 @@ describe('the runner journal (T45)', () => {
     }
     await session.done;
     // Delivered: nothing is left to deliver.
-    expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+    expect(await journalFiles(root)).toEqual([]);
   });
 });
 

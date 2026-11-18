@@ -199,8 +199,11 @@ describe('the buttons that recover a run (T39)', () => {
     await rendered.user.click(restartButton() as HTMLElement);
 
     const confirm = await screen.findByRole('dialog', { name: /Start .* over/i });
-    expect(confirm).toHaveTextContent(/renamed.*-attempt-/i);
-    expect(confirm).toHaveTextContent(/nothing is deleted/i);
+    // The agent does the renaming, and nothing checks it (T76 C2): the text must not promise it.
+    expect(confirm).toHaveTextContent(/agent is asked to rename.*-attempt-/i);
+    expect(confirm).toHaveTextContent(/not checked/i);
+    expect(confirm).not.toHaveTextContent(/is renamed/i);
+    expect(confirm).not.toHaveTextContent(/nothing is deleted/i);
     expect(rendered.board.calls).not.toContain('runTask');
 
     await rendered.user.click(within(confirm).getByRole('button', { name: 'Cancel' }));

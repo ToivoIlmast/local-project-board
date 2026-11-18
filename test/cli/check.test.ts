@@ -17,6 +17,7 @@ import {
   type RunJournal,
 } from '../../src/server/cli/runJournal.js';
 import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js';
+import { RUNNER_LOG } from '../../src/server/cli/runnerLog.js';
 import { cli, cliInBackground, stopBoards } from '../support/cli.js';
 import { fakeClaude } from '../support/fakeClaude.js';
 import { freePort, releasePorts } from '../support/ports.js';
@@ -87,8 +88,11 @@ const checkOf = (state: RuntimeState, id: string, number: number) =>
     }>(a),
   );
 
+/** The journals left in `.board/runner/`; the runner log beside them stays by design (T76 B2). */
 const journalNames = async (root: string): Promise<string[]> =>
-  (await readdir(journalDir(root)).catch(() => [] as string[])).sort();
+  (await readdir(journalDir(root)).catch(() => [] as string[]))
+    .filter((name) => name !== RUNNER_LOG)
+    .sort();
 
 const checkRecord = (extra: Partial<CheckJournal> = {}): CheckJournal => ({
   formatVersion: 1,
