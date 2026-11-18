@@ -40,7 +40,7 @@ test('the Blocks View is a main view; its blocks are renamed, added, moved and d
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Rename', exact: true }).click();
   await expect(page.getByLabel('Title')).toBeFocused();
-  await page.keyboard.press('Control+A');
+  await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('Make');
   await page.keyboard.press('Enter');
   await expect(headings(page)).toHaveText(['K1 · Design', 'K2 · Make', 'K3 · Review']);
