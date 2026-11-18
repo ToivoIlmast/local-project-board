@@ -13,6 +13,7 @@ const KNOWN = [
   'branch',
   'workflow',
   'aiRun',
+  'aiRunHistory',
   'launch',
   'topic',
   'block',

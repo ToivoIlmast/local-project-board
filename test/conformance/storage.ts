@@ -1393,6 +1393,24 @@ export function runStorageConformance(harness: StorageHarness): void {
         expect((await storage.getTask(created.id))?.aiRun).toEqual(working);
       });
 
+      it('keeps every run that has a runId in the history, across a reopen (T103, INVARIANT)', async () => {
+        const created = await storage.createTask(newTask());
+        const first = { ...working, runId: 1, state: 'failed' as const };
+        await storage.updateTask(created.id, { aiRun: { ...working, runId: 1 } });
+        await storage.updateTask(created.id, { aiRun: first });
+        await storage.updateTask(created.id, { aiRun: { ...working, runId: 2 } });
+        const reopened = await reopen(storage);
+        const task = await reopened.getTask(created.id);
+        expect(task?.aiRunHistory).toEqual([first, { ...working, runId: 2 }]);
+        expect(task?.aiRun?.runId).toBe(2);
+      });
+
+      it('has no history for a run without a runId (T103)', async () => {
+        const created = await storage.createTask(newTask());
+        const updated = await storage.updateTask(created.id, { aiRun: finished });
+        expect(updated.aiRunHistory).toBeUndefined();
+      });
+
       it('forgets the run when the patch says null, and keeps it when the patch is silent', async () => {
         const created = await storage.createTask(newTask());
         await storage.updateTask(created.id, { aiRun: working });

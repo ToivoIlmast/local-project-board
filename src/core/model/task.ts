@@ -27,6 +27,11 @@ export const taskSchema = z
     workflow: taskWorkflowSchema.optional(),
     /** What the last agent on this task reported about its run (T27). */
     aiRun: aiRunSchema.optional(),
+    /**
+     * Every run the runner began, by runId, oldest first (T103). Written by the storage with each
+     * write of `aiRun`; the record of run N is never touched by a write for another run.
+     */
+    aiRunHistory: z.array(aiRunSchema).optional(),
     /** The last request of a work run handed to a runner; the board's alone (ADR-0029 T94). */
     launch: launchSchema.optional(),
     /** Where the task is placed (ADR-0032 §3). None of the three is content: no version (ADR-0030 §1). */

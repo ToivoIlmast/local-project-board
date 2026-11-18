@@ -44,7 +44,8 @@ export interface NewTask {
 /**
  * Only the given fields change. `branch: null` clears the branch; `workflow: null` clears all of
  * the task's workflow overrides, and a `workflow` object replaces them whole, as `labels` does.
- * `aiRun` is the same: an object replaces the reported run whole, null forgets it. `topic`,
+ * `aiRun` is the same: an object replaces the reported run whole, null forgets it; a run with a
+ * runId is also kept in `aiRunHistory` of the task (T103). `topic`,
  * `block` and `dependsOn` are set or cleared (null) the same way; what a write names of them must
  * hold against the board, or it is refused and nothing changes (ADR-0032 §3–4, T85): the place
  * that results must be whole (`INVALID_PLACEMENT`), and `dependsOn` must name tasks that can be
