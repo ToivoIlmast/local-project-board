@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { deliverPendingEnds } from '../../src/server/cli/runEnd.js';
 import { runCli } from '../../src/server/cli/run.js';
 import { procProbe, type ProcessProbe } from '../../src/server/cli/processProbe.js';
 import { readRuntime, type RuntimeState } from '../../src/server/cli/runtime.js';
@@ -231,6 +232,93 @@ describe('the runner journal (T45)', () => {
 
     expect(await aiRun(state)).toEqual(current);
     expect(await readdir(journalDir(root)).catch(() => [])).toEqual([]);
+  });
+
+  describe('a journal without an outcome, for a run the board already has as over (T71)', () => {
+    /** The runner died after the agent's report but before it wrote the outcome. */
+    async function boardWithFinishedRun(): Promise<{ root: string; state: RuntimeState }> {
+      const made = await boardWithWorkingRun();
+      const report = await api(made.state, 'PATCH', '/tasks/T1/ai-run/1/report', {
+        agent: 'claude-code',
+        state: 'finished',
+        checks: 'skipped',
+        finishedAt: '2026-10-11T10:00:00Z',
+      });
+      expect(report.status).toBe(200);
+      expect(await aiRun(made.state)).toMatchObject({ state: 'finished', runId: 1 });
+      return made;
+    }
+    const names = async (root: string) => (await readdir(journalDir(root)).catch(() => [])).sort();
+
+    it('is removed when the runner and claude are gone (INVARIANT)', async () => {
+      const { root, state } = await boardWithFinishedRun();
+      await writeJournal(root, journal());
+      const before = await aiRun(state);
+
+      await recover(root, machine());
+
+      expect(await names(root)).toEqual([]);
+      // Nothing was made up for the board: no end, no outcome.
+      expect(await aiRun(state)).toEqual(before);
+    });
+
+    it('is removed when the recorded pids now belong to other processes (a reused pid)', async () => {
+      const { root } = await boardWithFinishedRun();
+      await writeJournal(root, journal());
+
+      await recover(root, machine({ startOf: () => Promise.resolve('999999') }));
+
+      expect(await names(root)).toEqual([]);
+    });
+
+    it.each([
+      ['claude', 101, '5001'],
+      ['the runner', 100, '5000'],
+    ])('stays while %s is still running (INVARIANT)', async (_who, pid, start) => {
+      const { root } = await boardWithFinishedRun();
+      await writeJournal(root, journal());
+
+      await recover(root, machine({ startOf: (p) => Promise.resolve(p === pid ? start : 'gone') }));
+
+      expect(await names(root)).toEqual(['T1-1.json']);
+    });
+
+    it('stays while a process holds the session', async () => {
+      const { root } = await boardWithFinishedRun();
+      await writeJournal(root, journal());
+
+      await recover(
+        root,
+        machine({
+          processes: () =>
+            Promise.resolve({
+              list: [{ pid: 300, argv: ['claude', '--resume', SESSION] }],
+              unreadable: 0,
+            }),
+        }),
+      );
+
+      expect(await names(root)).toEqual(['T1-1.json']);
+    });
+
+    it('stays when this machine cannot tell whether the processes are gone', async () => {
+      const { root } = await boardWithFinishedRun();
+      await writeJournal(root, journal());
+
+      await recover(root, machine({ startOf: () => Promise.resolve(undefined) }));
+
+      expect(await names(root)).toEqual(['T1-1.json']);
+    });
+
+    it('stays while the board has the run as working, even if its processes are gone (INVARIANT)', async () => {
+      const { root } = await boardWithWorkingRun();
+      await writeJournal(root, journal());
+
+      // Only `claude --recover` may call a working run lost; the sweep never does.
+      await deliverPendingEnds(root, machine());
+
+      expect(await names(root)).toEqual(['T1-1.json']);
+    });
   });
 
   it('a session started by the runner leaves a journal with its process and no token, readable by its owner only', async () => {
