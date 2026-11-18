@@ -119,6 +119,26 @@ describe('POST /tasks/:id/ai-run/:runId/end (end)', () => {
   });
 });
 
+describe('the history of the runs (T103)', () => {
+  it('shows every run of the task through GET /tasks/:id, and no token (INVARIANT)', async () => {
+    const id = await createTask();
+    await board.post(`${API}/tasks/${id}/ai-run`, BEGIN_BODY).expect(200);
+    await board
+      .post(`${API}/tasks/${id}/ai-run/1/end`, { exitCode: 1, endedAt: '2026-01-01T00:00:00.000Z' })
+      .expect(200);
+    await board.post(`${API}/tasks/${id}/ai-run`, { ...BEGIN_BODY, mode: 'resume' }).expect(200);
+
+    const response = await board.get(`${API}/tasks/${id}`).expect(200);
+    const runs = response.body.aiRunHistory as { runId: number; state: string }[];
+    expect(runs.map((run) => [run.runId, run.state])).toEqual([
+      [1, 'failed'],
+      [2, 'working'],
+    ]);
+    expect(runs[0]).toMatchObject({ failure: { kind: 'exit', exitCode: 1 } });
+    expect(JSON.stringify(response.body)).not.toContain(board.token);
+  });
+});
+
 describe('routes absent from generateInstructions (INVARIANT)', () => {
   it('ai-run begin, end and report routes are not in the generated instructions', () => {
     const instructions = generateInstructions({

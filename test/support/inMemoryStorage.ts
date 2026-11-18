@@ -132,7 +132,15 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
     if (workflow === null) delete updated.workflow;
     else if (workflow !== undefined) updated.workflow = { ...workflow };
     if (aiRun === null) delete updated.aiRun;
-    else if (aiRun !== undefined) updated.aiRun = { ...aiRun };
+    else if (aiRun !== undefined) {
+      updated.aiRun = { ...aiRun };
+      if (aiRun.runId !== undefined) {
+        const others = (task.aiRunHistory ?? []).filter((run) => run.runId !== aiRun.runId);
+        updated.aiRunHistory = [...others, structuredClone(aiRun)].sort(
+          (a, b) => (a.runId ?? 0) - (b.runId ?? 0),
+        );
+      }
+    }
     if (launch === null) delete updated.launch;
     else if (launch !== undefined) updated.launch = structuredClone(launch);
     return updated;
