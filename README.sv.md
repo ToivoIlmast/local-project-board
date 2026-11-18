@@ -1,4 +1,4 @@
-<!-- Based on README.md @ f626319e8939969ce23a691254e4b4d0b3643cc4 -->
+<!-- Based on README.md @ 24c1eceb6a61d9fb53f685947c05bc359099d946 -->
 
 # local-project-board
 
@@ -161,6 +161,40 @@ hittar en körande tavla, och så en andra tavla i samma katalog nekas.
 Servern lyssnar bara på loopback-gränssnittet och ingen annanstans; det finns ingen flagga som
 ändrar det. Att läsa API:t kräver ingenting, att ändra något kräver körningens token, och
 förfrågningar från en annan sida eller till en annan värd nekas.
+
+## Plattformar
+
+Vad som har körts, och vad som inte har det. CI kör alla kontroller på Ubuntu, Windows och macOS
+med Node.js 22.12.0 och 24.x, och webbläsartesterna på alla tre; en plattform nedan sägs ”fungera”
+bara för det som har körts på den.
+
+| Plattform                                      | Läge                       | Kontrollerat genom                                                      |
+| ---------------------------------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| Linux                                          | Fungerar                   | CI; alla tester, paketet, webbläsartesterna                             |
+| WSL2, projekt i Linux-filsystemet (`~/…`)      | Fungerar                   | Daglig användning; webbläsaren öppnas på Windows-sidan                  |
+| WSL2, projekt på en Windows-enhet (`/mnt/c/…`) | Fungerar med begränsningar | För hand: liveuppdateringar kommer genom avsökning, se nedan            |
+| Windows 11                                     | Fungerar med begränsningar | Alla kontroller och det installerade paketet på en maskin, Node 22.13.1 |
+| macOS                                          | Inte kontrollerat          | Bara CI kan säga; ingen Mac fanns till hands                            |
+
+- **WSL2, `/mnt/c`.** `fs.watch` får ingen händelse alls på en Windows-enhet, inte ens för en
+  ändring gjord från Linux, och säger ingenting om det. Tavlan märker detta och tittar på filerna
+  varannan sekund i stället: en uppgift som ändrats i en editor eller av en agent syns efter några
+  sekunder, senare på en stor tavla, och det kostar fler diskläsningar. Data blir aldrig inaktuella:
+  varje förfrågan läser filerna ändå.
+- **WSL2, webbläsaren.** Tavlan öppnar Windows standardwebbläsare med `explorer.exe`, även när
+  `WSL_DISTRO_NAME` saknas (under `sudo`). Utan Windows-mapparna i `PATH`
+  (`appendWindowsPath = false`) öppnas ingenting; öppna den utskrivna URL:en själv.
+- **Windows, Claude Code.** Bara `claude.exe` (den inbyggda installeraren) startas. En
+  `claude.cmd` från `npm install -g` startas inte: en `.cmd` behöver ett skal, och prompten ges
+  aldrig till ett.
+- **Windows, att stoppa.** Windows har inga signaler: en tavla vars fönster stängs eller vars
+  process avslutas lämnar `.board/runtime.json` kvar. Nästa start ser att ingen tavla svarar där och
+  ersätter den. `Ctrl+C` i terminalen kontrollerades inte för hand.
+- **Windows, token.** ”Läsbar endast för dig” är en filrättighet på Linux och macOS. Windows bryr
+  sig inte om filrättigheter; `runtime.json` är lika privat som mappen den ligger i (din
+  användarmapp är det; en mapp som `C:\work` kanske inte). Inte kontrollerat vidare.
+- **Windows, `claude --recover`.** Det finns ingen `/proc`, så den kan inte avgöra om en körare
+  fortfarande lever, och säger det i stället för att gissa.
 
 ## Med en AI-agent
 

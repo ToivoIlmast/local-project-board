@@ -1,4 +1,4 @@
-<!-- Based on README.md @ f626319e8939969ce23a691254e4b4d0b3643cc4 -->
+<!-- Based on README.md @ 24c1eceb6a61d9fb53f685947c05bc359099d946 -->
 
 # local-project-board
 
@@ -167,6 +167,40 @@ torjutaan.
 Palvelin kuuntelee vain loopback-liitäntää eikä missään muualla; sitä ei voi vaihtaa valitsimella.
 API:n lukeminen ei vaadi mitään, muutokset vaativat tämän ajon tunnuksen, ja pyynnöt toiselta
 sivulta tai toiselle isännälle torjutaan.
+
+## Alustat
+
+Mitä on ajettu ja mitä ei. CI ajaa kaikki tarkistukset Ubuntulla, Windowsilla ja macOS:llä
+Node.js-versioilla 22.12.0 ja 24.x sekä selaintestit kaikilla kolmella; alla oleva alusta on
+”toimii” vain sen osalta, mitä sillä on ajettu.
+
+| Alusta                                                | Tila               | Tarkistettu                                                             |
+| ----------------------------------------------------- | ------------------ | ----------------------------------------------------------------------- |
+| Linux                                                 | Toimii             | CI; kaikki testit, paketti, selaintestit                                |
+| WSL2, projekti Linuxin tiedostojärjestelmässä (`~/…`) | Toimii             | Päivittäinen käyttö; selain aukeaa Windowsin puolella                   |
+| WSL2, projekti Windowsin asemalla (`/mnt/c/…`)        | Toimii rajoituksin | Käsin: reaaliaikaiset päivitykset kyselemällä, ks. alla                 |
+| Windows 11                                            | Toimii rajoituksin | Kaikki tarkistukset ja asennettu paketti yhdellä koneella, Node 22.13.1 |
+| macOS                                                 | Ei tarkistettu     | Vain CI voi kertoa; Macia ei ollut käytettävissä                        |
+
+- **WSL2, `/mnt/c`.** `fs.watch` ei saa Windowsin asemalla yhtään tapahtumaa, ei edes Linuxista
+  tehdystä muutoksesta, eikä kerro siitä. Taulu huomaa tämän ja katsoo tiedostot sen sijaan kahden
+  sekunnin välein: editorissa tai agentin muokkaama tehtävä näkyy muutaman sekunnin kuluttua, isolla
+  taululla myöhemmin, ja se maksaa enemmän levyn lukuja. Tiedot eivät koskaan vanhene: jokainen
+  pyyntö lukee tiedostot joka tapauksessa.
+- **WSL2, selain.** Taulu avaa Windowsin oletusselaimen `explorer.exe`:llä, myös kun
+  `WSL_DISTRO_NAME` puuttuu (`sudo`). Ilman Windowsin kansioita `PATH`:ssa
+  (`appendWindowsPath = false`) mitään ei aukea; avaa tulostettu URL itse.
+- **Windows, Claude Code.** Vain `claude.exe` (natiivi asennusohjelma) käynnistetään. Komennon
+  `npm install -g` antamaa `claude.cmd`:tä ei: `.cmd` tarvitsee komentotulkin, eikä kehotetta koskaan
+  anneta sellaiselle.
+- **Windows, pysäyttäminen.** Windowsissa ei ole signaaleja: taulu, jonka ikkuna suljetaan tai
+  prosessi lopetetaan, jättää `.board/runtime.json`:n jälkeensä. Seuraava käynnistys näkee, ettei
+  siellä vastaa taulua, ja korvaa sen. `Ctrl+C`:tä päätteessä ei tarkistettu käsin.
+- **Windows, tunnus.** ”Vain sinun luettavissasi” on Linuxissa ja macOS:ssä tiedoston oikeus.
+  Windows ei huomioi tiedosto-oikeuksia; `runtime.json` on yhtä yksityinen kuin kansio, jossa se
+  on (käyttäjäkansiosi on; esimerkiksi `C:\work` ei välttämättä). Ei tarkistettu tämän pidemmälle.
+- **Windows, `claude --recover`.** `/proc`:ia ei ole, joten se ei voi tietää, onko ajaja yhä
+  elossa, ja sanoo sen arvaamisen sijaan.
 
 ## Tekoälyagentin kanssa
 
