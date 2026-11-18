@@ -263,8 +263,9 @@ Hyvä tietää:
   jotka lohko merkitsee sellaisiksi. Epäonnistunut ajo kertoo syyn sanoin (ei käynnistynyt, päättyi
   ilman loppuraporttia koodeineen, agentin oma viesti tai kadonnut). Ajolle, jonka tila on `failed`
   tai `needs-review`, on kaksi painiketta: **Resume** avaa yllä olevan dialogin kyseisen ajon
-  istunnolla ja **Restart** kysyy ensin — vanha haara nimetään uudelleen muotoon `…-attempt-N`,
-  mitään ei poisteta — ja aloittaa työn alusta uudessa istunnossa. Kumpaakaan ei ole, kun Claude
+  istunnolla ja **Restart** kysyy ensin — agenttia pyydetään nimeämään vanha haara
+  uudelleen muotoon `…-attempt-N` ja säilyttämään sen raportti; taulu ei tee tätä eikä
+  tarkista sitä — ja aloittaa työn alusta uudessa istunnossa. Kumpaakaan ei ole, kun Claude
   Code työskentelee, eikä istuntoja edeltäneellä ajolla ole Resumea. Lohko kopioi myös komennon
   `claude --resume <istunto>` käsin jatkamista varten. Kortti näyttää `AI: failed #N`.
 - Clauden on tehtävä HTTP-pyyntöjä osoitteeseen `127.0.0.1` — se käyttää `curl`ia Bash-työkalunsa
@@ -276,7 +277,9 @@ Hyvä tietää:
   tapetaan), tehtävä jää tilaan **working** eikä siihen voi käynnistää mitään. Aja
   `npx local-project-board claude --recover <ID>` projektin terminaalissa. Se toimittaa ensin
   lopun, jonka odottaja kirjasi muttei saanut lähetettyä (odottaja säilyttää sen hakemistossa
-  `.board/runner/`, joten se säilyy odottajan ja taulun uudelleenkäynnistyksen yli), ja katsoo
+  `.board/runner/`, joten se säilyy odottajan ja taulun uudelleenkäynnistyksen yli; sen oma loki,
+  `.board/runner/runner.log`, sisältää jokaisen käynnistetyn istunnon tarkan argv:n ja sen, mitä
+  kullekin lopulle tapahtui, vain omistajan luettavissa ja ilman tokenia), ja katsoo
   sitten tätä konetta: **alive** — taulu jätetään ennalleen; **lost** — odottaja ja sen kirjaama
   `claude` ovat poissa, ja ajo merkitään tilaan `failed` (`failure.kind: lost`) todisteineen;
   **unknown** — tämä kone ei pysty näyttämään sitä (ei `/proc`ia, toinen käyttöjärjestelmä tai
