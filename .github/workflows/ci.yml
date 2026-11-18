@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Windows runs are slow, so they are not part of push/PR runs. Start them by hand from
+  # Actions -> CI -> "Run workflow" (or `gh workflow run ci.yml --ref <branch>`).
+  workflow_dispatch:
 
 jobs:
   verify:
@@ -11,7 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # push / pull_request -> Ubuntu and macOS; manual run (workflow_dispatch) -> Windows.
+        # (The env context is not available in strategy, so the lists are written inline.)
+        os: >-
+          ${{ fromJSON(github.event_name == 'workflow_dispatch'
+          && '["windows-latest"]'
+          || '["ubuntu-latest", "macos-latest"]') }}
         # Lowest supported version (package.json engines) and current LTS.
         node: ['22.12.0', '24.x']
     steps:
@@ -39,7 +47,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # push / pull_request -> Ubuntu and macOS; manual run (workflow_dispatch) -> Windows.
+        # (The env context is not available in strategy, so the lists are written inline.)
+        os: >-
+          ${{ fromJSON(github.event_name == 'workflow_dispatch'
+          && '["windows-latest"]'
+          || '["ubuntu-latest", "macos-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
