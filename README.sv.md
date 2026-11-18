@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 5d76690c7aeda449a51f3b7ac7e86c75bbbb9226 -->
+<!-- Based on README.md @ f626319e8939969ce23a691254e4b4d0b3643cc4 -->
 
 # local-project-board
 
@@ -260,8 +260,9 @@ Bra att veta:
   rapporterade och som blocket märker som sådana. En körning som misslyckats säger varför i ord
   (startade inte, slutade utan slutrapport med sin kod, agentens eget meddelande eller förlorad).
   För en körning som är `failed` eller `needs-review` finns två knappar: **Resume** öppnar dialogen
-  ovan med den körningens session, och **Restart** frågar först — den gamla grenen byter namn till
-  `…-attempt-N`, inget raderas — och startar sedan om arbetet i en ny session. Ingen av dem finns
+  ovan med den körningens session, och **Restart** frågar först — agenten ombeds byta namn på den
+  gamla grenen till `…-attempt-N` och spara dess rapport; tavlan gör inte detta och
+  kontrollerar det inte — och startar sedan om arbetet i en ny session. Ingen av dem finns
   medan Claude Code arbetar, och en körning från före sessionerna har ingen Resume. Blocket kopierar
   också `claude --resume <session>` för att fortsätta för hand. Kortet visar `AI: failed #N`.
 - Claude måste göra HTTP-anrop till `127.0.0.1` — den använder `curl` via sitt Bash-verktyg — och
@@ -273,7 +274,9 @@ Bra att veta:
   uppgiften kvar som **working** och inget kan startas på den. Kör
   `npx local-project-board claude --recover <ID>` i en terminal i projektet. Den levererar först
   ett slut som väntaren skrev ned men inte kunde skicka (väntaren sparar det i `.board/runner/`,
-  så det överlever väntaren och en omstart av tavlan), och tittar sedan på den här datorn:
+  så det överlever väntaren och en omstart av tavlan; dess egen logg, `.board/runner/runner.log`,
+  har den exakta argv för varje session den startade och vad som hände med varje slut, läsbar
+  bara för ägaren och utan token), och tittar sedan på den här datorn:
   **alive** — tavlan lämnas orörd; **lost** — väntaren och den `claude` den registrerade är borta,
   och körningen markeras `failed` (`failure.kind: lost`) med beviset; **unknown** — den här
   datorn kan inte visa det (ingen `/proc`, ett annat OS eller PID-namnrymd, en körning startad

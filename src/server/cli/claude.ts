@@ -15,6 +15,7 @@ import { boardMessage, findRunningBoard, get, post } from './running.js';
 import type { RuntimeState } from './runtime.js';
 import { spawnSession } from './spawnSession.js';
 import { writeJournal, type RunJournal } from './runJournal.js';
+import { logRunner } from './runnerLog.js';
 
 /** The one program this command starts. It is never taken from the command line (T19). */
 const PROGRAM = 'claude';
@@ -124,6 +125,7 @@ export async function startSession(
     prompt,
   ];
   const journal = await startJournal(root, id, runId, sessionId);
+  await logRunner(root, { event: 'start', taskId: id, runId, mode, program, argv: args });
   return run(program, args, root, env, journal);
 }
 
@@ -267,6 +269,7 @@ async function endRun(
   const deadline = Date.now() + END_RETRY_MS;
   let delay = END_RETRY_INITIAL_DELAY_MS;
   for (;;) {
+    // `deliverEnd` logs a delivered or dropped end itself, whoever sends it (T76 B2).
     if ((await deliverEnd(journal.root, journal.record)) !== 'pending') return;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -275,14 +278,16 @@ async function endRun(
     });
     delay = Math.min(delay * 2, 5_000);
   }
-  process.stderr.write(
+  await logRunner(journal.root, { event: 'end', taskId, runId, delivery: 'pending' });
+  const warning =
     `Warning: the board did not take the end of run ${runId} of ${taskId}.\n` +
-      (journal.kept
-        ? '  It is kept in .board/runner/ and is delivered by the next ' +
-          '`local-project-board claude --wait` or `claude <ID>`, or now by:\n'
-        : '  It could not be kept on disk either. When the board is back, run:\n') +
-      `    local-project-board claude --recover ${taskId}\n`,
-  );
+    (journal.kept
+      ? '  It is kept in .board/runner/ and is delivered by the next ' +
+        '`local-project-board claude --wait` or `claude <ID>`, or now by:\n'
+      : '  It could not be kept on disk either. When the board is back, run:\n') +
+    `    local-project-board claude --recover ${taskId}\n`;
+  await logRunner(journal.root, { event: 'warning', taskId, runId, message: warning.trim() });
+  process.stderr.write(warning);
 }
 
 /**

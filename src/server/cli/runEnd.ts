@@ -2,6 +2,7 @@ import { findRunningBoard, get, post } from './running.js';
 import { procProbe, type ProcessProbe } from './processProbe.js';
 import { inspectRun } from './runInspect.js';
 import { listJournals, removeJournal, type RunJournal } from './runJournal.js';
+import { logRunner } from './runnerLog.js';
 
 export type Delivery = 'delivered' | 'dropped' | 'pending';
 
@@ -14,6 +15,9 @@ export type Delivery = 'delivered' | 'dropped' | 'pending';
  * (the run was replaced or abandoned and ended since, or the task is gone; the board's
  * compare-and-set on runId and session decided that, not this code). `pending` keeps it for the
  * next try: the board is not there, or it answered something that may pass.
+ *
+ * `delivered` and `dropped` are written to the runner log (T76 B2); `pending` is not, since the
+ * runner retries it many times: `endRun` logs it once, when it gives up.
  */
 export async function deliverEnd(root: string, record: RunJournal): Promise<Delivery> {
   const outcome = record.outcome;
@@ -29,7 +33,15 @@ export async function deliverEnd(root: string, record: RunJournal): Promise<Deli
   if (answer === undefined) return 'pending';
   if (answer.ok || answer.status === 404 || answer.status === 409) {
     await removeJournal(root, record.taskId, record.runId);
-    return answer.ok ? 'delivered' : 'dropped';
+    const delivery = answer.ok ? 'delivered' : 'dropped';
+    // Logged here, not by the caller, so an end the sweep delivers late is in the log too (T76 B2).
+    await logRunner(root, {
+      event: 'end',
+      taskId: record.taskId,
+      runId: record.runId,
+      delivery,
+    });
+    return delivery;
   }
   return 'pending';
 }

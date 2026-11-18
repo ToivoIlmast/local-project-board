@@ -260,9 +260,10 @@ What to know:
   the agent reported and the block marks so. A run that failed says why in words (not started,
   ended without a final report with its code, the agent's own message, or lost). For a run that
   `failed` or `needs-review` it has two buttons: **Resume**, which opens the dialog above on the
-  session of that run, and **Restart**, which asks first — the old branch is renamed to
-  `…-attempt-N`, nothing is deleted — and then starts the work over in a new session. Neither is
-  there while Claude Code works, and a run from before sessions has no Resume. The block also
+  session of that run, and **Restart**, which asks first — the agent is asked to rename the
+  old branch to `…-attempt-N` and keep its report; the board does not do this or check it —
+  and then starts the work over in a new session. Neither is there while Claude Code works,
+  and a run from before sessions has no Resume. The block also
   copies `claude --resume <session>` for continuing by hand. The card shows `AI: failed #N`.
 - Claude has to make HTTP requests to `127.0.0.1` — it uses `curl` through its Bash tool — and
   Claude Code asks for permission for that by default. Allow `Bash(curl *)` for the session, or in
@@ -273,7 +274,9 @@ What to know:
   task stays **working** and nothing can start on it. Run
   `npx local-project-board claude --recover <ID>` in a terminal of the project. It first delivers
   any end the runner wrote down and could not send (the runner keeps it in `.board/runner/`, so it
-  survives the runner and a restart of the board), then looks at this machine: **alive** — the
+  survives the runner and a restart of the board; its own log, `.board/runner/runner.log`, holds
+  the exact argv of every session it started and what became of each end, owner-readable only
+  and without the token), then looks at this machine: **alive** — the
   board is left alone; **lost** — the runner and `claude` it recorded are gone, and the run is
   marked `failed` (`failure.kind: lost`) with the evidence; **unknown** — this machine cannot show
   it (no `/proc`, another OS or PID namespace, a run started elsewhere), and nothing changes unless

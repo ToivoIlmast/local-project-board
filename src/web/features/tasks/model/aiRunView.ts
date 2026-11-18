@@ -18,9 +18,11 @@ export const RUN_LABELS = {
   restartMessage: (branch: string | undefined, attempt: number) =>
     `${
       branch === undefined
-        ? `The old branch is renamed to …-attempt-${attempt}`
-        : `The old branch ${branch} is renamed to ${branch}-attempt-${attempt}`
-    }, and the work starts over in a new session from the base branch. Nothing is deleted.`,
+        ? `The agent is asked to rename the old branch to …-attempt-${attempt}`
+        : `The agent is asked to rename the old branch ${branch} to ${branch}-attempt-${attempt}`
+    } and to keep its report as report-attempt-${attempt}.md, then the work starts over in a new ` +
+    'session from the base branch. The board does not do this itself and it is not checked: ' +
+    'if the agent skips it, the old work stays reachable only through the git reflog.',
   sent: (taskId: string) =>
     `Sent ${taskId} to the runner in the terminal where ` +
     '`local-project-board claude --wait` runs. Claude Code has not begun yet: the task shows ' +
