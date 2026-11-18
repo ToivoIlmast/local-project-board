@@ -162,6 +162,39 @@ The server listens on the loopback interface and nowhere else; there is no flag 
 Reading the API needs nothing, changing anything needs this run's token, and requests from another
 page or addressed to another host are refused.
 
+## Platforms
+
+What has been run, and what has not. CI runs every check on Ubuntu, Windows and macOS with Node.js
+22.12.0 and 24.x, and the browser tests on each of the three; a platform below says “works” only
+for what was run on it.
+
+| Platform                                      | State                  | Checked by                                                         |
+| --------------------------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| Linux                                         | Works                  | CI; every test, the package, the browser tests                     |
+| WSL2, project in the Linux filesystem (`~/…`) | Works                  | Daily use; the browser opens on the Windows side                   |
+| WSL2, project on a Windows drive (`/mnt/c/…`) | Works with limitations | By hand: live updates come by polling, see below                   |
+| Windows 11                                    | Works with limitations | Every check and the installed package on one machine, Node 22.13.1 |
+| macOS                                         | Not checked            | Only CI can say; no Mac was at hand                                |
+
+- **WSL2, `/mnt/c`.** `fs.watch` gets no event at all on a Windows drive, not even for a change made
+  from Linux, and says nothing about it. The board notices this and looks at the files every two
+  seconds instead: a task edited in an editor or by an agent shows up after a few seconds, later on
+  a large board, which also costs more disk reads. Data is never stale: every request reads the
+  files anyway.
+- **WSL2, the browser.** The board opens the Windows default browser with `explorer.exe`, also when
+  `WSL_DISTRO_NAME` is missing (under `sudo`). Without the Windows folders in `PATH`
+  (`appendWindowsPath = false`) nothing opens; open the printed URL yourself.
+- **Windows, Claude Code.** Only `claude.exe` (the native installer) is started. A `claude.cmd`
+  from `npm install -g` is not: a `.cmd` needs a shell, and the prompt is never given to one.
+- **Windows, stopping.** Windows has no signals: a board whose window is closed or whose process is
+  ended leaves `.board/runtime.json` behind. The next start sees that no board answers there and
+  replaces it. `Ctrl+C` in the terminal was not checked by hand.
+- **Windows, the token.** “Readable by you only” is a file mode on Linux and macOS. Windows ignores
+  file modes; `runtime.json` is as private as the folder it is in (your user folder is; a folder
+  such as `C:\work` may not be). Not checked further.
+- **Windows, `claude --recover`.** There is no `/proc`, so it cannot tell whether a runner is still
+  alive, and says so instead of guessing.
+
 ## With an AI agent
 
 ```bash

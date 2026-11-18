@@ -358,7 +358,9 @@ describe('the runner journal (T45)', () => {
             record = parsed;
             const text = await readFile(join(journalDir(root), files[0]!), 'utf8');
             expect(text).not.toContain(runtime.state.token);
-            expect((await stat(join(journalDir(root), files[0]!))).mode & 0o077).toBe(0);
+            if (process.platform !== 'win32') {
+              expect((await stat(join(journalDir(root), files[0]!))).mode & 0o077).toBe(0);
+            }
             break;
           }
         }

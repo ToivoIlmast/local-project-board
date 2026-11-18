@@ -1,6 +1,7 @@
-import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from './board';
+import { installWindowsShim } from '../support/windowsShim.js';
 
 test('a developer opens the board and works on a task', async ({ page, board }) => {
   await page.goto(board.url);
@@ -352,7 +353,11 @@ test('the AI settings of a task are changed with the keyboard, and the handoff c
   await page.keyboard.press('Enter');
   await expect(ai.getByText('Handoff copied to the clipboard.')).toBeVisible();
   await expect(ai.getByRole('button', { name: 'Send to AI' })).toBeFocused();
-  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  // The Windows clipboard keeps text with CRLF line ends, whatever the page wrote (T10).
+  const copied = ((await page.evaluate('navigator.clipboard.readText()')) as string).replaceAll(
+    '\r\n',
+    '\n',
+  );
   const served = await (
     await fetch(`${board.url.replace(/\/$/, '')}/api/v1/tasks/T1/handoff`)
   ).text();
@@ -393,7 +398,11 @@ test('the handoff is copied from the menu of a card, and is the one the board se
   const card = page.getByRole('button', { name: 'Ship it' }).locator('xpath=ancestor::li');
   await expect(card.getByText('Handoff copied to the clipboard.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Actions for T1' })).toBeFocused();
-  const copied = (await page.evaluate('navigator.clipboard.readText()')) as string;
+  // The Windows clipboard keeps text with CRLF line ends, whatever the page wrote (T10).
+  const copied = ((await page.evaluate('navigator.clipboard.readText()')) as string).replaceAll(
+    '\r\n',
+    '\n',
+  );
   const served = await (
     await fetch(`${board.url.replace(/\/$/, '')}/api/v1/tasks/T1/handoff`)
   ).text();
@@ -473,6 +482,11 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
     ].join('\n'),
   );
   await chmod(join(bin, 'claude'), 0o755);
+  if (process.platform === 'win32') {
+    // The CLI starts only claude.exe on Windows; the shim runs the same script (T10).
+    await copyFile(join(bin, 'claude'), join(bin, 'claude.js'));
+    await installWindowsShim(bin, 'claude');
+  }
 
   // The runner, started once by the person in a terminal of the project.
   const runner = board.spawnRunner(['claude', '--wait'], { PATH: bin });

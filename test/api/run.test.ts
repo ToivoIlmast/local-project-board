@@ -263,7 +263,8 @@ describe('the board server never starts a process (ADR-0029, INVARIANT)', () => 
 
     const spawners = files
       .filter((file) => /child_process/.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(process.cwd().length + 1))
+      // As a POSIX path on every platform, so the list reads the same on Windows.
+      .map((file) => file.slice(process.cwd().length + 1).replaceAll('\\', '/'))
       .sort();
 
     // The git reader runs `git` read-only (ADR-0007); the CLI starts `claude` and a browser for

@@ -26,7 +26,10 @@ function whyUnavailable(root: string): string | undefined {
   try {
     // Sitting inside somebody else's repository (an unpacked package in a project) is not
     // being a checkout of this one.
-    if (realpathSync(git(root, 'rev-parse', '--show-toplevel')) !== realpathSync(root)) {
+    // `.native`: on Windows a short (8.3) and a long name of one directory must compare equal.
+    if (
+      realpathSync.native(git(root, 'rev-parse', '--show-toplevel')) !== realpathSync.native(root)
+    ) {
       return 'not a git checkout (the directory is inside another repository)';
     }
     if (git(root, 'rev-parse', '--is-shallow-repository') === 'true') {

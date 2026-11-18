@@ -32,10 +32,13 @@ describe('.board/runtime.json', () => {
     await writeRuntime(state(root));
 
     expect(runtimePath(root)).toBe(join(root, '.board', 'runtime.json'));
-    const mode = (await stat(runtimePath(root))).mode & 0o777;
-    // It holds the session token, so the group and the world may not read it.
-    expect(mode & 0o077).toBe(0);
-    expect(mode & 0o600).toBe(0o600);
+    // It holds the session token, so the group and the world may not read it. Windows has no
+    // such mode bits (its files are guarded by ACLs), as runnerLog.test.ts says too.
+    if (process.platform !== 'win32') {
+      const mode = (await stat(runtimePath(root))).mode & 0o777;
+      expect(mode & 0o077).toBe(0);
+      expect(mode & 0o600).toBe(0o600);
+    }
   });
 
   it('holds what is needed to find the board, and nothing else (INVARIANT)', async () => {

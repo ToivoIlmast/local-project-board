@@ -39,7 +39,8 @@ describe('the prompt that starts Claude Code on a task (T19)', () => {
       .filter((file) => !file.endsWith(join('contract', 'v1', 'claudeCode.ts')))
       .filter((file) => file.endsWith('index.ts') === false)
       .filter((file) => /claudeCodePrompt\(/.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(process.cwd().length + 1))
+      // As a POSIX path on every platform, so the list reads the same on Windows.
+      .map((file) => file.slice(process.cwd().length + 1).replaceAll('\\', '/'))
       .sort();
 
     expect(callers).toEqual(['src/server/cli/claude.ts']);

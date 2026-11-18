@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -79,7 +79,7 @@ describe('claude --wait reports a start that did not begin (K9), on the real boa
     const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
     await runner.printed(WAITING);
     // Claude Code was there when the runner began to wait, and is gone when the request comes.
-    await rm(join(claude.bin, 'claude'));
+    await claude.remove();
 
     expect((await api(state, 'POST', '/tasks/T1/run', { agent: 'claude-code' })).status).toBe(200);
 
@@ -200,6 +200,18 @@ describe('startSession says why a start did not begin (K9), against the real boa
     const task = await readTask(state, 'T1');
     expect(task.aiRun).toMatchObject({ state: 'failed', failure: { kind: 'launch' } });
     expect(task.launch).toBeUndefined();
+  });
+
+  it('so is a start that spawn refuses by throwing, not by an error event (T10)', async () => {
+    // Windows throws from spawn for a claude.exe it cannot run (EFTYPE); a NUL in the path
+    // makes spawn throw on every platform, so the same path is taken everywhere.
+    const { root, state } = await boardWithTasks();
+
+    const code = await startSession(join(root, 'claude\0'), 'T1', state, root, process.env);
+
+    expect(code).toBe(1);
+    const task = await readTask(state, 'T1');
+    expect(task.aiRun).toMatchObject({ state: 'failed', failure: { kind: 'launch' } });
   });
 });
 
@@ -482,7 +494,7 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       const claude = await fakeClaude();
       const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
       await runner.printed(WAITING);
-      await rm(join(claude.bin, 'claude'));
+      await claude.remove();
       stub.hand({ type: 'run.requested', taskId: 'T1', agent: 'claude-code' });
       await runner.printed(/`claude`.*PATH/);
       expect(stub.reports).toEqual([]);

@@ -1,6 +1,7 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpDir } from './tmp.js';
+import { installWindowsShim } from './windowsShim.js';
 
 /** What the stand-in for Claude Code saw when the board launched it. */
 export interface FakeClaudeCall {
@@ -47,6 +48,8 @@ export interface FakeClaude {
   reads: () => Promise<FakeClaudeRead[]>;
   /** The environment that makes the command find it, and makes it behave as told. */
   env: (behaviour?: FakeClaudeBehaviour) => NodeJS.ProcessEnv;
+  /** Uninstalls it: whatever the CLI would find in `bin`, `claude` or `claude.exe`, is gone. */
+  remove: () => Promise<void>;
 }
 
 const lines = async <T>(file: string): Promise<T[]> => {
@@ -76,9 +79,10 @@ export async function fakeClaude(): Promise<FakeClaude> {
     [
       `#!${process.execPath}`,
       "const { appendFileSync, existsSync, readFileSync } = require('node:fs');",
-      'const env = process.env;',
+      // Behind the Windows shim the process the CLI started is the shim: its pid is the one.
+      'const { TEST_SHIM_PID, ...env } = process.env;',
       'appendFileSync(env.FAKE_CLAUDE_LOG, JSON.stringify({',
-      '  argv: process.argv.slice(2), cwd: process.cwd(), env, pid: process.pid,',
+      '  argv: process.argv.slice(2), cwd: process.cwd(), env, pid: Number(TEST_SHIM_PID ?? process.pid),',
       "}) + '\\n');",
       '(async () => {',
       '  if (env.FAKE_CLAUDE_AGENT) {',
@@ -166,9 +170,18 @@ export async function fakeClaude(): Promise<FakeClaude> {
     'utf8',
   );
   await chmod(join(bin, 'claude'), 0o755);
+  if (process.platform === 'win32') {
+    // The CLI starts only claude.exe on Windows; the shim runs the same script (T10).
+    await copyFile(join(bin, 'claude'), join(bin, 'claude.js'));
+    await installWindowsShim(bin, 'claude');
+  }
 
   return {
     bin,
+    remove: async () => {
+      await rm(join(bin, 'claude'), { force: true });
+      await rm(join(bin, 'claude.exe'), { force: true });
+    },
     calls: () => lines<FakeClaudeCall>(log),
     reads: () => lines<FakeClaudeRead>(readLog),
     env: ({ exit = 0, signal, agent = false, holdUntil, reports } = {}) => ({

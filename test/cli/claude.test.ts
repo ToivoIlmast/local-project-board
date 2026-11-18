@@ -141,17 +141,21 @@ describe('local-project-board claude <id>', () => {
       expect(run.err).toEqual([]);
     });
 
-    it('ends as a shell would say for a claude that was killed by a signal', async () => {
-      const { root } = await boardWithTasks();
-      const claude = await fakeClaude();
+    // A process on Windows is not killed by a signal; it ends with an exit code (T10).
+    (process.platform === 'win32' ? it.skip : it)(
+      'ends as a shell would say for a claude that was killed by a signal',
+      async () => {
+        const { root } = await boardWithTasks();
+        const claude = await fakeClaude();
 
-      const run = await cli(['claude', 'T1'], {
-        cwd: root,
-        env: claude.env({ signal: 'SIGTERM' }),
-      });
+        const run = await cli(['claude', 'T1'], {
+          cwd: root,
+          env: claude.env({ signal: 'SIGTERM' }),
+        });
 
-      expect(run.exitCode).toBe(143);
-    });
+        expect(run.exitCode).toBe(143);
+      },
+    );
   });
 
   describe('what it refuses, and says', () => {
