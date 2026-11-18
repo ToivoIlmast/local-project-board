@@ -4,13 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Windows runs are slow, so they are not part of push/PR runs. Start them by hand from
+  # Actions -> CI -> "Run workflow" (or `gh workflow run ci.yml --ref <branch>`).
+  workflow_dispatch:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # push / pull_request -> Ubuntu and macOS; manual run (workflow_dispatch) -> Windows.
+        # (The env context is not available in strategy, so the lists are written inline.)
+        os: >-
+          ${{ fromJSON(github.event_name == 'workflow_dispatch'
+          && '["windows-latest"]'
+          || '["ubuntu-latest", "macos-latest"]') }}
         # Lowest supported version (package.json engines) and current LTS.
         node: ['22.12.0', '24.x']
     steps:
@@ -34,7 +43,16 @@ jobs:
 
   # The browser tests are slower and need a browser, so they are their own job.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # push / pull_request -> Ubuntu and macOS; manual run (workflow_dispatch) -> Windows.
+        # (The env context is not available in strategy, so the lists are written inline.)
+        os: >-
+          ${{ fromJSON(github.event_name == 'workflow_dispatch'
+          && '["windows-latest"]'
+          || '["ubuntu-latest", "macos-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,11 +60,13 @@ jobs:
           node-version: '24.x'
           cache: npm
       - run: npm ci
+      # --with-deps installs the system libraries Chromium needs on Linux; on Windows and macOS
+      # there are none to install and it only downloads the browser.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.os }}
           path: playwright-report/
           retention-days: 7

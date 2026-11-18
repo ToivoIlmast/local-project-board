@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm, stat, watch, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BoardError } from '../../../core/errors.js';
 import type {
@@ -40,6 +40,9 @@ import { historyFiles } from './history.js';
 import { parseTask, serializeTask } from './taskFile.js';
 import { parseTopic, serializeTopic } from './topicFile.js';
 import { parseWorkflow, serializeWorkflow } from './workflowFile.js';
+import { detectWatchStrategy, watchBoard } from './watch.js';
+
+export { isRuntimeFile } from './watch.js';
 
 export interface MarkdownStorageOptions {
   /** The board root; the board itself lives in <root>/.board. */
@@ -403,7 +406,10 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       await mkdir(reportsDir, { recursive: true });
       // The board ignores itself, so no project has to know about it (ADR-0001).
       await writeFile(join(boardDir, '.gitignore'), '*\n', { encoding: 'utf8' });
-      if (options.onExternalChange && !watcher) watcher = startWatching(boardDir, options);
+      if (options.onExternalChange && !watcher) {
+        const strategy = await detectWatchStrategy(boardDir);
+        watcher = watchBoard(boardDir, options.onExternalChange, { strategy });
+      }
     },
 
     async close() {
@@ -780,42 +786,6 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       });
     },
   };
-}
-
-/**
- * Process state of a running board, not board data: `runtime.json` (pid, port, token), the
- * temp file it is written through, and the runner journal. Writing them is not a change of the
- * board, so it must not make every open page reread it.
- */
-export function isRuntimeFile(filename: string | null): boolean {
-  if (filename === null) return false;
-  const parts = filename.split(/[\\/]/);
-  if (parts[0] === 'runner') return true;
-  return (
-    parts.length === 1 && (parts[0] === 'runtime.json' || /^\.[0-9a-f]{12}\.tmp$/.test(parts[0]!))
-  );
-}
-
-function startWatching(boardDir: string, options: MarkdownStorageOptions): AbortController {
-  const controller = new AbortController();
-  void (async () => {
-    try {
-      let pending: NodeJS.Timeout | undefined;
-      for await (const event of watch(boardDir, {
-        recursive: true,
-        signal: controller.signal,
-      })) {
-        if (isRuntimeFile(event.filename)) continue;
-        if (pending) clearTimeout(pending);
-        // Several writes arrive as several events; one refresh is enough.
-        pending = setTimeout(() => options.onExternalChange?.(), 50);
-        pending.unref();
-      }
-    } catch {
-      // Watching is best-effort: it does not work on WSL2 for /mnt/c paths (ADR-0019).
-    }
-  })();
-  return controller;
 }
 
 function isCounter(value: unknown): value is number {

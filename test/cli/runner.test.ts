@@ -106,10 +106,15 @@ describe('runner lifecycle: begin / spawn / end (T33)', () => {
   it('spawn error → failed{launch}', async () => {
     const { root, state } = await boardWithTasks();
     const dir = await tmpDir();
-    // A file whose shebang points to a nonexistent interpreter: spawn emits ENOENT 'error'
-    await writeFile(join(dir, 'claude'), '#!/nonexistent_interpreter_xyz_t33\necho hi\n', {
-      mode: 0o755,
-    });
+    if (process.platform === 'win32') {
+      // A claude.exe that is no program: Windows refuses to start it, and spawn emits 'error'.
+      await writeFile(join(dir, 'claude.exe'), 'not a program\n');
+    } else {
+      // A file whose shebang points to a nonexistent interpreter: spawn emits ENOENT 'error'
+      await writeFile(join(dir, 'claude'), '#!/nonexistent_interpreter_xyz_t33\necho hi\n', {
+        mode: 0o755,
+      });
+    }
 
     const run = await cli(['claude', 'T1'], { cwd: root, env: { PATH: dir } });
 

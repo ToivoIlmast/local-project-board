@@ -33,7 +33,7 @@
     "build": "npm run build:node && npm run build:web",
     "build:node": "tsc -b tsconfig.build.json",
     "build:web": "vite build",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json && tsc -p tsconfig.test-web.json && tsc -p tsconfig.e2e.json",
     "lint": "eslint .",
     "check:cycles": "dep-health-analyzer cycles --target ./src --mode compact",

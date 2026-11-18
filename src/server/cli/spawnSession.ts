@@ -23,7 +23,20 @@ export function spawnSession(
   hooks: SessionHooks,
 ): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn(program, args, { cwd, env, stdio: 'inherit', shell: false });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(program, args, { cwd, env, stdio: 'inherit', shell: false });
+    } catch (error) {
+      // spawn emits only a few failures (ENOENT, EACCES…) as 'error' and throws the rest, such
+      // as a claude.exe that Windows cannot run (EFTYPE). Either way the start failed (T10).
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Claude Code could not be started: ${message}\n`);
+      hooks.onEnd({ launchError: message }).then(
+        () => resolve(1),
+        () => resolve(1),
+      );
+      return;
+    }
     let recorded: Promise<void> = Promise.resolve();
     child.once('spawn', () => {
       const pid = child.pid;

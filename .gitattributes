@@ -1,0 +1,2 @@
+# LF everywhere, also in a Windows checkout with core.autocrlf: Prettier checks for LF (T10).
+* text=auto eol=lf

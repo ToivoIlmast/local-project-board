@@ -7,6 +7,7 @@
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -22,13 +23,25 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 /** Packing, installing and starting a real package is slow; the project timeout is not
  * always applied to a hook, so every slow step here carries its own. */
 const SLOW_MS = 180_000;
-const work = mkdtempSync(path.join(os.tmpdir(), 'lpb-pack-'));
+const windows = process.platform === 'win32';
+// A space in every path the package is packed to, installed in and started from (T10).
+const work = mkdtempSync(path.join(os.tmpdir(), 'lpb pack '));
 let packedFiles: string[] = [];
 let tarball = '';
 let child: ChildProcess | undefined;
 
+/** On Windows `npm` and the installed bin are `.cmd` files, which only a shell can start. */
+function quoted(args: string[]): string[] {
+  return windows ? args.map((arg) => `"${arg}"`) : args;
+}
+
 function npm(args: string[], cwd: string): string {
-  return execFileSync('npm', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync('npm', quoted(args), {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: windows,
+  });
 }
 
 function freePort(): Promise<number> {
@@ -104,7 +117,9 @@ describe('npm package', () => {
   });
 
   it('ships a LICENSE with a real copyright holder', () => {
-    const license = execFileSync('tar', ['-xzOf', tarball, 'package/LICENSE'], {
+    // Relative to its directory: a GNU tar takes `C:` in a path for a remote host.
+    const license = execFileSync('tar', ['-xzOf', path.basename(tarball), 'package/LICENSE'], {
+      cwd: work,
       encoding: 'utf8',
     });
     expect(license).toMatch(/^Copyright \(c\) \d{4} \S.+$/m);
@@ -116,15 +131,34 @@ describe('npm package', () => {
     async () => {
       const install = path.join(work, 'install');
       const project = path.join(work, 'project');
-      npm(['init', '-y'], (execFileSync('mkdir', ['-p', install]), install));
+      mkdirSync(install, { recursive: true });
+      npm(['init', '-y'], install);
       npm(['install', tarball, '--no-audit', '--no-fund', '--omit=dev'], install);
-      execFileSync('mkdir', ['-p', project]);
+      mkdirSync(project, { recursive: true });
       execFileSync('git', ['init', '-q'], { cwd: project });
       writeFileSync(path.join(project, 'README.md'), '# fixture\n');
 
       const port = await freePort();
-      const bin = path.join(install, 'node_modules', '.bin', 'local-project-board');
-      child = spawn(bin, ['--port', String(port), '--no-open'], { cwd: project });
+      const bin = path.join(
+        install,
+        'node_modules',
+        '.bin',
+        windows ? 'local-project-board.cmd' : 'local-project-board',
+      );
+      // The server's own pid is checked below: on Windows the `.cmd` would put a cmd.exe in
+      // between, so the board is started with node and the script the bin entry names.
+      child = windows
+        ? spawn(
+            process.execPath,
+            [
+              path.join(install, 'node_modules', 'local-project-board', 'bin', 'board.js'),
+              '--port',
+              String(port),
+              '--no-open',
+            ],
+            { cwd: project },
+          )
+        : spawn(bin, ['--port', String(port), '--no-open'], { cwd: project });
       // Everything the real process prints, for as long as this test runs.
       let printed = '';
       const collect = (chunk: Buffer) => {
@@ -235,7 +269,8 @@ describe('npm package', () => {
         port,
         url: `${base}/`,
         token,
-        root: realpathSync(project),
+        // `.native`: the board's root is canonical, a short (8.3) Windows name expanded.
+        root: realpathSync.native(project),
       });
 
       // The board printed its URL and, after a whole session, nothing about the token.
@@ -260,11 +295,13 @@ describe('npm package', () => {
       expect((JSON.parse(exported.stdout) as { tasks: unknown[] }).tasks).toHaveLength(1);
 
       // SIGTERM stops the board: it stops answering, even with that event stream open, and
-      // takes its runtime state with it.
+      // takes its runtime state with it. Windows has no SIGTERM: the process is terminated
+      // without a chance to clean up, its runtime state stays, and the next start finds it
+      // stale and replaces it (ADR-0024).
       const exited = new Promise((resolve) => child?.once('exit', resolve));
       child.kill('SIGTERM');
       await exited;
-      expect(existsSync(runtimeFile)).toBe(false);
+      expect(existsSync(runtimeFile)).toBe(windows);
       await expect(fetch(`${base}/api/v1/project`)).rejects.toThrow();
 
       // The installed bin reports the version of this repository's package.json, and nothing
@@ -273,7 +310,7 @@ describe('npm package', () => {
       expect(versioned.status).toBe(0);
       expect(versioned.stdout).toBe(`${version}\n`);
       expect(versioned.stderr).toBe('');
-      expect(existsSync(runtimeFile)).toBe(false);
+      expect(existsSync(runtimeFile)).toBe(windows);
 
       // And now that nothing is running, the CLI still answers, without a token.
       const offline = run(bin, ['instructions'], project);
@@ -292,7 +329,12 @@ function run(
 ): { status: number; stdout: string; stderr: string } {
   // A timeout, so a command that unexpectedly keeps running fails the test instead of
   // hanging it: `local-project-board` with no arguments is a server when it is not refused.
-  const result = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: 30_000 });
+  const result = spawnSync(windows ? `"${bin}"` : bin, quoted(args), {
+    cwd,
+    encoding: 'utf8',
+    timeout: 30_000,
+    shell: windows,
+  });
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 

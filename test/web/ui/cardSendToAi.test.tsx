@@ -121,7 +121,8 @@ describe('"Send to AI" in the menu of a card', () => {
 
     const callers = files
       .filter((file) => /\.handoff\(/.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(process.cwd().length + 1))
+      // As a POSIX path on every platform, so the list reads the same on Windows.
+      .map((file) => file.slice(process.cwd().length + 1).replaceAll('\\', '/'))
       .sort();
 
     expect(callers).toEqual(['src/web/features/tasks/model/useSendToAi.ts']);

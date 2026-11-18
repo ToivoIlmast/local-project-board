@@ -306,7 +306,9 @@ describe('the journal of a check (ADR-0030 §6)', () => {
       sessionId: SESSION,
     });
     const { stat } = await import('node:fs/promises');
-    expect((await stat(join(journalDir(root), 'T1-check-1.json'))).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(join(journalDir(root), 'T1-check-1.json'))).mode & 0o777).toBe(0o600);
+    }
     expect(checkJournalSchema.safeParse({ ...checkRecord(), token: 'x' }).success).toBe(false);
   });
 
