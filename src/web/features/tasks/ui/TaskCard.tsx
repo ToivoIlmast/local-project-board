@@ -1,6 +1,8 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import { launchState, type BlockingReason, type Task } from '../../../../contract/v1/index';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { Badge, Menu, type MenuItem } from '../../../shared/ui/index';
+import { useCardT } from '../i18n/card';
 import { reasonText } from '../model/readinessText';
 import { hasOwnSettings } from '../model/taskWorkflow';
 import { useSendToAi } from '../model/useSendToAi';
@@ -21,6 +23,22 @@ export interface TaskCardProps {
   onDragStart: (id: string, event: ReactPointerEvent<HTMLElement>) => void;
 }
 
+/** A run state in the language shown; one this page does not know is shown as the board sent it. */
+function runStateLabel(t: ReturnType<typeof useCardT>, state: string): string {
+  switch (state) {
+    case 'working':
+      return t('card.state.working');
+    case 'finished':
+      return t('card.state.finished');
+    case 'failed':
+      return t('card.state.failed');
+    case 'needs-review':
+      return t('card.state.needs-review');
+    default:
+      return state;
+  }
+}
+
 /**
  * One task on the board. Dragging is one way to move it; the menu is the other, because a
  * board that can only be used with a mouse cannot be used with a keyboard.
@@ -38,23 +56,33 @@ export const TaskCard = memo(function TaskCard({
   onNudge,
   onDragStart,
 }: TaskCardProps) {
+  const t = useCardT();
+  const common = useT();
+  const statusLabel = useStatusLabel();
   const sendToAi = useSendToAi(task, undefined, reasons);
   // ● and 🔒 can be shown together: a run that has started is not stopped (ADR-0032 §7).
   const launch = launchState(task, reasons);
-  const blockedWhy = `Blocked: ${reasons.map(reasonText).join('; ')}`;
+  const blockedWhy = t('card.blocked', { reasons: reasons.map(reasonText).join('; ') });
+  const aiState = task.aiRun === undefined ? '' : runStateLabel(t, task.aiRun.state);
   const items: (MenuItem | 'separator')[] = [
-    { label: 'Open', onSelect: () => onOpen(task.id) },
-    { label: 'Edit', onSelect: () => onEdit(task.id) },
+    { label: t('card.open'), onSelect: () => onOpen(task.id) },
+    { label: t('card.edit'), onSelect: () => onEdit(task.id) },
     'separator',
-    ...sendToAi.items.map((item) => ({ ...item, label: `Send to AI: ${item.label}` })),
+    ...sendToAi.items.map((item) => ({
+      ...item,
+      label: t('card.sendToAi', { action: item.label }),
+    })),
     'separator',
-    { label: 'Move up', onSelect: () => onNudge(task.id, -1) },
-    { label: 'Move down', onSelect: () => onNudge(task.id, 1) },
+    { label: t('card.up'), onSelect: () => onNudge(task.id, -1) },
+    { label: t('card.down'), onSelect: () => onNudge(task.id, 1) },
     ...statuses
       .filter((status) => status !== task.status)
-      .map((status) => ({ label: `Move to ${status}`, onSelect: () => onMoveTo(task.id, status) })),
+      .map((status) => ({
+        label: t('card.moveTo', { status: statusLabel(status) }),
+        onSelect: () => onMoveTo(task.id, status),
+      })),
     'separator',
-    { label: 'Delete', tone: 'danger' as const, onSelect: () => onDelete(task.id) },
+    { label: common('ui.delete'), tone: 'danger' as const, onSelect: () => onDelete(task.id) },
   ];
 
   return (
@@ -69,7 +97,7 @@ export const TaskCard = memo(function TaskCard({
         <button type="button" className="card__title" onClick={() => onOpen(task.id)}>
           {task.title}
         </button>
-        <Menu label={`Actions for ${task.id}`} items={items} />
+        <Menu label={t('card.actions', { id: task.id })} items={items} />
       </div>
       <div className="card__meta">
         <Badge>{task.id}</Badge>
@@ -79,7 +107,7 @@ export const TaskCard = memo(function TaskCard({
           </Badge>
         ))}
         {task.branch === undefined ? null : (
-          <Badge tone="neutral" title="Branch">
+          <Badge tone="neutral" title={t('card.branch')}>
             ⎇ {task.branch}
           </Badge>
         )}
@@ -92,9 +120,9 @@ export const TaskCard = memo(function TaskCard({
                   ? 'neutral'
                   : 'warning'
             }
-            title={`AI run: ${task.aiRun.state}`}
+            title={t('card.aiRun', { state: aiState })}
           >
-            AI: {task.aiRun.state}
+            {t('card.aiBadge', { state: aiState })}
             {task.aiRun.runId !== undefined &&
             (task.aiRun.state === 'failed' || task.aiRun.state === 'needs-review')
               ? ` #${task.aiRun.runId}`
@@ -102,7 +130,7 @@ export const TaskCard = memo(function TaskCard({
           </Badge>
         )}
         {launch.running ? (
-          <Badge tone="accent" title="An AI run is working">
+          <Badge tone="accent" title={t('card.running')}>
             ●
           </Badge>
         ) : null}
@@ -114,11 +142,11 @@ export const TaskCard = memo(function TaskCard({
           </Badge>
         ) : null}
         {hasOwnSettings(task.workflow) ? (
-          <Badge tone="warning" title="This task has AI settings of its own">
-            ⚙ AI settings
+          <Badge tone="warning" title={t('card.ownSettings')}>
+            ⚙ {t('card.aiSettings')}
           </Badge>
         ) : null}
-        {busy ? <span className="card__busy">saving…</span> : null}
+        {busy ? <span className="card__busy">{t('card.saving')}</span> : null}
       </div>
       {sendToAi.dialog === null ? null : (
         // A press inside the dialog is not the start of a drag of the card it is drawn in.

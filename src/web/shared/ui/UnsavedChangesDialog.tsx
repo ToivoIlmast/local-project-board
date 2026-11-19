@@ -1,3 +1,4 @@
+import { useT } from '../i18n/common';
 import { Button } from './Button';
 import { Modal } from './Modal';
 
@@ -26,22 +27,23 @@ export function UnsavedChangesDialog({
   onDiscard,
   onCancel,
 }: UnsavedChangesDialogProps) {
+  const t = useT();
   return (
     <Modal
-      title="Unsaved changes"
+      title={t('ui.unsaved.title')}
       // While a save is on its way the way out is closed: an answer that arrives after the
       // dialog was dismissed would go on without having been asked for.
       onClose={pending ? () => undefined : onCancel}
       footer={
         <>
           <Button variant="primary" onClick={onSave} disabled={pending}>
-            {pending ? 'Saving…' : 'Save'}
+            {pending ? t('ui.saving') : t('ui.save')}
           </Button>
           <Button onClick={onDiscard} disabled={pending}>
-            Discard
+            {t('ui.discard')}
           </Button>
           <Button onClick={onCancel} disabled={pending}>
-            Cancel
+            {t('ui.cancel')}
           </Button>
         </>
       }

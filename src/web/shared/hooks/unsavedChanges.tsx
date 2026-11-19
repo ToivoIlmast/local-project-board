@@ -10,6 +10,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { useListOf } from '../i18n/useListOf';
+import { useT } from '../i18n/common';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
 
 /** What a form with something in it tells the page, so that leaving it can be asked about. */
@@ -36,12 +38,6 @@ interface Guard {
 
 const GuardContext = createContext<Guard | null>(null);
 
-/** "a", "a and b", "a, b and c". */
-function listOf(items: readonly string[]): string {
-  if (items.length < 2) return items.join('');
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
-
 /**
  * The page's memory of which forms hold changes, and the one place that asks what to do with
  * them: Save, Discard or Cancel. Every form that can be left with something in it registers
@@ -50,10 +46,12 @@ function listOf(items: readonly string[]): string {
  * forgets to ask is the one that does not call the guard.
  */
 export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
+  const t = useT();
+  const listOf = useListOf();
   const [registry] = useState<Registry>(() => new Map());
   // What the question says is worked out when it is asked, in the handler, not while drawing.
   const [asking, setAsking] = useState<
-    { proceed: () => void; message: string; note: string | undefined } | undefined
+    { proceed: () => void; what: string[]; note: string | undefined } | undefined
   >(undefined);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -75,7 +73,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
       setError(undefined);
       setAsking({
         proceed,
-        message: `You have unsaved changes to ${listOf(forms.map((form) => form.what))}.`,
+        what: forms.map((form) => form.what),
         note: notes.length === 0 ? undefined : notes.join(' '),
       });
     },
@@ -129,7 +127,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
       {children}
       {asking === undefined ? null : (
         <UnsavedChangesDialog
-          message={asking.message}
+          message={t('ui.unsaved.message', { what: listOf(asking.what) })}
           note={asking.note}
           error={error}
           pending={pending}

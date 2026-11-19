@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import type { Topic } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useT } from '../../../shared/i18n/index';
 import { Button, ConfirmDialog, Field, Input, Menu, Modal, Select } from '../../../shared/ui/index';
+import { useBlocksT } from '../i18n';
 
 type Block = Topic['blocks'][number];
 type Dialog = 'rename' | 'add' | 'move' | 'delete';
@@ -23,18 +25,20 @@ export interface BlockMenuProps {
  * The menu is a button with a name of its own, so a screen reader can tell them apart.
  */
 export function BlockMenu({ topic, block, position, onDeleted }: BlockMenuProps) {
+  const t = useBlocksT();
+  const common = useT();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const close = (): void => setDialog(null);
 
   return (
     <>
       <Menu
-        label={`Block ${block.id} actions`}
+        label={t('menu.label', { id: block.id })}
         items={[
-          { label: 'Rename', onSelect: () => setDialog('rename') },
-          { label: 'Add block', onSelect: () => setDialog('add') },
-          { label: 'Move to position', onSelect: () => setDialog('move') },
-          { label: 'Delete', tone: 'danger', onSelect: () => setDialog('delete') },
+          { label: t('menu.rename'), onSelect: () => setDialog('rename') },
+          { label: t('menu.add'), onSelect: () => setDialog('add') },
+          { label: t('menu.move'), onSelect: () => setDialog('move') },
+          { label: common('ui.delete'), tone: 'danger', onSelect: () => setDialog('delete') },
         ]}
       />
       {dialog === null
@@ -84,6 +88,8 @@ function TitleDialog({
   onSave,
   onDone,
 }: TitleDialogProps) {
+  const t = useBlocksT();
+  const common = useT();
   const [title, setTitle] = useState(initial);
   const saving = useAsyncAction(async () => {
     await onSave(title.trim());
@@ -101,7 +107,7 @@ function TitleDialog({
   return (
     <Modal title={heading} onClose={onDone}>
       <form className="form" onSubmit={submit}>
-        <Field label="Title">
+        <Field label={t('field.title')}>
           {(id) => (
             <Input
               id={id}
@@ -118,7 +124,7 @@ function TitleDialog({
           </p>
         )}
         <div className="form__actions">
-          <Button onClick={onDone}>Cancel</Button>
+          <Button onClick={onDone}>{common('ui.cancel')}</Button>
           <Button type="submit" variant="primary" disabled={saving.pending || blank}>
             {saving.pending ? pendingLabel : submitLabel}
           </Button>
@@ -138,12 +144,14 @@ function RenameDialog({
   onDone: () => void;
 }) {
   const { store } = useBoard();
+  const t = useBlocksT();
+  const common = useT();
   return (
     <TitleDialog
-      heading={`Rename ${block.id}`}
+      heading={t('dialog.rename', { id: block.id })}
       initial={block.title}
-      submitLabel="Save"
-      pendingLabel="Saving…"
+      submitLabel={common('ui.save')}
+      pendingLabel={common('ui.saving')}
       onSave={(title) => store.updateBlock(topic.id, block.id, title)}
       onDone={onDone}
     />
@@ -152,12 +160,13 @@ function RenameDialog({
 
 function AddDialog({ topic, onDone }: { topic: Topic; onDone: () => void }) {
   const { store } = useBoard();
+  const t = useBlocksT();
   return (
     <TitleDialog
-      heading={`Add a block to ${topic.id}`}
+      heading={t('dialog.add', { topic: topic.id })}
       initial=""
-      submitLabel="Add"
-      pendingLabel="Adding…"
+      submitLabel={t('action.add')}
+      pendingLabel={t('action.adding')}
       onSave={(title) => store.createBlock(topic.id, title)}
       onDone={onDone}
     />
@@ -176,6 +185,8 @@ function MoveDialog({
   onDone: () => void;
 }) {
   const { store } = useBoard();
+  const t = useBlocksT();
+  const common = useT();
   const [target, setTarget] = useState(position);
   const moving = useAsyncAction(async () => {
     const others = topic.blocks.filter((other) => other.id !== block.id).map((other) => other.id);
@@ -193,9 +204,12 @@ function MoveDialog({
   };
 
   return (
-    <Modal title={`Move ${block.id}`} onClose={onDone}>
+    <Modal title={t('dialog.move', { id: block.id })} onClose={onDone}>
       <form className="form" onSubmit={submit}>
-        <Field label="Position" hint={`Of ${topic.blocks.length} blocks in ${topic.id}`}>
+        <Field
+          label={t('field.position')}
+          hint={t('field.positionHint', { count: topic.blocks.length, topic: topic.id })}
+        >
           {(id, describedBy) => (
             <Select
               id={id}
@@ -212,9 +226,9 @@ function MoveDialog({
           </p>
         )}
         <div className="form__actions">
-          <Button onClick={onDone}>Cancel</Button>
+          <Button onClick={onDone}>{common('ui.cancel')}</Button>
           <Button type="submit" variant="primary" disabled={moving.pending || unchanged}>
-            {moving.pending ? 'Moving…' : 'Move'}
+            {moving.pending ? t('action.moving') : t('action.move')}
           </Button>
         </div>
       </form>
@@ -234,12 +248,14 @@ function DeleteDialog({
   onDeleted: () => void;
 }) {
   const { store } = useBoard();
+  const t = useBlocksT();
+  const common = useT();
   const remove = useAsyncAction(() => store.deleteBlock(topic.id, block.id));
   return (
     <ConfirmDialog
-      title={`Delete ${block.id}?`}
-      message={`The block “${block.title}” is removed from ${topic.id}. A block that has tasks cannot be deleted. This cannot be undone.`}
-      confirmLabel="Delete"
+      title={t('dialog.delete.title', { id: block.id })}
+      message={t('dialog.delete.message', { title: block.title, topic: topic.id })}
+      confirmLabel={common('ui.delete')}
       pending={remove.pending}
       error={remove.error}
       onCancel={onDone}

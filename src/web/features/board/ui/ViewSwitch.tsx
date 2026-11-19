@@ -1,4 +1,5 @@
 import { Button } from '../../../shared/ui/index';
+import { useBoardT } from '../i18n';
 
 export type View = 'board' | 'blocks';
 
@@ -7,15 +8,16 @@ export interface ViewSwitchProps {
   onChange: (view: View) => void;
 }
 
-const VIEWS: { view: View; label: string }[] = [
-  { view: 'board', label: 'Board' },
-  { view: 'blocks', label: 'Blocks' },
-];
+const VIEWS = [
+  { view: 'board', label: 'view.board' },
+  { view: 'blocks', label: 'view.blocks' },
+] as const;
 
 /** Which way the main area shows the tasks: in columns by status, or in blocks by topic. */
 export function ViewSwitch({ value, onChange }: ViewSwitchProps) {
+  const t = useBoardT();
   return (
-    <nav className="view-switch" aria-label="View">
+    <nav className="view-switch" aria-label={t('view.label')}>
       {VIEWS.map(({ view, label }) => (
         <Button
           key={view}
@@ -23,7 +25,7 @@ export function ViewSwitch({ value, onChange }: ViewSwitchProps) {
           aria-current={view === value ? 'page' : undefined}
           onClick={() => onChange(view)}
         >
-          {label}
+          {t(label)}
         </Button>
       ))}
     </nav>

@@ -3,5 +3,6 @@ export { BoardHeader } from './ui/BoardHeader';
 export { ViewSwitch, type View } from './ui/ViewSwitch';
 export { TopicFilter } from './ui/TopicFilter';
 export { NO_TOPIC, filterByTopic } from './model/filterByTopic';
+export { useBoardT } from './i18n';
 export { ReadIssues } from './ui/ReadIssues';
 export { intentFor, indexAt, isNoop, type MoveIntent } from './model/dnd';

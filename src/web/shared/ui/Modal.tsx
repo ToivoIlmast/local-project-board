@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useT } from '../i18n/common';
 import { IconButton } from './IconButton';
 
 export interface ModalProps {
@@ -27,6 +28,7 @@ function firstStop(panel: HTMLElement): HTMLElement {
  * page behind it, and closing hands the focus back to whatever opened it.
  */
 export function Modal({ title, onClose, children, footer, width = 'normal' }: ModalProps) {
+  const t = useT();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   // The latest onClose without re-running the effect below: a parent that re-renders (the
@@ -90,7 +92,7 @@ export function Modal({ title, onClose, children, footer, width = 'normal' }: Mo
           <h2 id={titleId} className="modal__title">
             {title}
           </h2>
-          <IconButton label="Close" onClick={onClose}>
+          <IconButton label={t('ui.close')} onClick={onClose}>
             ✕
           </IconButton>
         </div>

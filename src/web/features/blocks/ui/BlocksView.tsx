@@ -9,6 +9,7 @@ import { useBoard } from '../../../api/react';
 import { Badge, EmptyState } from '../../../shared/ui/index';
 import { NO_TOPIC } from '../../board/index';
 import { blockSummary, reasonText, useSeries, type BlockSummary } from '../../tasks/index';
+import { useBlocksT } from '../i18n';
 import { BlockMenu } from './BlockMenu';
 
 export interface BlocksViewProps {
@@ -17,11 +18,11 @@ export interface BlocksViewProps {
   onOpen: (id: string) => void;
 }
 
-const STATE_TEXT: Record<NonNullable<BlockSummary['state']>, string> = {
-  completed: 'completed',
-  waiting: 'waiting for previous Block',
-  empty: 'empty',
-};
+const STATE_TEXT = {
+  completed: 'blocks.state.completed',
+  waiting: 'blocks.state.waiting',
+  empty: 'blocks.state.empty',
+} as const satisfies Record<NonNullable<BlockSummary['state']>, string>;
 
 /** An empty list for a task without reasons, so a row is not told something new for nothing. */
 const NONE: readonly BlockingReason[] = [];
@@ -34,6 +35,7 @@ const NONE: readonly BlockingReason[] = [];
  * neither a topic nor a block come last, in one section of their own.
  */
 export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
+  const t = useBlocksT();
   const { state } = useBoard();
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -45,14 +47,14 @@ export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
   );
 
   return (
-    <section className="blocks" aria-label="Blocks">
+    <section className="blocks" aria-label={t('blocks.title')}>
       <h2 className="blocks__title-main" tabIndex={-1} ref={headingRef}>
-        Blocks
+        {t('blocks.title')}
       </h2>
 
       {state.topics.length === 0 && topicFilter === null ? (
-        <EmptyState title="No topics">
-          <p>Blocks belong to topics. Create a topic in “Topics” first.</p>
+        <EmptyState title={t('blocks.noTopics.title')}>
+          <p>{t('blocks.noTopics.hint')}</p>
         </EmptyState>
       ) : null}
 
@@ -68,10 +70,10 @@ export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
       ))}
 
       {showGlobal ? (
-        <section className="blocks__topic" aria-label="No block">
-          <h3 className="blocks__topic-title">No block</h3>
+        <section className="blocks__topic" aria-label={t('blocks.noBlock')}>
+          <h3 className="blocks__topic-title">{t('blocks.noBlock')}</h3>
           {unplaced.length === 0 ? (
-            <p className="blocks__none">No tasks without a topic and a block.</p>
+            <p className="blocks__none">{t('blocks.noneUnplaced')}</p>
           ) : (
             <TaskRows tasks={unplaced} readiness={state.readiness} onOpen={onOpen} />
           )}
@@ -91,6 +93,7 @@ interface TopicBlocksProps {
 }
 
 function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocksProps) {
+  const t = useBlocksT();
   const label = `${topic.id} · ${topic.title}`;
   const ofTopic = tasks.filter((task) => task.topic === topic.id);
   // A task of the topic that is in none of its blocks is outside their order (ADR-0032 §5).
@@ -109,12 +112,12 @@ function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocks
           <section key={block.id} className="blocks__block" aria-label={name}>
             <header className="blocks__block-head">
               <h4 className="blocks__block-title">{name}</h4>
-              <span className="blocks__count" title="Tasks done of all">
+              <span className="blocks__count" title={t('blocks.doneOfAll')}>
                 {summary.done}/{summary.total}
               </span>
               {summary.state === undefined ? null : (
                 <Badge tone={summary.state === 'waiting' ? 'warning' : 'neutral'}>
-                  {STATE_TEXT[summary.state]}
+                  {t(STATE_TEXT[summary.state])}
                 </Badge>
               )}
               <BlockMenu topic={topic} block={block} position={index} onDeleted={onDeleted} />
@@ -124,9 +127,9 @@ function TopicBlocks({ topic, tasks, readiness, onOpen, onDeleted }: TopicBlocks
         );
       })}
       {loose.length === 0 ? null : (
-        <section className="blocks__block" aria-label="Not in a block">
+        <section className="blocks__block" aria-label={t('blocks.notInBlock')}>
           <header className="blocks__block-head">
-            <h4 className="blocks__block-title">Not in a block</h4>
+            <h4 className="blocks__block-title">{t('blocks.notInBlock')}</h4>
           </header>
           <TaskRows tasks={loose} readiness={readiness} onOpen={onOpen} />
         </section>
@@ -142,6 +145,7 @@ interface TaskRowsProps {
 }
 
 function TaskRows({ tasks, readiness, onOpen }: TaskRowsProps) {
+  const t = useBlocksT();
   const { views } = useSeries(tasks);
   if (tasks.length === 0) return null;
   return (
@@ -150,29 +154,31 @@ function TaskRows({ tasks, readiness, onOpen }: TaskRowsProps) {
         const reasons = readiness[task.id] ?? NONE;
         const launch = launchState(task, reasons);
         const series = views.get(task.id);
-        const why = `Blocked: ${reasons.map(reasonText).join('; ')}`;
+        const why = t('blocks.mark.blockedWhy', { reasons: reasons.map(reasonText).join('; ') });
         const first = reasons[0];
         return (
           <li key={task.id} className="blocks__task" data-task-id={task.id}>
             <span className="blocks__marks">
-              {launch.done ? <Mark title="Done" glyph="✓" /> : null}
-              {launch.running ? <Mark title="An AI run is working" glyph="●" /> : null}
-              {launch.blocked ? <Mark title={why} glyph="🔒" spoken="Blocked" /> : null}
-              {launch.launchable ? <Mark title="Ready to start" glyph="▷" /> : null}
+              {launch.done ? <Mark title={t('blocks.mark.done')} glyph="✓" /> : null}
+              {launch.running ? <Mark title={t('blocks.mark.running')} glyph="●" /> : null}
+              {launch.blocked ? (
+                <Mark title={why} glyph="🔒" spoken={t('blocks.mark.blocked')} />
+              ) : null}
+              {launch.launchable ? <Mark title={t('blocks.mark.ready')} glyph="▷" /> : null}
             </span>
             <button type="button" className="blocks__title" onClick={() => onOpen(task.id)}>
               {task.title}
             </button>
             <Badge>{task.id}</Badge>
             {series === undefined ? null : (
-              <span className="blocks__deps" title="Series of checks">
+              <span className="blocks__deps" title={t('blocks.series.title')}>
                 <span aria-hidden="true">
                   ↻ {series.loaded ? series.checked : '…'}/{series.total}
                 </span>
                 <span className="visually-hidden">
                   {series.loaded
-                    ? `${series.checked} of ${series.total} checked`
-                    : `checks of ${task.id} loading`}
+                    ? t('blocks.series.checked', { checked: series.checked, total: series.total })
+                    : t('blocks.series.loading', { id: task.id })}
                 </span>
               </span>
             )}

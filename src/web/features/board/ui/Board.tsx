@@ -6,7 +6,9 @@ import {
   type Project,
   type Task,
 } from '../../../../contract/v1/index';
+import { useStatusLabel } from '../../../shared/i18n/index';
 import { ConfirmDialog, EmptyState } from '../../../shared/ui/index';
+import { useBoardT } from '../i18n';
 import { TaskCard, needsStatusConfirmation, reasonText } from '../../tasks/index';
 import { intentFor, isNoop, type MoveIntent } from '../model/dnd';
 import { useDrag } from '../model/useDrag';
@@ -47,6 +49,8 @@ export function Board({
   onMove,
   filtered = false,
 }: BoardProps) {
+  const t = useBoardT();
+  const statusLabel = useStatusLabel();
   const { columns, orphans } = useMemo(() => columnsOf(project, tasks), [project, tasks]);
   /** A status change of a blocked task that waits for the answer to "are you sure"; nothing is sent. */
   const [asking, setAsking] = useState<{ id: string; intent: MoveIntent; follow: boolean } | null>(
@@ -106,19 +110,17 @@ export function Board({
     <>
       {orphans.length === 0 ? null : (
         <p className="board__orphans">
-          {orphans.length === 1
-            ? '1 task has a status this board does not have'
-            : `${orphans.length} tasks have a status this board does not have`}
-          : {orphans.map((task) => `${task.id} (${task.status})`).join(', ')}
+          {t('board.orphans', { count: orphans.length })}:{' '}
+          {orphans.map((task) => `${task.id} (${task.status})`).join(', ')}
         </p>
       )}
 
       {tasks.length === 0 ? (
         filtered ? (
-          <EmptyState title="No tasks match this filter" />
+          <EmptyState title={t('board.noMatch')} />
         ) : (
-          <EmptyState title="No tasks yet">
-            <p>Create one with “New task”, or let an agent create it through the API.</p>
+          <EmptyState title={t('board.empty.title')}>
+            <p>{t('board.empty.hint')}</p>
           </EmptyState>
         )
       ) : null}
@@ -127,7 +129,7 @@ export function Board({
         <p
           className="board__blocked"
           role="status"
-          aria-label={`${blocked.length} blocked ${blocked.length === 1 ? 'task' : 'tasks'}`}
+          aria-label={t('board.blocked', { count: blocked.length })}
         >
           <span aria-hidden="true">🔒 {blocked.length}</span>
         </p>
@@ -165,9 +167,13 @@ export function Board({
 
       {asking === null || asked === undefined ? null : (
         <ConfirmDialog
-          title={`Change the status of ${asked.id}?`}
-          message={`${asked.id} is blocked. Change its status from ${asked.status} to ${asking.intent.status} by hand? The board will not stop you.`}
-          confirmLabel="Change status"
+          title={t('board.confirm.title', { id: asked.id })}
+          message={t('board.confirm.message', {
+            id: asked.id,
+            from: statusLabel(asked.status),
+            to: statusLabel(asking.intent.status),
+          })}
+          confirmLabel={t('board.confirm.action')}
           confirmVariant="primary"
           onCancel={() => setAsking(null)}
           onConfirm={() => {

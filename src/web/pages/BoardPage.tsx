@@ -10,6 +10,7 @@ import {
   filterByTopic,
   type MoveIntent,
   type View,
+  useBoardT,
 } from '../features/board/index';
 import { BlocksView } from '../features/blocks/index';
 import { GitPanel } from '../features/git/index';
@@ -19,6 +20,7 @@ import { SettingsPanel } from '../features/settings/index';
 import { TaskDetails, TaskDialog } from '../features/tasks/index';
 import { TopicsPanel } from '../features/topics/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
+import { useT } from '../shared/i18n/index';
 import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedChanges';
 import { replaceSearchParams, useSearchParam } from '../shared/hooks/useSearchParam';
 import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
@@ -39,6 +41,8 @@ export function BoardPage() {
 }
 
 function BoardScreen() {
+  const t = useBoardT();
+  const common = useT();
   const { state, store } = useBoard();
   const leave = useLeaveGuard();
   const [openTaskId, setOpenTaskId] = useSearchParam('task');
@@ -58,14 +62,14 @@ function BoardScreen() {
     if (legacyBlocks) replaceSearchParams({ panel: null, view: 'blocks' });
   }, [legacyBlocks]);
 
-  if (state.phase === 'loading') return <Spinner label="Loading the board…" />;
+  if (state.phase === 'loading') return <Spinner label={t('page.loading')} />;
 
   const project = state.project;
   if (state.phase === 'failed' || project === undefined) {
     return (
       <ErrorState
-        title="The board could not be read"
-        message={state.error?.message ?? 'The board did not answer.'}
+        title={t('page.failed.title')}
+        message={state.error?.message ?? t('page.failed.silent')}
         onRetry={() => void store.load()}
       />
     );
@@ -117,16 +121,16 @@ function BoardScreen() {
         <p className="notice" role="alert">
           {state.error.message}
           <Button size="small" onClick={() => void store.load()}>
-            Try again
+            {common('ui.tryAgain')}
           </Button>
         </p>
       )}
 
       {missingTopic ? (
         <p className="notice" role="alert">
-          {`Topic ${topicFilter} is not on the board. It may have been deleted, or it cannot be read.`}
+          {t('page.topicMissing', { topic: topicFilter })}
           <Button size="small" onClick={() => setTopicFilter(null)}>
-            Show all
+            {t('page.showAll')}
           </Button>
         </p>
       ) : null}
@@ -135,7 +139,7 @@ function BoardScreen() {
         <p className="notice" role="alert">
           {notice}
           <Button size="small" onClick={() => setNotice(undefined)}>
-            Dismiss
+            {common('ui.dismiss')}
           </Button>
         </p>
       )}
@@ -178,12 +182,12 @@ function BoardScreen() {
             onClose={() => leave(() => setOpenTaskId(null))}
           />
         ) : openTaskId !== null ? (
-          <Panel label="Task">
+          <Panel label={t('page.task')}>
             <ErrorState
-              title="This task is not on the board"
-              message="It may have been deleted while this page was open."
+              title={t('page.taskMissing.title')}
+              message={t('page.taskMissing.message')}
               onRetry={() => setOpenTaskId(null)}
-              retryLabel="Close"
+              retryLabel={common('ui.close')}
             />
           </Panel>
         ) : panel === 'reports' ? (
@@ -219,9 +223,9 @@ function BoardScreen() {
 
       {deletingId === null ? null : (
         <ConfirmDialog
-          title={`Delete ${deletingId}?`}
-          message="The task and its documents are removed from the board. This cannot be undone."
-          confirmLabel="Delete"
+          title={t('page.delete.title', { id: deletingId })}
+          message={t('page.delete.message')}
+          confirmLabel={common('ui.delete')}
           pending={remove.pending}
           error={remove.error}
           onCancel={() => setDeletingId(null)}

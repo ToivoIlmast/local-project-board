@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useT } from '../i18n/common';
 import { Button } from './Button';
 import { Modal } from './Modal';
 
@@ -28,15 +29,16 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const t = useT();
   return (
     <Modal
       title={title}
       onClose={onCancel}
       footer={
         <>
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel}>{t('ui.cancel')}</Button>
           <Button variant={confirmVariant} onClick={onConfirm} disabled={pending}>
-            {pending ? 'Working…' : confirmLabel}
+            {pending ? t('ui.working') : confirmLabel}
           </Button>
         </>
       }
