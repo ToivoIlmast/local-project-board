@@ -40,7 +40,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .header__offline {
@@ -65,7 +65,7 @@
 
 .read-issues ul {
   margin: 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 .read-issues__title {
@@ -172,7 +172,7 @@
 }
 
 .column__head .icon-button {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .column__cards {
@@ -224,7 +224,7 @@
   color: inherit;
   font: inherit;
   font-weight: 500;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -252,7 +252,7 @@
   width: 380px;
   flex: 0 0 380px;
   padding: 16px;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   background: var(--surface);
   overflow-y: auto;
 }
@@ -345,7 +345,7 @@
   background: transparent;
   color: var(--accent);
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -421,7 +421,7 @@
   .panel {
     width: auto;
     flex: 1 1 auto;
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid var(--border);
   }
 }
@@ -453,7 +453,7 @@
 
 .settings__stale {
   margin: 0 0 8px;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   font-size: 13px;
 }
 
@@ -684,7 +684,7 @@
 
 .review__other {
   margin: 8px 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 
 .with-aside {
@@ -695,8 +695,8 @@
 
 .with-aside__side {
   min-width: 0;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--border);
 }
 
 .check__meta {
@@ -718,7 +718,7 @@
 
 .check__evidence {
   margin: 4px 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   font-size: 13px;
 }
 
@@ -755,7 +755,7 @@
 
 /* The source of a field of the AI run, and the buttons that recover it: at most two. */
 .ai__source {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   font-weight: 400;
   color: var(--ink-muted);
   font-style: italic;
@@ -846,7 +846,7 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -862,7 +862,7 @@
 
 .blocks__reason {
   flex-basis: 100%;
-  padding-left: 2.5em;
+  padding-inline-start: 2.5em;
 }
 
 /* What a move to another topic or block changes, in the review of an edit. */

@@ -2,6 +2,7 @@ import { clearImmediate, clearInterval, setImmediate, setInterval } from 'node:t
 import { TextDecoder, TextEncoder } from 'node:util';
 import { deserialize, serialize } from 'node:v8';
 import '@testing-library/jest-dom';
+import { reloadLanguage } from '../../../src/web/shared/i18n/store';
 
 /**
  * A browser environment with the few Node globals a real server needs. The integration
@@ -18,6 +19,14 @@ environment['clearImmediate'] ??= clearImmediate;
 // The event stream keeps a Node timer it can `unref`; jsdom's would be a plain number.
 environment['setInterval'] = setInterval;
 environment['clearInterval'] = clearInterval;
+
+// The language of the interface is a saved choice: no test inherits another's.
+beforeEach(() => {
+  window.localStorage.clear();
+  document.documentElement.lang = 'en';
+  document.documentElement.dir = 'ltr';
+  reloadLanguage();
+});
 
 // What the page is looking at lives in the address bar, so every test starts at the board.
 beforeEach(() => {
