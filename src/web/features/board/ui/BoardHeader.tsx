@@ -2,6 +2,7 @@ import type { GitStatus, Project } from '../../../../contract/v1/index';
 import type { ConnectionStatus } from '../../../api/index';
 import { LanguageSelect } from '../../../shared/i18n/index';
 import { Badge, Button, IconButton } from '../../../shared/ui/index';
+import { useBoardT } from '../i18n';
 
 export interface BoardHeaderProps {
   project: Project;
@@ -20,6 +21,7 @@ export function BoardHeader({
   onReload,
   onShowPanel,
 }: BoardHeaderProps) {
+  const t = useBoardT();
   const branch = git?.branch ?? project.git.branch ?? null;
 
   return (
@@ -31,7 +33,7 @@ export function BoardHeader({
             <span aria-hidden="true">⎇</span> <span className="header__branch">{branch}</span>
             {git === undefined ? null : (
               <Badge tone={git.clean ? 'neutral' : 'warning'}>
-                {git.clean ? 'clean' : `${git.files.length} changed`}
+                {git.clean ? t('header.clean') : t('header.changed', { count: git.files.length })}
               </Badge>
             )}
           </span>
@@ -40,14 +42,14 @@ export function BoardHeader({
 
       <div className="header__actions">
         <Button variant="primary" onClick={onNewTask}>
-          New task
+          {t('header.new')}
         </Button>
-        <Button onClick={() => onShowPanel('reports')}>Reports</Button>
-        <Button onClick={() => onShowPanel('topics')}>Topics</Button>
-        <Button onClick={() => onShowPanel('git')}>Git</Button>
-        <Button onClick={() => onShowPanel('instructions')}>AI instructions</Button>
-        <Button onClick={() => onShowPanel('settings')}>Settings</Button>
-        <IconButton label="Reload" onClick={onReload}>
+        <Button onClick={() => onShowPanel('reports')}>{t('header.reports')}</Button>
+        <Button onClick={() => onShowPanel('topics')}>{t('header.topics')}</Button>
+        <Button onClick={() => onShowPanel('git')}>{t('header.git')}</Button>
+        <Button onClick={() => onShowPanel('instructions')}>{t('header.instructions')}</Button>
+        <Button onClick={() => onShowPanel('settings')}>{t('header.settings')}</Button>
+        <IconButton label={t('header.reload')} onClick={onReload}>
           ↻
         </IconButton>
         <LanguageSelect />
@@ -55,7 +57,7 @@ export function BoardHeader({
 
       {connection === 'offline' ? (
         <p className="header__offline" role="status">
-          The board is not answering. Live updates are off until it comes back.
+          {t('header.offline')}
         </p>
       ) : null}
     </header>

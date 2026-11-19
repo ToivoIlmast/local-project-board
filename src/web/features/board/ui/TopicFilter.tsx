@@ -1,4 +1,5 @@
 import type { Topic } from '../../../../contract/v1/index';
+import { useBoardT } from '../i18n';
 import { Field, Select, type SelectOption } from '../../../shared/ui/index';
 import { NO_TOPIC } from '../model/filterByTopic';
 
@@ -11,9 +12,10 @@ export interface TopicFilterProps {
 
 /** Which tasks the board shows: all of them, those with no topic, or those of one topic. */
 export function TopicFilter({ topics, value, onChange }: TopicFilterProps) {
+  const t = useBoardT();
   const options: SelectOption[] = [
-    { value: '', label: 'All topics' },
-    { value: NO_TOPIC, label: 'No topic' },
+    { value: '', label: t('filter.all') },
+    { value: NO_TOPIC, label: t('filter.none') },
     ...topics.map((topic) => ({ value: topic.id, label: `${topic.id} · ${topic.title}` })),
   ];
   // A value the board does not have is still what is selected: the select must say so, not
@@ -22,12 +24,12 @@ export function TopicFilter({ topics, value, onChange }: TopicFilterProps) {
     value !== null &&
     !options.some((option) => typeof option !== 'string' && option.value === value)
   ) {
-    options.push({ value, label: `${value} (not on the board)`, disabled: true });
+    options.push({ value, label: t('filter.missing', { id: value }), disabled: true });
   }
 
   return (
-    <section className="board-filter" aria-label="Board filter">
-      <Field label="Topic">
+    <section className="board-filter" aria-label={t('filter.label')}>
+      <Field label={t('filter.topic')}>
         {(id) => (
           <Select
             id={id}
