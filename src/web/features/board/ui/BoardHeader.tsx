@@ -1,5 +1,6 @@
 import type { GitStatus, Project } from '../../../../contract/v1/index';
 import type { ConnectionStatus } from '../../../api/index';
+import { LanguageSelect } from '../../../shared/i18n/index';
 import { Badge, Button, IconButton } from '../../../shared/ui/index';
 
 export interface BoardHeaderProps {
@@ -49,6 +50,7 @@ export function BoardHeader({
         <IconButton label="Reload" onClick={onReload}>
           ↻
         </IconButton>
+        <LanguageSelect />
       </div>
 
       {connection === 'offline' ? (

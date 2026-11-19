@@ -1,10 +1,13 @@
 import { BoardProvider } from '../api/react';
 import { BoardPage } from '../pages/BoardPage';
+import { I18nProvider } from '../shared/i18n/index';
 
 export function App() {
   return (
-    <BoardProvider>
-      <BoardPage />
-    </BoardProvider>
+    <I18nProvider>
+      <BoardProvider>
+        <BoardPage />
+      </BoardProvider>
+    </I18nProvider>
   );
 }

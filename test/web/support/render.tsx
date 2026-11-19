@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, type RenderResult } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { BoardProvider } from '../../../src/web/api/react';
 import type { BoardStore } from '../../../src/web/api/index';
+import { I18nProvider } from '../../../src/web/shared/i18n/index';
 import { BoardPage } from '../../../src/web/pages/BoardPage';
 import { fakeBoard, type FakeBoard, type FakeBoardOptions } from './fakeBoard';
 
@@ -27,9 +28,11 @@ export async function renderBoard(options: FakeBoardOptions = {}): Promise<Rende
   };
 
   const result = render(
-    <BoardProvider client={board.client} connect={connect}>
-      <BoardPage />
-    </BoardProvider>,
+    <I18nProvider>
+      <BoardProvider client={board.client} connect={connect}>
+        <BoardPage />
+      </BoardProvider>
+    </I18nProvider>,
   );
 
   await waitFor(() => expect(screen.queryByText('Loading the board…')).not.toBeInTheDocument());
