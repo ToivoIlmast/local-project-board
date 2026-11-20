@@ -302,7 +302,10 @@ export const runTaskRequestSchema = z
      * A session itself is never sent: the runner reads it from the board, or makes a new one.
      */
     mode: z.enum(['new', 'resume', 'restart']).optional(),
-    /** Only with `research`: the person's focus, carried by the runner into the begin. */
+    /**
+     * With `research`: the person's focus; with a run of the task (no `kind`, or `work`, any
+     * `mode`): what they want the agent to know. The runner carries it into the begin.
+     */
     comment: researchCommentSchema.optional(),
     /**
      * Only with `check`: why the check is asked, from a task that is done (ADR-0029 T95). It is
@@ -321,8 +324,8 @@ export const runTaskRequestSchema = z
       path: ['mode'],
     },
   )
-  .refine((request) => request.comment === undefined || request.kind === 'research', {
-    message: 'A comment belongs to a research: send kind "research" with it.',
+  .refine((request) => request.comment === undefined || request.kind !== 'check', {
+    message: 'A check takes no comment: it belongs to a run of the task or to a research.',
     path: ['comment'],
   })
   .refine((request) => request.trigger === undefined || request.kind === 'check', {
@@ -353,6 +356,11 @@ export const runRequestSchema = z
     model: claudeModelSchema.optional(),
     mode: z.enum(['resume', 'restart']).optional(),
     kind: otherRunKindSchema.optional(),
+    /**
+     * A research always carries its focus. A run of the task carries a comment only to a runner
+     * that declared `comment` in `accepts`: an earlier runner parses this strictly and would
+     * drop the whole request.
+     */
     comment: researchCommentSchema.optional(),
     /**
      * Only with `check`, and only to a runner that declared `trigger` in `accepts`: an earlier
@@ -366,8 +374,8 @@ export const runRequestSchema = z
      */
     requestId: z.uuid().optional(),
   })
-  .refine((request) => request.comment === undefined || request.kind === 'research', {
-    message: 'A comment belongs to a research.',
+  .refine((request) => request.comment === undefined || request.kind !== 'check', {
+    message: 'A check takes no comment.',
     path: ['comment'],
   })
   .refine((request) => request.trigger === undefined || request.kind === 'check', {
@@ -382,8 +390,10 @@ export const runRequestSchema = z
 /**
  * What a runner says it can start, on `GET /runs?accepts=check,research,trigger` (D13, ADR-0029
  * T54, T95 V1): a list of the kinds besides `work`, of closed form, and `trigger`, which is not a
- * kind: it says that the runner carries the trigger of a check into the begin. Without it the runner is one of an earlier
- * version and is handed work only; every runner starts work.
+ * kind: it says that the runner carries the trigger of a check into the begin. `comment` is no
+ * kind either: it says that the runner carries the comment of a run of the task into the begin.
+ * Without it the runner is one of an earlier version and is handed work only, and no comment;
+ * every runner starts work.
  *
  * `signals=run-failure` says that it reports a work run that did not begin (ADR-0029 T94, K11).
  * A closed list, parsed as strictly as `accepts`; without it the runner is of an earlier version.
@@ -392,10 +402,12 @@ export const runsQuerySchema = z.strictObject({
   accepts: z
     .string()
     .regex(
-      /^(check|research|trigger)(,(check|research|trigger))*$/,
-      'A list of values: check, research, trigger',
+      /^(check|research|trigger|comment)(,(check|research|trigger|comment))*$/,
+      'A list of values: check, research, trigger, comment',
     )
-    .transform((list) => [...new Set(list.split(','))] as ('check' | 'research' | 'trigger')[])
+    .transform(
+      (list) => [...new Set(list.split(','))] as ('check' | 'research' | 'trigger' | 'comment')[],
+    )
     .optional(),
   signals: z
     .string()
@@ -494,6 +506,8 @@ export const aiRunBeginRequestSchema = z.strictObject({
   sessionId: z.string().uuid(),
   mode: z.enum(['new', 'resume', 'restart']),
   model: z.string().min(1).max(200).optional(),
+  /** The comment of the request of this run, as received: same rule as a research focus. */
+  comment: researchCommentSchema.optional(),
 });
 
 /** Runner → end: what the process did (T31). */

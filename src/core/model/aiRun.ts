@@ -8,6 +8,9 @@ export const AI_RUN_MODES = ['new', 'resume', 'restart'] as const;
 /** `lost`: the runner died without an end, and `claude --recover` said so (T45). */
 export const AI_RUN_FAILURE_KINDS = ['launch', 'exit', 'agent', 'lost'] as const;
 
+/** The longest comment of a run or a research, in characters (ADR-0030 R2, D12). */
+export const COMMENT_MAX_LENGTH = 4000;
+
 /** What the runner records when a process failed (T31). */
 export const aiRunFailureSchema = z.strictObject({
   kind: z.enum(AI_RUN_FAILURE_KINDS),
@@ -32,6 +35,16 @@ export const aiRunSchema = z.strictObject({
   mode: z.enum(AI_RUN_MODES).optional(),
   /** Which model ran; set by the runner on begin (T31). */
   model: z.string().min(1).max(200).optional(),
+  /**
+   * What the person wrote when they started this run: context for the agent, shown in its
+   * handoff and never put on a command line. Written only by begin; every run keeps its own.
+   */
+  comment: z
+    .string()
+    .min(1)
+    .max(COMMENT_MAX_LENGTH)
+    .refine((text) => !text.includes('\0'), 'Must not contain NUL')
+    .optional(),
   checks: z.enum(AI_RUN_CHECKS).optional(),
   /** A commit the agent made, as an abbreviated or full SHA; not looked up in git. */
   commit: z

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { COMMENT_MAX_LENGTH } from './aiRun.js';
 import { documentNameSchema } from './document.js';
 import { isoDateTimeSchema, taskIdSchema } from './task.js';
 
@@ -202,7 +203,8 @@ export const CHECK_KINDS = ['research'] as const;
 export const checkKindSchema = z.enum(CHECK_KINDS);
 export type CheckKind = z.infer<typeof checkKindSchema>;
 
-export const COMMENT_MAX_LENGTH = 4000;
+// Defined with the run record, which also keeps a comment; one limit for both.
+export { COMMENT_MAX_LENGTH };
 
 /** A document as the research saw it: name, size and time, never the text. */
 export const begunDocumentSchema = z.strictObject({

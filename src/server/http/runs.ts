@@ -19,7 +19,9 @@ import { SSE_HEARTBEAT_MS, SSE_RETRY_MS } from './sse.js';
  * an earlier version says nothing and is handed work only, so that a request it cannot read is
  * never handed to it and lost while the page is told "started". `trigger` is no kind but a
  * word of the same list (ADR-0029 T95, V1): the runner carries the trigger of a check into the
- * begin, and only such a runner is handed a check that has one.
+ * begin, and only such a runner is handed a check that has one. `comment` is the same kind of
+ * word: the runner carries the comment of a work run into the begin, and only such a runner is
+ * handed a work run that has one.
  */
 export interface RunDispatch {
   /**
@@ -34,8 +36,8 @@ export interface RunDispatch {
    * this and `send`; a runner that declared `signals` is then sent the request with its id.
    */
   reserve(
-    request: Omit<RunRequest, 'type' | 'requestId' | 'kind' | 'comment'>,
-  ): RunnerReservation | undefined;
+    request: Omit<RunRequest, 'type' | 'requestId' | 'kind'>,
+  ): RunnerReservation | undefined | 'outdated';
   /** The route a runner waits on; only the holder of the token may wait there. */
   handler(token: string, options?: { heartbeatMs?: number | undefined }): RequestHandler;
 }
@@ -45,7 +47,7 @@ export type Handed = 'handed' | 'nobody' | 'outdated';
 type RunKind = NonNullable<RunRequest['kind']> | 'work';
 
 /** What a runner may declare: the kinds it starts, and `trigger` (ADR-0029 T95, V1). */
-type Accepted = RunKind | 'trigger';
+type Accepted = RunKind | 'trigger' | 'comment';
 
 interface Waiting {
   response: Response;
@@ -81,8 +83,14 @@ export function createRunDispatch(): RunDispatch {
     },
 
     reserve(request) {
+      if (waiting.length === 0) return undefined;
       // Every runner starts work; the one that came last is the one the person just started.
-      const index = waiting.length - 1;
+      // A comment goes only to one that declared `comment`: it is never dropped to hand the
+      // request on, and an earlier runner would lose the whole event (it parses strictly).
+      const index = waiting.findLastIndex(
+        (candidate) => request.comment === undefined || candidate.accepts.has('comment'),
+      );
+      if (index === -1) return 'outdated';
       const runner = waiting[index];
       if (runner === undefined) return undefined;
       waiting.splice(index, 1);

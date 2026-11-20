@@ -45,6 +45,18 @@ async function createTask(): Promise<string> {
 const history = async (id: string) => (await storage.getTask(id))?.aiRunHistory;
 
 describe('aiRun history', () => {
+  it('keeps the comment of a run in that run only, and in its history record (INVARIANT)', async () => {
+    const id = await createTask();
+    await service.begin(id, { sessionId: S1, mode: 'new', comment: 'mind the tests' });
+    expect((await storage.getTask(id))?.aiRun?.comment).toBe('mind the tests');
+    await service.end(id, 1, { exitCode: 0, sessionId: S1 });
+
+    await service.begin(id, { sessionId: S2, mode: 'new' });
+    const task = await storage.getTask(id);
+    expect(task?.aiRun?.comment).toBeUndefined();
+    expect(task?.aiRunHistory?.map((run) => run.comment)).toEqual(['mind the tests', undefined]);
+  });
+
   it('keeps the outcome of run 1 after run 2 begins (INVARIANT)', async () => {
     const id = await createTask();
     await service.begin(id, {

@@ -66,6 +66,35 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     expect(first.ended()).toBeUndefined();
   });
 
+  it('a comment goes to the last runner that declared `comment`, and to no other', () => {
+    const dispatch = createRunDispatch();
+    const able = waitOn(dispatch, { accepts: 'comment' });
+    const older = waitOn(dispatch);
+
+    const reserved = dispatch.reserve({ ...request, comment: 'mind the tests' });
+    expect(reserved).not.toBe('outdated');
+    if (reserved === undefined || reserved === 'outdated') throw new Error('not reserved');
+    reserved.send('5d2f7a10-1c3b-4d5e-8f90-a1b2c3d4e5f6');
+
+    expect(event(able)).toMatchObject({ comment: 'mind the tests' });
+    expect(older.ended()).toBeUndefined();
+  });
+
+  it('answers outdated, and takes nobody, when only runners without `comment` wait', () => {
+    const dispatch = createRunDispatch();
+    const older = waitOn(dispatch, { accepts: 'check,research,trigger' });
+
+    expect(dispatch.reserve({ ...request, comment: 'x' })).toBe('outdated');
+    expect(older.ended()).toBeUndefined();
+    // Without a comment the same runner is still taken as before.
+    expect(dispatch.reserve(request)).toBeDefined();
+  });
+
+  it('answers nothing, as before, when no runner waits, comment or not', () => {
+    const dispatch = createRunDispatch();
+    expect(dispatch.reserve({ ...request, comment: 'x' })).toBeUndefined();
+  });
+
   it('is exclusive: a reserved runner is not reserved again, nor handed a check (INVARIANT)', () => {
     const dispatch = createRunDispatch();
     waitOn(dispatch, { accepts: 'check' });
