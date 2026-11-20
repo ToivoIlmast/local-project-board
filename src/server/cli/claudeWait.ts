@@ -17,6 +17,9 @@ const ACCEPTS = 'check,research';
 /** Said besides the kinds: this runner carries the trigger of a check into begin (T95, V1). */
 const TRIGGER = 'trigger';
 
+/** Said besides the kinds: this runner carries the comment of a work run into begin (T8). */
+const COMMENT = 'comment';
+
 /** What this runner reports to the board (ADR-0029 T94, K11). */
 const SIGNALS = 'run-failure';
 
@@ -88,15 +91,34 @@ export async function waitForRuns(
             'Press Ctrl+C to stop.',
         );
       };
-      // One attempt is at most three requests, each after a `400` to the one before, and
+      // One attempt is at most four requests, each after a `400` to the one before, and
       // nothing was handed by a request that was refused (ADR-0029 T95, V2 and V6):
-      // 1. with `trigger` and, unless this board's token is marked, `signals`;
-      // 2. without `trigger`, with the same `signals`: a board of T94 knows `signals` only;
-      // 3. only when 2 had `signals`: without them, and the board is marked as earlier (K11).
-      // The refusal of `trigger` is not remembered: the next attempt asks with it again.
-      let next = await nextRequest(current, stop.signal, { trigger: true, signals }, onWaiting);
+      // 1. with `comment`, `trigger` and, unless this board's token is marked, `signals`;
+      // 2. without `comment`: a board before the comment of a work run knows the rest;
+      // 3. without `trigger` too, with the same `signals`: a board of T94 knows `signals` only;
+      // 4. only when 3 had `signals`: without them, and the board is marked as earlier (K11).
+      // The refusal of `comment` or `trigger` is not remembered: the next attempt asks again.
+      let next = await nextRequest(
+        current,
+        stop.signal,
+        { comment: true, trigger: true, signals },
+        onWaiting,
+      );
       if (next === 'refused') {
-        next = await nextRequest(current, stop.signal, { trigger: false, signals }, onWaiting);
+        next = await nextRequest(
+          current,
+          stop.signal,
+          { comment: false, trigger: true, signals },
+          onWaiting,
+        );
+      }
+      if (next === 'refused') {
+        next = await nextRequest(
+          current,
+          stop.signal,
+          { comment: false, trigger: false, signals },
+          onWaiting,
+        );
       }
       if (next === 'refused' && signals) {
         earlierBoard = current.token;
@@ -104,7 +126,7 @@ export async function waitForRuns(
         next = await nextRequest(
           current,
           stop.signal,
-          { trigger: false, signals: false },
+          { comment: false, trigger: false, signals: false },
           onWaiting,
         );
       }
@@ -122,7 +144,8 @@ export async function waitForRuns(
           ? `Starting Claude Code on a check of ${next.taskId}.`
           : next.kind === 'research'
             ? `Starting Claude Code on a research of ${next.taskId}.`
-            : `Starting Claude Code on ${next.taskId}.`,
+            : // Only that a comment is there, never its text.
+              `Starting Claude Code on ${next.taskId}${next.comment === undefined ? '' : ' (with a comment)'}.`,
       );
       inSession = true;
       try {
@@ -163,6 +186,7 @@ export async function waitForRuns(
                   env,
                   next.model,
                   next.mode ?? 'new',
+                  next.comment,
                 );
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
@@ -196,7 +220,7 @@ export async function waitForRuns(
 async function nextRequest(
   board: RuntimeState,
   signal: AbortSignal,
-  declare: { trigger: boolean; signals: boolean },
+  declare: { comment: boolean; trigger: boolean; signals: boolean },
   onWaiting: () => void,
 ): Promise<RunRequest | 'lost' | 'stopped' | 'refused'> {
   // A stop that came while the ends were delivered fires no event any more: it is read here.
@@ -206,7 +230,11 @@ async function nextRequest(
   signal.addEventListener('abort', abort);
   try {
     // Says what this runner can start, so that the board hands it nothing it cannot (D13).
-    const accepts = declare.trigger ? `${ACCEPTS},${TRIGGER}` : ACCEPTS;
+    const accepts = [
+      ACCEPTS,
+      ...(declare.trigger ? [TRIGGER] : []),
+      ...(declare.comment ? [COMMENT] : []),
+    ].join(',');
     const query = `accepts=${accepts}${declare.signals ? `&signals=${SIGNALS}` : ''}`;
     const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?${query}`, {
       headers: { authorization: `Bearer ${board.token}` },

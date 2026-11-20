@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -223,6 +223,8 @@ interface StubBoard {
   reports: { body: unknown; authorization: string | undefined }[];
   /** The bodies of `POST /tasks/:id/checks` as text, exactly as the runner sent them. */
   begins: string[];
+  /** The bodies of `POST /tasks/:id/ai-run` (begin of a run of the task), as sent. */
+  workBegins: string[];
   /** Answers to `run-failure`, in order; the last one repeats. */
   answers: number[];
   /** Requests not yet handed: the next runner that waits gets the first. */
@@ -255,8 +257,25 @@ const runsQueryOfT94 = z.strictObject({
   signals: z.literal('run-failure').optional(),
 });
 
+/**
+ * The query of `GET /runs` as a board of T95 parses it: `trigger` is known, `comment` is not
+ * (T8). Boards before it know neither `trigger` nor `comment`.
+ */
+const runsQueryOfT95 = z.strictObject({
+  accepts: z
+    .string()
+    .regex(/^(check|research|trigger)(,(check|research|trigger))*$/)
+    .optional(),
+  signals: z.literal('run-failure').optional(),
+});
+
 async function stubBoard(
-  options: { earlier?: boolean; withoutTrigger?: boolean; answers?: number[] } = {},
+  options: {
+    earlier?: boolean;
+    withoutTrigger?: boolean;
+    withoutComment?: boolean;
+    answers?: number[];
+  } = {},
 ): Promise<StubBoard> {
   const root = await resolveBoardRoot(await initRepo(await tmpDir()));
   await mkdir(join(root, '.board'), { recursive: true });
@@ -266,6 +285,7 @@ async function stubBoard(
     queries: [] as string[],
     reports: [] as StubBoard['reports'],
     begins: [] as string[],
+    workBegins: [] as string[],
     answers: options.answers ?? [200],
     queue: [] as unknown[],
     waiting: [] as ServerResponse[],
@@ -289,7 +309,8 @@ async function stubBoard(
         const query = Object.fromEntries(url.searchParams);
         const refused =
           (options.earlier === true && !runsQueryBeforeT94.safeParse(query).success) ||
-          (options.withoutTrigger === true && !runsQueryOfT94.safeParse(query).success);
+          (options.withoutTrigger === true && !runsQueryOfT94.safeParse(query).success) ||
+          (options.withoutComment === true && !runsQueryOfT95.safeParse(query).success);
         if (refused) {
           return json(response, 400, {
             error: { code: 'INVALID_REQUEST', message: 'The request does not match.', details: {} },
@@ -309,6 +330,7 @@ async function stubBoard(
         return json(response, status, status === 200 ? { recorded: true } : { error: {} });
       }
       if (/^\/api\/v1\/tasks\/T\d+\/ai-run$/.test(url.pathname)) {
+        stub.workBegins.push(text);
         const { sessionId } = JSON.parse(text) as { sessionId: string };
         return json(response, 200, { agent: 'runner', state: 'working', runId: 1, sessionId });
       }
@@ -445,20 +467,23 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       await runner.printed(/^The session on T1 ended/);
       await runner.printed(WAITING, 2);
 
-      // Trigger first (V1), then the same without it (V2), then without signals too (V6, K11).
-      expect(stub.queries.slice(0, 3)).toEqual([
+      // Comment first (T8), then without it (V1), without trigger too (V2), then without
+      // signals as well (V6, K11).
+      expect(stub.queries.slice(0, 4)).toEqual([
+        '?accepts=check,research,trigger,comment&signals=run-failure',
         '?accepts=check,research,trigger&signals=run-failure',
         '?accepts=check,research&signals=run-failure',
         '?accepts=check,research',
       ]);
-      // From then on, to the board with this token, never signals again: trigger is tried, and
-      // dropped, on every new connection.
-      expect(stub.queries.slice(3)).toEqual(
-        stub.queries
-          .slice(3)
-          .map((_query, index) =>
-            index % 2 === 0 ? '?accepts=check,research,trigger' : '?accepts=check,research',
-          ),
+      // From then on, to the board with this token, never signals again: comment and trigger are
+      // tried, and dropped, on every new connection.
+      const again = [
+        '?accepts=check,research,trigger,comment',
+        '?accepts=check,research,trigger',
+        '?accepts=check,research',
+      ];
+      expect(stub.queries.slice(4)).toEqual(
+        stub.queries.slice(4).map((_query, index) => again[index % 3]),
       );
       expect(stub.queries.length).toBeGreaterThanOrEqual(5);
       const notes = runner.out.filter((line) => /earlier version/.test(line));
@@ -479,8 +504,8 @@ describe('a board of an earlier version (K11): one step back, no request lost', 
       const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
       await runner.printed(WAITING, 2);
       expect(stub.queries.slice(0, 2)).toEqual([
-        '?accepts=check,research,trigger&signals=run-failure',
-        '?accepts=check,research,trigger&signals=run-failure',
+        '?accepts=check,research,trigger,comment&signals=run-failure',
+        '?accepts=check,research,trigger,comment&signals=run-failure',
       ]);
       expect(runner.out.join('\n')).not.toMatch(/earlier version/);
     } finally {
@@ -523,7 +548,7 @@ describe('the trigger of a check in the runner (ADR-0029 T95, V1–V5)', () => {
       const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
       await runner.printed(/^The session on T1 ended/);
 
-      expect(stub.queries[0]).toBe('?accepts=check,research,trigger&signals=run-failure');
+      expect(stub.queries[0]).toBe('?accepts=check,research,trigger,comment&signals=run-failure');
       expect(stub.begins).toHaveLength(1);
       const body = JSON.parse(stub.begins[0] ?? '') as { trigger?: unknown; kind?: unknown };
       expect(JSON.stringify(body.trigger)).toBe(JSON.stringify(sent));
@@ -591,15 +616,14 @@ describe('the trigger of a check in the runner (ADR-0029 T95, V1–V5)', () => {
       await runner.printed(/^The session on T1 ended/);
       await runner.printed(WAITING, 2);
 
-      expect(stub.queries.slice(0, 2)).toEqual([
+      const round = [
+        '?accepts=check,research,trigger,comment&signals=run-failure',
         '?accepts=check,research,trigger&signals=run-failure',
         '?accepts=check,research&signals=run-failure',
-      ]);
+      ];
+      expect(stub.queries.slice(0, 3)).toEqual(round);
       // No permanent refusal: every new connection tries trigger again.
-      expect(stub.queries.slice(2, 4)).toEqual([
-        '?accepts=check,research,trigger&signals=run-failure',
-        '?accepts=check,research&signals=run-failure',
-      ]);
+      expect(stub.queries.slice(3, 6)).toEqual(round);
       // A 400 to the request with trigger says nothing about signals.
       expect(runner.out.join('\n')).not.toMatch(/earlier version/);
       expect(stub.queries.some((query) => query === '?accepts=check,research')).toBe(false);
@@ -619,6 +643,83 @@ describe('the trigger of a check in the runner (ADR-0029 T95, V1–V5)', () => {
       await runner.printed(WAITING, 2);
       stub.hand({ type: 'run.requested', taskId: 'T2', agent: 'claude-code' });
       await runner.printed(/^The session on T2 ended/);
+    } finally {
+      await closeStub(stub);
+    }
+  });
+});
+
+/** Every file under `directory`, as text, to look for what must not be there. */
+async function filesText(directory: string): Promise<string> {
+  const parts: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+    const path = join(directory, entry.name);
+    parts.push(entry.isDirectory() ? await filesText(path) : await readFile(path, 'utf8'));
+  }
+  return parts.join('\n');
+}
+
+describe('the comment of a work run in the runner (T8)', () => {
+  const COMMENT = 'Keep the public API.\n  Two spaces, a "quote" and — a dash.\n';
+  const work = (comment?: string) => ({
+    type: 'run.requested',
+    taskId: 'T1',
+    agent: 'claude-code',
+    ...(comment === undefined ? {} : { comment }),
+  });
+
+  it('goes to begin byte for byte, and to no argument, no environment, no log, no journal, no terminal', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(work(COMMENT));
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+
+      expect(stub.workBegins).toHaveLength(1);
+      expect((JSON.parse(stub.workBegins[0] ?? '') as { comment?: string }).comment).toBe(COMMENT);
+      expect(stub.queries[0]).toBe('?accepts=check,research,trigger,comment&signals=run-failure');
+
+      const [call] = await claude.calls();
+      expect(JSON.stringify([call?.argv, call?.env])).not.toContain('public API');
+      expect(await filesText(join(stub.root, '.board'))).not.toContain('public API');
+      expect([...runner.out, ...runner.err].join('\n')).not.toContain('public API');
+      expect(runner.out.join('\n')).toContain('Starting Claude Code on T1 (with a comment).');
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('a request without a comment begins as before: no comment field', async () => {
+    const stub = await stubBoard();
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(work());
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+      expect(Object.keys(JSON.parse(stub.workBegins[0] ?? '') as object).sort()).toEqual([
+        'mode',
+        'sessionId',
+      ]);
+      expect(runner.out.join('\n')).toContain('Starting Claude Code on T1.');
+    } finally {
+      await closeStub(stub);
+    }
+  });
+
+  it('a board that answers 400 to comment: one retry at once without it, trigger and signals kept, no note', async () => {
+    const stub = await stubBoard({ withoutComment: true });
+    try {
+      const claude = await fakeClaude();
+      stub.queue.push(work());
+      const runner = cliInBackground(['claude', '--wait'], { cwd: stub.root, env: claude.env() });
+      await runner.printed(/^The session on T1 ended/);
+      await runner.printed(WAITING, 2);
+      expect(stub.queries.slice(0, 2)).toEqual([
+        '?accepts=check,research,trigger,comment&signals=run-failure',
+        '?accepts=check,research,trigger&signals=run-failure',
+      ]);
+      expect(runner.out.join('\n')).not.toMatch(/earlier version/);
     } finally {
       await closeStub(stub);
     }
