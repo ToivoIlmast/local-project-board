@@ -3,6 +3,7 @@ import { useBoard } from '../../../api/react';
 import { ApiError } from '../../../api/index';
 import type { Task } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { formatDate } from '../../../shared/lib/format';
 import { Markdown } from '../../../shared/lib/Markdown';
 import { Badge, Button, ConfirmDialog, Field, Panel, Select, Text } from '../../../shared/ui/index';
@@ -15,6 +16,7 @@ import {
   versionOptions,
   type Selected,
 } from '../model/history';
+import { useTaskT } from '../i18n/details';
 import { needsStatusConfirmation } from '../model/placement';
 import { reasonText } from '../model/readinessText';
 import { useTaskHistory, useVersion } from '../model/useTaskHistory';
@@ -39,6 +41,9 @@ export interface TaskDetailsProps {
 /** One task, everything about it, its history, and the documents that belong to it. */
 export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskDetailsProps) {
   const { store, client, state } = useBoard();
+  const t = useTaskT();
+  const common = useT();
+  const statusLabel = useStatusLabel();
   const reasons = state.readiness[task.id] ?? [];
   // A status chosen for a blocked task waits for the answer; until then nothing is sent.
   const [asking, setAsking] = useState<string | undefined>(undefined);
@@ -64,8 +69,8 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       const result = await store.restoreVersion(task.id, viewing, currentHash(task));
       setDone(
         result.changed
-          ? `Restored v${viewing} as a new version.`
-          : `The task already has the content of v${viewing}.`,
+          ? t('details.restored', { version: viewing })
+          : t('details.restoredSame', { version: viewing }),
       );
       setChosen(CURRENT);
       setRestoring(false);
@@ -86,17 +91,17 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
   const check = useAsyncAction(async () => {
     setDone(undefined);
     await client.runTask(task.id, { agent: 'claude-code', kind: 'check' });
-    setDone(`A check of ${task.id} was handed to Claude Code.`);
+    setDone(t('details.checkHanded', { id: task.id }));
   });
 
   const options = versionOptions(task, history?.list);
 
   return (
-    <Panel label={`Task ${task.id}`}>
+    <Panel label={t('details.panel', { id: task.id })}>
       <header className="panel__head">
         <h2 className="panel__title">{shown?.title ?? task.title}</h2>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
 
@@ -107,10 +112,12 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
             {label}
           </Badge>
         ))}
-        {task.branch === undefined ? null : <Badge title="Branch">⎇ {task.branch}</Badge>}
+        {task.branch === undefined ? null : (
+          <Badge title={t('field.branch')}>⎇ {task.branch}</Badge>
+        )}
       </div>
 
-      <Field label="Version">
+      <Field label={t('field.version')}>
         {(id) => (
           <Select
             id={id}
@@ -125,19 +132,20 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       </Field>
       {viewing === undefined ? null : (
         <p className="notice" role="status">
-          You are looking at v{viewing}, a historical version. The task itself has not changed
           {currentVersion(task, history?.list) === null
-            ? ''
-            : `: it is at v${currentVersion(task, history?.list)}`}
-          .
+            ? t('details.viewing', { version: viewing })
+            : t('details.viewingAt', {
+                version: viewing,
+                now: currentVersion(task, history?.list) ?? '',
+              })}
         </p>
       )}
 
-      <Field label="Status">
+      <Field label={t('field.status')}>
         {(id) => (
           <Select
             id={id}
-            options={statuses}
+            options={statuses.map((value) => ({ value, label: statusLabel(value) }))}
             value={task.status}
             disabled={setStatus.pending}
             onChange={(event) => {
@@ -155,12 +163,15 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
       )}
 
       <Text tone="muted">
-        Created {formatDate(task.createdAt)} · changed {formatDate(task.updatedAt)}
+        {t('details.dates', {
+          created: formatDate(task.createdAt),
+          changed: formatDate(task.updatedAt),
+        })}
       </Text>
 
       <div className="panel__actions">
         {viewing === undefined ? (
-          <Button onClick={onEdit}>Edit</Button>
+          <Button onClick={onEdit}>{t('details.edit')}</Button>
         ) : (
           <Button
             variant="primary"
@@ -170,14 +181,14 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
               setRestoring(true);
             }}
           >
-            Restore this version
+            {t('details.restore')}
           </Button>
         )}
         <Button disabled={check.pending} onClick={() => void check.run()}>
-          {check.pending ? 'Asking…' : 'Check actuality'}
+          {check.pending ? t('details.checking') : t('details.check')}
         </Button>
         <Button variant="danger" onClick={onDelete}>
-          Delete
+          {common('ui.delete')}
         </Button>
       </div>
       {/* Always there, so that what is put into it is announced; empty, it takes no room. */}
@@ -200,9 +211,9 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
             {snapshot.error}
           </p>
         ) : shown === undefined ? (
-          <Text tone="muted">Loading the version…</Text>
+          <Text tone="muted">{t('details.loadingVersion')}</Text>
         ) : shown.body.trim() === '' ? (
-          <Text tone="muted">No description</Text>
+          <Text tone="muted">{t('details.noDescription')}</Text>
         ) : (
           <Markdown>{shown.body}</Markdown>
         )}
@@ -228,9 +239,13 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
 
       {asking === undefined ? null : (
         <ConfirmDialog
-          title={`Change the status of ${task.id}?`}
-          message={`${task.id} is blocked. Change its status from ${task.status} to ${asking} by hand? The board will not stop you.`}
-          confirmLabel="Change status"
+          title={t('details.askStatus.title', { id: task.id })}
+          message={t('details.askStatus.message', {
+            id: task.id,
+            from: statusLabel(task.status),
+            to: statusLabel(asking),
+          })}
+          confirmLabel={t('details.askStatus.confirm')}
           confirmVariant="primary"
           pending={setStatus.pending}
           onCancel={() => setAsking(undefined)}
@@ -248,12 +263,9 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
 
       {!restoring || viewing === undefined ? null : (
         <ConfirmDialog
-          title={`Restore v${viewing}?`}
-          message={
-            `A new version is made with the title, the labels and the description of v${viewing}. ` +
-            'The versions before it stay, and the status of the task does not change.'
-          }
-          confirmLabel="Restore"
+          title={t('details.restoreAsk.title', { version: viewing })}
+          message={t('details.restoreAsk.message', { version: viewing })}
+          confirmLabel={t('details.restoreAsk.confirm')}
           pending={restore.pending}
           error={restore.error}
           onCancel={() => setRestoring(false)}
@@ -317,16 +329,16 @@ export function TaskDetails({ task, statuses, onEdit, onDelete, onClose }: TaskD
 
 /** The recommendations beside the editor: what is being applied, and what could not be. */
 function ApplyAside({ request }: { request: ApplyRequest }) {
+  const t = useTaskT();
   return (
     <div className="apply-aside">
       <h3 className="check__heading">
-        {request.fromCheck.basis === 'report' ? 'Recommendations applied' : 'Recommendations'}
+        {request.fromCheck.basis === 'report'
+          ? t('details.aside.applied')
+          : t('details.aside.recommendations')}
       </h3>
       {request.fromCheck.basis === 'manual' ? (
-        <Text tone="muted">
-          The report is for another version than the task has now, so nothing is applied for you.
-          Make the changes by hand, using the recommendations below.
-        </Text>
+        <Text tone="muted">{t('details.aside.manual')}</Text>
       ) : null}
       <ul className="check__list">
         {request.recommendations.map((recommendation) => (
@@ -337,7 +349,7 @@ function ApplyAside({ request }: { request: ApplyRequest }) {
       </ul>
       {request.notApplied.length === 0 ? null : (
         <div className="notice" role="status">
-          <span>Not applied:</span>
+          <span>{t('details.aside.notApplied')}</span>
           <ul>
             {request.notApplied.map((item) => (
               <li key={item.id}>

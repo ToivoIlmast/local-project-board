@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useT } from '../../../shared/i18n/index';
 import { formatSize } from '../../../shared/lib/format';
 import { Button, ConfirmDialog, EmptyState, Modal, Spinner } from '../../../shared/ui/index';
+import { useDocumentT } from '../i18n';
 import { DocumentEditor } from './DocumentEditor';
 import { DocumentView } from './DocumentView';
 
@@ -13,6 +15,8 @@ export interface TaskDocumentsProps {
 /** The files that belong to one task: notes, plans, whatever an agent left there (§10). */
 export function TaskDocuments({ taskId }: TaskDocumentsProps) {
   const { state, store, client } = useBoard();
+  const t = useDocumentT();
+  const common = useT();
   const documents = state.documents[taskId];
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ name?: string; content: string } | null>(null);
@@ -34,16 +38,16 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
     try {
       setEditing({ name, content: await client.readDocument(taskId, name) });
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : 'The document could not be read.');
+      setFailure(error instanceof Error ? error.message : t('docs.readFailed'));
     }
   };
 
   return (
-    <section className="documents" aria-label="Documents">
+    <section className="documents" aria-label={t('docs.title')}>
       <header className="documents__head">
-        <h3 className="documents__title">Documents</h3>
+        <h3 className="documents__title">{t('docs.title')}</h3>
         <Button size="small" onClick={() => setEditing({ content: '' })}>
-          New document
+          {t('docs.new')}
         </Button>
       </header>
 
@@ -54,9 +58,9 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
       ) : null}
 
       {documents === undefined ? (
-        <Spinner label="Loading documents…" />
+        <Spinner label={t('docs.loading')} />
       ) : documents.length === 0 ? (
-        <EmptyState title="No documents" />
+        <EmptyState title={t('docs.empty')} />
       ) : (
         <ul className="documents__list">
           {documents.map((document) => (
@@ -71,17 +75,17 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
               <span className="documents__size">{formatSize(document.size)}</span>
               <Button
                 size="small"
-                aria-label={`Edit ${document.name}`}
+                aria-label={t('docs.editName', { name: document.name })}
                 onClick={() => void edit(document.name)}
               >
-                Edit
+                {t('docs.edit')}
               </Button>
               <Button
                 size="small"
-                aria-label={`Delete ${document.name}`}
+                aria-label={t('docs.deleteName', { name: document.name })}
                 onClick={() => setDeleting(document.name)}
               >
-                Delete
+                {common('ui.delete')}
               </Button>
             </li>
           ))}
@@ -95,7 +99,9 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
 
       {editing === null ? null : (
         <Modal
-          title={editing.name === undefined ? 'New document' : `Edit ${editing.name}`}
+          title={
+            editing.name === undefined ? t('docs.new') : t('docs.editName', { name: editing.name })
+          }
           onClose={() => setEditing(null)}
           width="wide"
         >
@@ -114,9 +120,9 @@ export function TaskDocuments({ taskId }: TaskDocumentsProps) {
 
       {deleting === null ? null : (
         <ConfirmDialog
-          title={`Delete ${deleting}?`}
-          message="The file is removed from the task directory. This cannot be undone."
-          confirmLabel="Delete"
+          title={t('docs.deleteTitle', { name: deleting })}
+          message={t('docs.deleteMessage')}
+          confirmLabel={common('ui.delete')}
           pending={remove.pending}
           error={remove.error}
           onCancel={() => setDeleting(null)}

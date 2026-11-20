@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useBoard } from '../../../api/react';
+import { useT } from '../../../shared/i18n/index';
 import { Markdown } from '../../../shared/lib/Markdown';
 import { Button, ErrorState, Spinner } from '../../../shared/ui/index';
+import { useDocumentT } from '../i18n';
 
 export interface DocumentViewProps {
   taskId: string;
@@ -15,6 +17,8 @@ export interface DocumentViewProps {
  */
 export function DocumentView({ taskId, name, onClose }: DocumentViewProps) {
   const { client } = useBoard();
+  const t = useDocumentT();
+  const common = useT();
   const html = name.endsWith('.html');
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -32,26 +36,26 @@ export function DocumentView({ taskId, name, onClose }: DocumentViewProps) {
   }, [client, taskId, name, html]);
 
   return (
-    <section className="document" aria-label={`Document ${name}`}>
+    <section className="document" aria-label={t('docs.view', { name })}>
       <header className="document__head">
         <h4 className="document__name">{name}</h4>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
       {html ? (
         <iframe
           className="document__frame"
-          title={`Document ${name}`}
+          title={t('docs.view', { name })}
           src={client.documentUrl(taskId, name)}
           // The server sandboxes it too (ADR-0023); this page says the same thing itself,
           // and `allow-same-origin` is exactly what must never be here.
           sandbox="allow-scripts"
         />
       ) : error !== undefined ? (
-        <ErrorState title="This document could not be read" message={error} />
+        <ErrorState title={t('docs.unreadable')} message={error} />
       ) : text === null ? (
-        <Spinner label="Loading the document…" />
+        <Spinner label={t('docs.loadingOne')} />
       ) : (
         <Markdown>{text}</Markdown>
       )}

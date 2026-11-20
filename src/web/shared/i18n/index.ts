@@ -1,7 +1,7 @@
 export { I18nProvider } from './I18nProvider';
 export { LanguageSelect } from './LanguageSelect';
 export { defineCatalogs, defineTable, registeredCatalogs, type Catalogs } from './catalog';
-export { createUseT, type Translate } from './createUseT';
+export { createTranslate, createUseT, type Translate } from './createUseT';
 export { useT, useStatusLabel } from './common';
 export { useListOf } from './useListOf';
 export { useLanguage } from './useLanguage';

@@ -6,6 +6,7 @@ import {
   type Topic,
 } from '../../../../contract/v1/index';
 import { ApiError } from '../../../api/index';
+import { taskT } from '../i18n/details';
 import { reasonText } from './readinessText';
 
 /** The board as the page holds it: what readiness is computed from. */
@@ -29,10 +30,11 @@ export function placeLabel(
   topic: string | undefined,
   block: string | undefined,
 ): string {
-  if (topic === undefined) return 'no topic';
+  if (topic === undefined) return taskT('place.none');
   const held = topics.find((candidate) => candidate.id === topic);
-  const where = held === undefined ? `${topic} (not on the board)` : `${topic} · ${held.title}`;
-  if (block === undefined) return `${where} / no block`;
+  const where =
+    held === undefined ? taskT('form.topicStale', { topic }) : `${topic} · ${held.title}`;
+  if (block === undefined) return `${where} / ${taskT('place.noBlock')}`;
   const inside = held?.blocks.find((candidate) => candidate.id === block);
   return `${where} / ${inside === undefined ? block : `${block} · ${inside.title}`}`;
 }
@@ -161,18 +163,18 @@ function changes(
   return lines;
 }
 
+type MoveKey = Parameters<typeof taskT>[0];
+
 function transition(block: string, was: BlockState, now: BlockState, later: string[]): string {
   const behind = later.join(', ');
-  if (now === 'empty') {
-    return `${block} has no tasks left: it becomes empty${behind === '' ? '' : `, and ${behind} wait for it`}.`;
-  }
+  const say = (key: MoveKey, plain: MoveKey): string =>
+    taskT(behind === '' ? plain : key, { block, behind });
+  if (now === 'empty') return say('move.emptiedWait', 'move.emptied');
   if (now === 'open') {
-    if (was === 'done') {
-      return `${block} is no longer done${behind === '' ? '' : `: ${behind} wait for it again`}.`;
-    }
-    return `${block} gets its first task${behind === '' ? '' : `: ${behind} wait for it`}.`;
+    if (was === 'done') return say('move.reopenedWait', 'move.reopened');
+    return say('move.firstTaskWait', 'move.firstTask');
   }
-  return `${block} becomes done${behind === '' ? '' : `: ${behind} no longer wait for it`}.`;
+  return say('move.completedWait', 'move.completed');
 }
 
 /** Where the task lands in the order of blocks. */
@@ -183,15 +185,18 @@ function destination(
   const topic = topics.find((candidate) => candidate.id === to.topic);
   if (to.topic === undefined || to.block === undefined || topic === undefined) {
     return to.topic === undefined
-      ? 'The task is outside the order of blocks: it waits for no block.'
-      : `The task is in ${to.topic} without a block: outside the order of blocks.`;
+      ? taskT('move.outside')
+      : taskT('move.noBlock', { topic: to.topic });
   }
   const index = topic.blocks.findIndex((candidate) => candidate.id === to.block);
-  if (index === -1) return `${to.block} is not a block of ${topic.id}.`;
-  if (index === 0)
-    return `${to.block} is the first block of ${topic.id}: the task waits for no block.`;
+  if (index === -1) return taskT('move.unknownBlock', { block: to.block, topic: topic.id });
+  if (index === 0) return taskT('move.firstBlock', { block: to.block, topic: topic.id });
   const earlier = topic.blocks.slice(0, index).map((candidate) => candidate.id);
-  return `${to.block} comes after ${earlier.join(', ')} in ${topic.id}: the task waits until they are done.`;
+  return taskT('move.afterBlocks', {
+    block: to.block,
+    earlier: earlier.join(', '),
+    topic: topic.id,
+  });
 }
 
 /** The fields of a task that place it, and what the board refused in each. */

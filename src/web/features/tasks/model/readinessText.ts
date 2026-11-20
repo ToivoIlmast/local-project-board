@@ -1,32 +1,33 @@
 import type { BlockingReason } from '../../../../contract/v1/index';
+import { taskT } from '../i18n/details';
 
 /**
  * The words of the page for a reason not to start a task: the board sends codes with what they
- * are about, and the client says them (ADR-0032 §7).
+ * are about, and the client says them (ADR-0032 §7), in the language shown. Ids stay as they are.
  */
 export function reasonText(reason: BlockingReason): string {
   switch (reason.code) {
     case 'task-not-done':
-      return `${reason.task} is not done`;
     case 'task-missing':
-      return `${reason.task} does not exist`;
     case 'task-unreadable':
-      return `${reason.task} cannot be read`;
+      return taskT(`reason.${reason.code}`, { task: reason.task });
     case 'topic-missing':
-      return `topic ${reason.topic} does not exist`;
     case 'topic-unreadable':
-      return `topic ${reason.topic} cannot be read`;
+      return taskT(`reason.${reason.code}`, { topic: reason.topic });
     case 'block-missing':
-      return `block ${reason.block} is not in topic ${reason.topic}`;
+      return taskT('reason.block-missing', { block: reason.block, topic: reason.topic });
     case 'block-incomplete':
-      return `block ${reason.block} is not done: ${reason.tasks.join(', ')}`;
+      return taskT('reason.block-incomplete', {
+        block: reason.block,
+        tasks: reason.tasks.join(', '),
+      });
     case 'block-empty':
-      return `block ${reason.block} has no tasks`;
+      return taskT('reason.block-empty', { block: reason.block });
     case 'block-order-unknown':
-      return `earlier blocks cannot be told done: ${reason.tasks.join(', ')} cannot be read`;
+      return taskT('reason.block-order-unknown', { tasks: reason.tasks.join(', ') });
     case 'cycle':
-      return `dependency cycle: ${reason.tasks.join(', ')}`;
+      return taskT('reason.cycle', { tasks: reason.tasks.join(', ') });
     case 'config':
-      return `the board has no "${reason.status}" status`;
+      return taskT('reason.config', { status: reason.status });
   }
 }

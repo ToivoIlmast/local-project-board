@@ -1,5 +1,6 @@
 import { blockingReasonSchema } from '../../../../contract/v1/index';
 import { ApiError } from '../../../api/index';
+import { taskT } from '../i18n/details';
 import { reasonText } from './readinessText';
 
 /**
@@ -11,11 +12,14 @@ export function explainError<E>(error: E): E | ApiError {
   if (!(error instanceof ApiError) || error.code !== 'TASK_BLOCKED') return error;
   const parsed = blockingReasonSchema.array().safeParse(error.details['reasons']);
   if (!parsed.success || parsed.data.length === 0) return error;
-  const id = typeof error.details['id'] === 'string' ? `Task "${error.details['id']}"` : 'The task';
+  const id = error.details['id'];
+  const reasons = parsed.data.map(reasonText).join('; ');
   return new ApiError(
     error.status,
     error.code,
-    `${id} is blocked: ${parsed.data.map(reasonText).join('; ')}.`,
+    typeof id === 'string'
+      ? taskT('error.blockedTask', { id, reasons })
+      : taskT('error.blocked', { reasons }),
     error.details,
   );
 }
