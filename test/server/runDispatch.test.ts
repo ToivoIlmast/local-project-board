@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { NextFunction, Request, Response } from 'express';
+import type { RunnerReservation } from '../../src/core/services/aiRunService.js';
 import { createRunDispatch, type RunDispatch } from '../../src/server/http/runs.js';
 
 /**
@@ -44,6 +45,19 @@ function waitOn(dispatch: RunDispatch, query: Record<string, string> = {}): Fake
 }
 
 const request = { taskId: 'T1', agent: 'claude-code' as const };
+
+/**
+ * A reservation for a request without a comment, or nothing: such a request is never
+ * `outdated`, which only a comment no waiting runner can carry gives.
+ */
+function reserveWork(
+  dispatch: RunDispatch,
+  work: Parameters<RunDispatch['reserve']>[0],
+): RunnerReservation | undefined {
+  const reserved = dispatch.reserve(work);
+  if (reserved === 'outdated') throw new Error('reserve answered outdated without a comment');
+  return reserved;
+}
 const event = (runner: FakeRunner): unknown =>
   JSON.parse((runner.ended() ?? '').replace(/^data: /, '').trim());
 
@@ -53,7 +67,7 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     const first = waitOn(dispatch);
     const last = waitOn(dispatch, { signals: 'run-failure' });
 
-    const reserved = dispatch.reserve(request);
+    const reserved = reserveWork(dispatch, request);
 
     expect(reserved?.reports).toBe(true);
     expect(last.ended()).toBeUndefined();
@@ -99,8 +113,8 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     const dispatch = createRunDispatch();
     waitOn(dispatch, { accepts: 'check' });
 
-    const one = dispatch.reserve(request);
-    const two = dispatch.reserve({ taskId: 'T2', agent: 'claude-code' });
+    const one = reserveWork(dispatch, request);
+    const two = reserveWork(dispatch, { taskId: 'T2', agent: 'claude-code' });
 
     expect(one).toBeDefined();
     expect(two).toBeUndefined();
@@ -112,8 +126,8 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     const a = waitOn(dispatch, { signals: 'run-failure' });
     const b = waitOn(dispatch, { signals: 'run-failure' });
 
-    const one = dispatch.reserve(request);
-    const two = dispatch.reserve({ taskId: 'T2', agent: 'claude-code' });
+    const one = reserveWork(dispatch, request);
+    const two = reserveWork(dispatch, { taskId: 'T2', agent: 'claude-code' });
     one?.send('11111111-1111-4111-8111-111111111111');
     two?.send('22222222-2222-4222-8222-222222222222');
 
@@ -127,8 +141,8 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     const dispatch = createRunDispatch();
     const runner = waitOn(dispatch);
 
-    dispatch.reserve(request)?.release();
-    const again = dispatch.reserve(request);
+    reserveWork(dispatch, request)?.release();
+    const again = reserveWork(dispatch, request);
 
     expect(runner.ended()).toBeUndefined();
     expect(again).toBeDefined();
@@ -137,7 +151,7 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
   it('a runner whose connection closed while reserved is sent nothing and not put back (K6 step 4)', () => {
     const dispatch = createRunDispatch();
     const runner = waitOn(dispatch);
-    const reserved = dispatch.reserve(request);
+    const reserved = reserveWork(dispatch, request);
 
     runner.close();
 
@@ -151,7 +165,7 @@ describe('reserve: one waiting runner, for one request of work (K6, I4)', () => 
     const dispatch = createRunDispatch();
     const runner = waitOn(dispatch, { accepts: 'check,research' });
 
-    const reserved = dispatch.reserve(request);
+    const reserved = reserveWork(dispatch, request);
     reserved?.send('44444444-4444-4444-8444-444444444444');
 
     expect(reserved?.reports).toBe(false);

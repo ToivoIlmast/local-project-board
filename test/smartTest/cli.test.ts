@@ -1,5 +1,11 @@
+import { createRequire } from 'node:module';
 import { decide, isCi, jestArgv, main, parseArgs } from '../../scripts/smart-test/cli.mjs';
-import { FULL_JEST_ARGS } from '../../scripts/smart-test/rules.mjs';
+import {
+  FULL_JEST_ARGS,
+  JEST_BIN_ARGS,
+  JEST_PROJECTS,
+  PROJECT_ARGS,
+} from '../../scripts/smart-test/rules.mjs';
 
 /**
  * The runner's decisions with git and Jest replaced: which mode a run is in, and the exact Jest
@@ -84,7 +90,11 @@ describe('which mode a run is in', () => {
     for (const argv of [['test/core'], ['-t', 'rank'], ['--testPathPatterns=web'], ['--watch']]) {
       const { decision } = await run(argv);
       expect(decision).toEqual({ kind: 'manual', args: argv });
-      expect(jestArgv(decision, parseArgs(argv))).toEqual([...FULL_JEST_ARGS, ...argv]);
+      expect(jestArgv(decision, parseArgs(argv))).toEqual([
+        ...JEST_BIN_ARGS,
+        ...argv,
+        ...PROJECT_ARGS,
+      ]);
     }
   });
 
@@ -134,6 +144,79 @@ describe('which mode a run is in', () => {
       { status: 'M', path: 'src/a.ts' },
       { status: 'D', path: 'src/gone.ts' },
     ]);
+  });
+});
+
+/**
+ * How Jest itself reads a command line of the runner: its own parser, loaded from where the
+ * installed `jest` loads it (as scripts/smart-test/jest.mjs does). Nothing runs.
+ */
+const requireJest = createRequire(createRequire(import.meta.url).resolve('jest'));
+const { buildArgv } = requireJest('jest-cli') as {
+  buildArgv: (argv: string[]) => Promise<{
+    _: (string | number)[];
+    selectProjects?: string[];
+    testNamePattern?: string;
+    maxWorkers?: number | string;
+  }>;
+};
+const asJest = (args: string[]) => {
+  expect(args.slice(0, JEST_BIN_ARGS.length)).toEqual(JEST_BIN_ARGS);
+  return buildArgv(args.slice(JEST_BIN_ARGS.length));
+};
+
+describe('MANUAL: Jest is handed the paths as paths (regression: they were read as projects)', () => {
+  const manual = async (argv: string[]) => {
+    const { decision } = await run(argv);
+    expect(decision.kind).toBe('manual');
+    const args = jestArgv(decision, parseArgs(argv));
+    if (args === null) throw new Error('no command');
+    return { args, jest: await asJest(args) };
+  };
+
+  it('one file: it is the only path, and the projects are node and web only', async () => {
+    const { args, jest } = await manual(['test/contract/apiDoc.test.ts']);
+    expect(jest._).toEqual(['test/contract/apiDoc.test.ts']);
+    expect(jest.selectProjects).toEqual([...JEST_PROJECTS]);
+    // The project list is last: nothing can follow it and be taken for a project.
+    expect(args.slice(-PROJECT_ARGS.length)).toEqual(PROJECT_ARGS);
+  });
+
+  it('several files: every one of them is a path', async () => {
+    const files = ['test/api/run.test.ts', 'test/contract/handoff.test.ts'];
+    const { jest } = await manual(files);
+    expect(jest._).toEqual(files);
+    expect(jest.selectProjects).toEqual([...JEST_PROJECTS]);
+  });
+
+  it('a path with --maxWorkers: the path stays a path, the workers an option', async () => {
+    const { jest } = await manual(['test/contract/apiDoc.test.ts', '--maxWorkers', '2']);
+    expect(jest._).toEqual(['test/contract/apiDoc.test.ts']);
+    expect(String(jest.maxWorkers)).toBe('2');
+    expect(jest.selectProjects).toEqual([...JEST_PROJECTS]);
+  });
+
+  it('a path with -t: the path stays a path, the name a name', async () => {
+    const { jest } = await manual(['test/contract/apiDoc.test.ts', '-t', 'drift test']);
+    expect(jest._).toEqual(['test/contract/apiDoc.test.ts']);
+    expect(jest.testNamePattern).toBe('drift test');
+    expect(jest.selectProjects).toEqual([...JEST_PROJECTS]);
+  });
+
+  it('the command line before the fix would lose the path to --selectProjects (the defect)', async () => {
+    const jest = await asJest([...FULL_JEST_ARGS, 'test/contract/apiDoc.test.ts']);
+    expect(jest._).toEqual([]);
+    expect(jest.selectProjects).toEqual([...JEST_PROJECTS, 'test/contract/apiDoc.test.ts']);
+  });
+
+  it('Smart and Full command lines read as before: by path, and every project', async () => {
+    const { decision } = await run([]);
+    const smart = await asJest(jestArgv(decision, parseArgs([])) ?? []);
+    expect(smart._).toEqual(['test/t1.test.ts']);
+    expect(smart.selectProjects).toEqual([...JEST_PROJECTS]);
+    const full = await asJest(FULL_JEST_ARGS);
+    expect(full._).toEqual([]);
+    expect(full.selectProjects).toEqual([...JEST_PROJECTS]);
   });
 });
 

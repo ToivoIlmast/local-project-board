@@ -350,7 +350,8 @@ export function generateHandoff({
     task.aiRun?.runId !== undefined && task.aiRun.state === 'working'
       ? task.aiRun.comment
       : undefined;
-  if (comment !== undefined) {
+  // A comment of blanks only says nothing: no empty section.
+  if (comment !== undefined && comment.trim() !== '') {
     const fence = fenceFor(comment);
     lines.push(
       '',

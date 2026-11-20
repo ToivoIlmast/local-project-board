@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { jest } from '@jest/globals';
 import { BoardError } from '../../../src/core/errors.js';
 import type { Launch } from '../../../src/core/model/launch.js';
+import type { Task } from '../../../src/core/model/task.js';
 import type { Storage, TaskPatch } from '../../../src/core/ports.js';
 import { isLaunchCurrent } from '../../../src/core/rules/launch.js';
 import {
@@ -39,6 +40,15 @@ async function createTask(title = 'Do something'): Promise<string> {
 
 const launchOf = async (id: string): Promise<Launch | undefined> =>
   (await storage.getTask(id))?.launch;
+
+/**
+ * What `requestWork` wrote, or nothing. The stand-in runners here always take the request: no
+ * request has a comment, so `outdated` (no waiting runner can carry one) would be a failure.
+ */
+function written(result: Task | undefined | 'outdated'): Task | undefined {
+  if (result === 'outdated') throw new Error('requestWork answered outdated without a comment');
+  return result;
+}
 
 /** A runner as the dispatcher reserves one: it records what it was told and when. */
 interface FakeRunner extends RunnerReservation {
@@ -145,7 +155,7 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
     const runner = fakeRunner(id);
     const requestId = randomUUID();
 
-    const task = await service.requestWork(id, request('new', requestId), () => runner);
+    const task = written(await service.requestWork(id, request('new', requestId), () => runner));
 
     expect(runner.sent).toEqual([requestId]);
     // At the moment of the send the launch of this very request was already stored.
@@ -163,7 +173,7 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
 
   it('records whether the reserved runner reports: an earlier runner gives reports: false (K11)', async () => {
     const id = await createTask();
-    const task = await service.requestWork(id, request(), () => fakeRunner(id, false));
+    const task = written(await service.requestWork(id, request(), () => fakeRunner(id, false)));
     expect(task?.launch?.reports).toBe(false);
   });
 
@@ -172,7 +182,7 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
     const begun = await service.begin(id, { sessionId: SESSION, mode: 'new' });
     await service.end(id, begun.runId ?? 0, { exitCode: 1, sessionId: SESSION });
 
-    const task = await service.requestWork(id, request('resume'), () => fakeRunner(id));
+    const task = written(await service.requestWork(id, request('resume'), () => fakeRunner(id)));
 
     expect(task?.launch?.afterRunId).toBe(1);
     expect(isLaunchCurrent(task!)).toBe(true);
@@ -209,7 +219,7 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
 
   it('writes the previous launch back when the runner went away during the write (K6 step 4)', async () => {
     const id = await createTask();
-    const earlier = (await service.requestWork(id, request(), () => fakeRunner(id)))?.launch;
+    const earlier = written(await service.requestWork(id, request(), () => fakeRunner(id)))?.launch;
     events.events.length = 0;
     const gone = fakeRunner(id);
     gone.closed = true;
@@ -258,7 +268,9 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
     await service.runFailure(id, { requestId: first, kind: 'claude-missing' });
 
     const second = randomUUID();
-    const task = await service.requestWork(id, request('new', second), () => fakeRunner(id));
+    const task = written(
+      await service.requestWork(id, request('new', second), () => fakeRunner(id)),
+    );
 
     expect(task?.launch?.requestId).toBe(second);
     expect(task?.launch?.failure).toBeUndefined();
@@ -268,10 +280,12 @@ describe('/run of a work run: reserve, write, send (K6 steps 2–5, K7)', () => 
     const id = await createTask();
     const a = fakeRunner(id);
     const b = fakeRunner(id);
-    const [first, second] = await Promise.all([
-      service.requestWork(id, request(), () => a),
-      service.requestWork(id, request(), () => b),
-    ]);
+    const [first, second] = (
+      await Promise.all([
+        service.requestWork(id, request(), () => a),
+        service.requestWork(id, request(), () => b),
+      ])
+    ).map(written);
     expect(a.sent).toHaveLength(1);
     expect(b.sent).toHaveLength(1);
     // The last one handed is the current one, and it is what is stored.
@@ -313,7 +327,7 @@ describe('begin removes launch, in its one write (K5)', () => {
     const runId = run.runId ?? 0;
     await service.report(id, runId, { agent: 'claude-code', state: 'failed', message: 'no' });
     // A request after the run ended, then the late end of that run, and an agent's word.
-    const task = await service.requestWork(id, request('resume'), () => fakeRunner(id));
+    const task = written(await service.requestWork(id, request('resume'), () => fakeRunner(id)));
     const launch = task?.launch;
     await service.end(id, runId, { exitCode: 1, sessionId: SESSION });
     expect(await launchOf(id)).toEqual(launch);

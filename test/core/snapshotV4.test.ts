@@ -512,3 +512,33 @@ describe('export v4 keeps the launch of a task as stored (ADR-0029 T94, K15, INV
     expect(task?.extra).toBeUndefined();
   });
 });
+
+describe('export v4 keeps the comment of a run (T2, INVARIANT)', () => {
+  const comment = 'Mind the tests:\nkeep `parseStatus` as it is.';
+  const aiRun = {
+    agent: 'claude-code',
+    state: 'working' as const,
+    runId: 1,
+    sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+    mode: 'new' as const,
+    comment,
+    startedAt: '2026-09-21T09:00:00.000Z',
+  };
+
+  it('exports aiRun.comment as stored, and restores it as a field of the run', async () => {
+    const { storage } = await board();
+    await storage.createTask(newTask('Ship it'));
+    await storage.updateTask('T1', { aiRun });
+
+    const snapshot = boardSnapshotSchema.parse(await exported(storage));
+    expect(snapshot.tasks.find((task) => task.id === 'T1')?.aiRun?.comment).toBe(comment);
+
+    const target = await tmpDir();
+    await restoreSnapshot(target, snapshot);
+    const { storage: restored } = await board(target);
+
+    const task = await restored.getTask('T1');
+    expect(task?.aiRun).toEqual(aiRun);
+    expect(task?.extra).toBeUndefined();
+  });
+});

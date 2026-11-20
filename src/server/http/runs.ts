@@ -155,8 +155,22 @@ export function createRunDispatch(): RunDispatch {
 /**
  * What the page is told when nothing waits: how to start a runner, or the session itself. When
  * runners wait but none can start this kind, they are of an earlier version: update one.
+ * `outdated-comment`: runners wait, but none can pass the comment of a work run to the agent.
  */
-export function noRunner(taskId: string, why: Exclude<Handed, 'handed'> = 'nobody'): HttpError {
+export function noRunner(
+  taskId: string,
+  why: Exclude<Handed, 'handed'> | 'outdated-comment' = 'nobody',
+): HttpError {
+  if (why === 'outdated-comment') {
+    return new HttpError(
+      409,
+      'NO_AGENT_RUNNER',
+      'The runner waiting for this board cannot pass a comment to the agent: it is of an ' +
+        'earlier version. Update local-project-board, start `npx local-project-board claude ' +
+        '--wait` again and try again, or start the run without a comment.',
+      { id: taskId },
+    );
+  }
   if (why === 'outdated') {
     return new HttpError(
       409,

@@ -172,7 +172,9 @@ export const handlers: Handlers = {
           ...(body.comment === undefined ? {} : { comment: body.comment }),
         }),
     );
-    if (handed === undefined || handed === 'outdated') throw noRunner(params.id, handed);
+    if (handed === undefined) throw noRunner(params.id);
+    // Only a comment makes a waiting runner unable to take a work run.
+    if (handed === 'outdated') throw noRunner(params.id, 'outdated-comment');
     return request;
   },
 
