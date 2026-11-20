@@ -185,7 +185,7 @@ describe('Smart mode selects the tests a change can reach', () => {
 
 describe('Smart mode widens to Full mode when it cannot see how far a change reaches', () => {
   it.each([
-    ['package.json', 'scripts or dependencies'],
+    ['package.json', 'npm scripts or dependencies'],
     ['package-lock.json', 'locked dependency versions'],
     ['jest.config.js', 'Jest configuration'],
     ['tsconfig.test-web.json', 'TypeScript configuration'],

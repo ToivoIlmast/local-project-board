@@ -13,7 +13,7 @@ export const JEST_PROJECTS = /** @type {const} */ (['node', 'web']);
 
 /**
  * The exact Full-mode command. `npm run test:full` is this command and nothing else, so CI does
- * not depend on the selector at all; test/smartTest/scripts.test.ts keeps the two equal.
+ * not depend on the selector at all; test/smartTest/repository.test.ts keeps the two equal.
  */
 export const FULL_JEST_ARGS = [
   '--experimental-vm-modules',
@@ -35,7 +35,7 @@ export const FULL_JEST_ARGS = [
  * @type {PathRule[]}
  */
 export const FULL_RULES = [
-  { pattern: /^package\.json$/, why: 'package.json: scripts or dependencies' },
+  { pattern: /^package\.json$/, why: 'npm scripts or dependencies' },
   { pattern: /^(package-lock|npm-shrinkwrap)\.json$/, why: 'locked dependency versions' },
   { pattern: /^\.(npmrc|nvmrc|node-version)$/, why: 'npm / Node.js toolchain settings' },
   { pattern: /^jest\.config\.[cm]?[jt]s$/, why: 'Jest configuration' },
