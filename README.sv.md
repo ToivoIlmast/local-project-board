@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 24c1eceb6a61d9fb53f685947c05bc359099d946 -->
+<!-- Based on README.md @ 2f66f10f94f0c23dbb37ad21f975b2dd635c0f03 -->
 
 # local-project-board
 
@@ -353,12 +353,16 @@ Kräver Node.js >= 22.12.0.
 | `npm run build`                           | Bygger servern och användargränssnittet            |
 | `npm start`                               | Startar tavlan från bygget                         |
 | `npm run start:claude -- --wait`          | `claude --wait` från bygget (`-- T13`: en uppgift) |
-| `npm test`                                | Jest-tester (servern och sidan)                    |
+| `npm test`                                | Jest-tester som dina ändringar når (Smart)         |
+| `npm run test:full`                       | Alla Jest-tester (servern och sidan); CI kör detta |
 | `npm run test:e2e`                        | Playwright mot en tavla som startats på riktigt    |
 | `npm run test:pack`                       | Bygger npm-paketet, installerar och startar det    |
 | `npm run lint`                            | ESLint, inklusive arkitekturregler                 |
 | `npm run typecheck`                       | TypeScript                                         |
 | `npm run format` / `npm run format:check` | Prettier                                           |
+
+`npm test` visar vilka tester den valde och varför, och hur många den lämnade ute; när den inte kan avgöra
+hur långt en ändring når kör den alla. Se [ADR-0033](docs/adr/0033-local-tests-are-smart-ci-runs-all.md).
 
 Webbläsartesterna behöver en webbläsare en gång: `npx playwright install --with-deps chromium`.
 

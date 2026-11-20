@@ -191,3 +191,8 @@ the inner ring, `api` and `server` for HTTP behaviour, `storage` and `conformanc
 `docs` for documentation checks, `web` for the page, `pack` for the published package and
 `e2e` for the browser. `npm run test:pack` and `npm run test:e2e` build first and are not part
 of `npm test`.
+
+`npm test` runs only the Jest tests that the changes of the branch can reach (Smart mode,
+`scripts/smart-test/`); `npm run test:full` runs all of them, and CI always does. How tests are
+selected and when the selection widens to everything is in
+[ADR-0033](adr/0033-local-tests-are-smart-ci-runs-all.md).

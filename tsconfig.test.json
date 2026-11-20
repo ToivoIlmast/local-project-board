@@ -2,6 +2,9 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    // The test selector (scripts/smart-test) is plain JavaScript with JSDoc types; its tests import it.
+    "allowJs": true,
+    "rootDir": ".",
     "types": ["node", "jest"]
   },
   "include": ["test/**/*.ts", "jest.config.ts"],

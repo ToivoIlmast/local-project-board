@@ -1,4 +1,4 @@
-<!-- Based on README.md @ 24c1eceb6a61d9fb53f685947c05bc359099d946 -->
+<!-- Based on README.md @ 2f66f10f94f0c23dbb37ad21f975b2dd635c0f03 -->
 
 # local-project-board
 
@@ -356,12 +356,16 @@ Vaatii Node.js >= 22.12.0.
 | `npm run build`                           | Kääntää palvelimen ja käyttöliittymän                 |
 | `npm start`                               | Käynnistää taulun käännöksestä                        |
 | `npm run start:claude -- --wait`          | `claude --wait` käännöksestä (`-- T13`: yksi tehtävä) |
-| `npm test`                                | Jest-testit (palvelin ja sivu)                        |
+| `npm test`                                | Jest-testit, joihin muutoksesi vaikuttavat (Smart)    |
+| `npm run test:full`                       | Kaikki Jest-testit (palvelin ja sivu); CI ajaa tämän  |
 | `npm run test:e2e`                        | Playwright oikeasti käynnistettyä taulua vasten       |
 | `npm run test:pack`                       | Rakentaa npm-paketin, asentaa sen ja käynnistää sen   |
 | `npm run lint`                            | ESLint, myös arkkitehtuurisäännöt                     |
 | `npm run typecheck`                       | TypeScript                                            |
 | `npm run format` / `npm run format:check` | Prettier                                              |
+
+`npm test` kertoo, mitkä testit se valitsi ja miksi sekä kuinka monta jäi ajamatta; kun se ei pysty päättelemään,
+kuinka laajalle muutos ulottuu, se ajaa ne kaikki. Katso [ADR-0033](docs/adr/0033-local-tests-are-smart-ci-runs-all.md).
 
 Selaintestit tarvitsevat selaimen kerran: `npx playwright install --with-deps chromium`.
 
