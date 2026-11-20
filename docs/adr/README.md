@@ -33,3 +33,4 @@
 | 0029 | [Claude Code is started by the CLI in the user's terminal, never by the server](0029-claude-code-is-started-by-the-cli-in-the-users-terminal.md) | accepted; Research amendment (T54) partly accepted 2026-11-02 (set A), rest proposed |
 | 0030 | [Task history: content versions and actuality checks, append-only](0030-task-history-versions-and-checks-are-append-only.md)                     | accepted; Research amendment (T54) partly accepted 2026-11-02 (set A: R1 points 1–2), rest proposed |
 | 0031 | [One event stream per browser, held by a SharedWorker](0031-one-event-stream-per-browser-in-a-shared-worker.md) | accepted |
+| 0033 | [Local test runs are Smart; CI runs every test](0033-local-tests-are-smart-ci-runs-all.md) | accepted |

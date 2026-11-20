@@ -350,12 +350,16 @@ Requires Node.js >= 22.12.0.
 | `npm run build`                           | Build the server and the UI                         |
 | `npm start`                               | Start the board from the build                      |
 | `npm run start:claude -- --wait`          | `claude --wait` from the build (`-- T13`: one task) |
-| `npm test`                                | Jest tests (server and page)                        |
+| `npm test`                                | Jest tests your changes reach (Smart mode)          |
+| `npm run test:full`                       | All Jest tests (server and page); what CI runs      |
 | `npm run test:e2e`                        | Playwright, against a board started for real        |
 | `npm run test:pack`                       | Build the npm package, install it and start it      |
 | `npm run lint`                            | ESLint, including architecture rules                |
 | `npm run typecheck`                       | TypeScript                                          |
 | `npm run format` / `npm run format:check` | Prettier                                            |
+
+`npm test` prints which tests it chose and why, and how many it left out; when it cannot tell how
+far a change reaches, it runs them all. See [ADR-0033](docs/adr/0033-local-tests-are-smart-ci-runs-all.md).
 
 The browser tests need a browser once: `npx playwright install --with-deps chromium`.
 
