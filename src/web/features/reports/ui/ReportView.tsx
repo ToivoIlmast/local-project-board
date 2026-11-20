@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useBoard } from '../../../api/react';
+import { useT } from '../../../shared/i18n/index';
 import { Markdown } from '../../../shared/lib/Markdown';
 import { Button, ErrorState, Spinner } from '../../../shared/ui/index';
+import { useReportsT } from '../i18n';
 
 export interface ReportViewProps {
   id: string;
@@ -15,6 +17,8 @@ export interface ReportViewProps {
  */
 export function ReportView({ id, onClose }: ReportViewProps) {
   const { state, client } = useBoard();
+  const t = useReportsT();
+  const common = useT();
   const report = state.reports.find((candidate) => candidate.id === id);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -33,25 +37,25 @@ export function ReportView({ id, onClose }: ReportViewProps) {
   }, [client, id, markdown]);
 
   return (
-    <section className="report" aria-label={`Report ${id}`}>
+    <section className="report" aria-label={t('view.label', { id })}>
       <header className="report__head">
         <h3 className="report__title">{report?.title ?? id}</h3>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
       {markdown ? (
         error !== undefined ? (
-          <ErrorState title="This report could not be read" message={error} />
+          <ErrorState title={t('view.failed')} message={error} />
         ) : text === null ? (
-          <Spinner label="Loading the report…" />
+          <Spinner label={t('view.loading')} />
         ) : (
           <Markdown>{text}</Markdown>
         )
       ) : (
         <iframe
           className="report__frame"
-          title={`Report ${id}`}
+          title={t('view.label', { id })}
           src={client.reportUrl(id)}
           // A report is HTML someone else wrote: it runs in an origin of its own, never in
           // this one. `allow-same-origin` would hand it the board's DOM (ADR-0023).

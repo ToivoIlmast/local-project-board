@@ -1,6 +1,6 @@
 import type { WorkflowFlag } from '../../../../contract/v1/index';
 import { Field, Select, type SelectOption } from '../../../shared/ui/index';
-import { WORKFLOW_LABELS } from '../model/labels';
+import { useSettingsT } from '../i18n/index';
 
 export interface FlagChoiceProps {
   flag: WorkflowFlag;
@@ -19,16 +19,17 @@ const INHERIT = 'inherit';
 /**
  * One on/off setting of a column or of a task, as the three states it can have there: nothing
  * (inherit), on, or off. The columns and a task use this one control, so a setting reads the
- * same wherever it is overridden.
+ * same wherever it is overridden. The values (`inherit`, `on`, `off`) are not words.
  */
 export function FlagChoice({ flag, own, inheritLabel, hint, muted, onChange }: FlagChoiceProps) {
+  const t = useSettingsT();
   const options: SelectOption[] = [
     { value: INHERIT, label: inheritLabel },
-    { value: 'on', label: 'On' },
-    { value: 'off', label: 'Off' },
+    { value: 'on', label: t('choice.on') },
+    { value: 'off', label: t('choice.off') },
   ];
   return (
-    <Field label={WORKFLOW_LABELS[flag].label} hint={hint} muted={muted}>
+    <Field label={t(`label.${flag}`)} hint={hint} muted={muted}>
       {(id, hintId) => (
         <Select
           id={id}

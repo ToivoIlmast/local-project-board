@@ -3,6 +3,7 @@ import {
   type WorkflowOverrides,
   type WorkflowSettings,
 } from '../../../../contract/v1/index';
+import { useStatusLabel } from '../../../shared/i18n/index';
 import { Checkbox, Field, Input, Select, type SelectOption } from '../../../shared/ui/index';
 import {
   effectiveFlag,
@@ -12,8 +13,9 @@ import {
   setBoardLanguage,
   setBoardValue,
 } from '../model/draft';
+import { useSettingsT } from '../i18n/index';
+import { inEffectText, inactiveNote, onOff, sourceLabel } from '../model/labels';
 import { BoardLanguage, CommitLanguage } from './LanguageChoice';
-import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
 
 export interface BoardSettingsProps {
   overrides: WorkflowOverrides;
@@ -24,26 +26,27 @@ export interface BoardSettingsProps {
 
 /** The settings of the whole board: six on/off flags, two statuses, two texts and the languages of the commits and of the report. */
 export function BoardSettings({ overrides, defaults, statuses, onChange }: BoardSettingsProps) {
+  const t = useSettingsT();
   const inactive = inactiveFlags(overrides, defaults);
 
   return (
     <fieldset className="settings__group">
-      <legend className="settings__legend">Board</legend>
+      <legend className="settings__legend">{t('legend.board')}</legend>
 
       {WORKFLOW_FLAGS.map((key) => {
         const { value, source } = effectiveFlag(overrides, defaults, key);
         const muted = inactive.includes(key);
         const hint = [
-          WORKFLOW_LABELS[key].description,
-          `In effect: ${onOff(value)}, from ${sourceLabel(source)}.`,
-          muted ? INACTIVE_NOTE : undefined,
+          t(`description.${key}`),
+          inEffectText(onOff(value), sourceLabel(source)),
+          muted ? inactiveNote() : undefined,
         ]
           .filter(Boolean)
           .join(' ');
         return (
           <Checkbox
             key={key}
-            label={WORKFLOW_LABELS[key].label}
+            label={t(`label.${key}`)}
             hint={hint}
             muted={muted}
             checked={value}
@@ -98,24 +101,32 @@ interface StatusSelectProps extends BoardSettingsProps {
  * (the default of `startStatus` is a status, so `null` is a change), a missing key is the default.
  */
 function StatusSelect({ settingKey, overrides, defaults, statuses, onChange }: StatusSelectProps) {
+  const t = useSettingsT();
+  // Only the words shown: the value of each option is the status itself.
+  const statusLabel = useStatusLabel();
   const stored = overrides.board[settingKey];
   const fallback = defaults[settingKey];
   const options: SelectOption[] = [
-    { value: DEFAULT, label: `Default (${fallback ?? 'do not change'})` },
-    ...statuses.map((status) => ({ value: `${STATUS}${status}`, label: status })),
-    { value: NONE, label: 'Do not change' },
+    {
+      value: DEFAULT,
+      label: t('status.default', {
+        value: fallback === null ? t('status.keep') : statusLabel(fallback),
+      }),
+    },
+    ...statuses.map((status) => ({ value: `${STATUS}${status}`, label: statusLabel(status) })),
+    { value: NONE, label: t('status.keepChoice') },
   ];
   // A status the board no longer has stays visible instead of turning into some other choice.
   if (typeof stored === 'string' && !statuses.includes(stored)) {
     options.splice(1, 0, {
       value: `${STATUS}${stored}`,
-      label: `${stored} (not a status of this board)`,
+      label: t('status.unknown', { status: statusLabel(stored) }),
     });
   }
   const value = stored === undefined ? DEFAULT : stored === null ? NONE : `${STATUS}${stored}`;
 
   return (
-    <Field label={WORKFLOW_LABELS[settingKey].label} hint={WORKFLOW_LABELS[settingKey].description}>
+    <Field label={t(`label.${settingKey}`)} hint={t(`description.${settingKey}`)}>
       {(id, hintId) => (
         <Select
           id={id}
@@ -150,14 +161,17 @@ interface TextSettingProps {
 
 /** A text; empty is the default, so there is nothing to choose between "empty" and "missing". */
 function TextSetting({ settingKey, overrides, onChange }: TextSettingProps) {
+  const t = useSettingsT();
   const stored = overrides.board[settingKey];
   return (
-    <Field label={WORKFLOW_LABELS[settingKey].label} hint={WORKFLOW_LABELS[settingKey].description}>
+    <Field label={t(`label.${settingKey}`)} hint={t(`description.${settingKey}`)}>
       {(id, hintId) => (
         <Input
           id={id}
           aria-describedby={hintId}
           value={typeof stored === 'string' ? stored : ''}
+          // A branch or a command is written left to right in every language of the page.
+          dir="ltr"
           autoComplete="off"
           spellCheck={false}
           onChange={(event) =>

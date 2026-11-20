@@ -4,6 +4,7 @@ export { defineCatalogs, defineTable, registeredCatalogs, type Catalogs } from '
 export { createTranslate, createUseT, type Translate } from './createUseT';
 export { useT, useStatusLabel } from './common';
 export { useListOf } from './useListOf';
+export { row } from './row';
 export { useLanguage } from './useLanguage';
 export { getLanguage, setLanguage } from './store';
 export { formatMessage, type Message, type MessageParams } from './messages';

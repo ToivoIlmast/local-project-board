@@ -1,10 +1,7 @@
-import {
-  SUPPORTED_LANGUAGES,
-  languageName,
-  type SupportedLanguage,
-} from '../../../../contract/v1/index';
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../../../../contract/v1/index';
 import { Field, Select, type SelectOption } from '../../../shared/ui/index';
-import { WORKFLOW_LABELS } from '../model/labels';
+import { useSettingsT } from '../i18n/index';
+import { languageOptionLabel } from '../model/labels';
 
 const INHERIT = 'inherit';
 
@@ -23,15 +20,13 @@ export interface LanguageChoiceProps {
  * language here like any other — on a task it is a value, because the board may say another.
  */
 export function LanguageChoice({ own, inheritLabel, hint, onChange }: LanguageChoiceProps) {
+  const t = useSettingsT();
   const options: SelectOption[] = [
     { value: INHERIT, label: inheritLabel },
-    ...SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: languageName(code) })),
+    ...SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: languageOptionLabel(code) })),
   ];
   return (
-    <Field
-      label={WORKFLOW_LABELS.reportLanguage.label}
-      hint={`${WORKFLOW_LABELS.reportLanguage.description} ${hint}`}
-    >
+    <Field label={t('label.reportLanguage')} hint={`${t('description.reportLanguage')} ${hint}`}>
       {(id, hintId) => (
         <Select
           id={id}
@@ -55,18 +50,16 @@ export interface BoardLanguageProps {
 
 /** The language of the board's report: English (the default) first, then the other 13. */
 export function BoardLanguage({ value, onChange }: BoardLanguageProps) {
+  const t = useSettingsT();
   const options: SelectOption[] = [
-    { value: '', label: `${languageName('en')} (default)` },
+    { value: '', label: t('language.default', { language: languageOptionLabel('en') }) },
     ...SUPPORTED_LANGUAGES.filter((code) => code !== 'en').map((code) => ({
       value: code,
-      label: languageName(code),
+      label: languageOptionLabel(code),
     })),
   ];
   return (
-    <Field
-      label={WORKFLOW_LABELS.reportLanguage.label}
-      hint={WORKFLOW_LABELS.reportLanguage.description}
-    >
+    <Field label={t('label.reportLanguage')} hint={t('description.reportLanguage')}>
       {(id, hintId) => (
         <Select
           id={id}
@@ -93,15 +86,13 @@ export interface CommitLanguageProps {
  * then all 14. English is a language here, because choosing it gives the agent an instruction.
  */
 export function CommitLanguage({ value, onChange }: CommitLanguageProps) {
+  const t = useSettingsT();
   const options: SelectOption[] = [
-    { value: '', label: 'Not set (the convention of the project)' },
-    ...SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: languageName(code) })),
+    { value: '', label: t('commit.notSet') },
+    ...SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: languageOptionLabel(code) })),
   ];
   return (
-    <Field
-      label={WORKFLOW_LABELS.commitLanguage.label}
-      hint={WORKFLOW_LABELS.commitLanguage.description}
-    >
+    <Field label={t('label.commitLanguage')} hint={t('description.commitLanguage')}>
       {(id, hintId) => (
         <Select
           id={id}
