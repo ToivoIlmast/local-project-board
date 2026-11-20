@@ -11,16 +11,21 @@
 /** The Jest projects that `npm test` and `npm run test:full` run; `pack` is `npm run test:pack`. */
 export const JEST_PROJECTS = /** @type {const} */ (['node', 'web']);
 
+/** Node and the Jest it starts: the start of every command line of the runner. */
+export const JEST_BIN_ARGS = ['--experimental-vm-modules', 'node_modules/jest/bin/jest.js'];
+
+/**
+ * The projects to run. `--selectProjects` takes a list: Jest reads every argument after it that
+ * is not an option as one more project, so a test path right after it is lost as a project name
+ * and every test runs. Whatever follows it must start with an option, or it must come last.
+ */
+export const PROJECT_ARGS = ['--selectProjects', ...JEST_PROJECTS];
+
 /**
  * The exact Full-mode command. `npm run test:full` is this command and nothing else, so CI does
  * not depend on the selector at all; test/smartTest/repository.test.ts keeps the two equal.
  */
-export const FULL_JEST_ARGS = [
-  '--experimental-vm-modules',
-  'node_modules/jest/bin/jest.js',
-  '--selectProjects',
-  ...JEST_PROJECTS,
-];
+export const FULL_JEST_ARGS = [...JEST_BIN_ARGS, ...PROJECT_ARGS];
 
 /**
  * @typedef {object} PathRule

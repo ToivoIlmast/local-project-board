@@ -377,7 +377,8 @@ Request body:
 
 ```json
 {
-  "agent": "claude-code"
+  "agent": "claude-code",
+  "comment": "Keep the public API as it is."
 }
 ```
 
@@ -1578,7 +1579,8 @@ Request body:
 {
   "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
   "mode": "new",
-  "model": "claude-sonnet-4-6"
+  "model": "claude-sonnet-4-6",
+  "comment": "Keep the public API as it is."
 }
 ```
 
@@ -1592,6 +1594,7 @@ Response — 200, application/json:
   "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
   "mode": "new",
   "model": "claude-sonnet-4-6",
+  "comment": "Keep the public API as it is.",
   "startedAt": "2026-09-21T09:00:00.000Z"
 }
 ```
@@ -1707,7 +1710,7 @@ Wait for Send to AI (SSE, with the token): one request, then the stream ends; th
 
 Not given to AI agents in the generated instructions.
 
-Query: ?accepts=check%2Cresearch
+Query: ?accepts=check%2Cresearch%2Ctrigger%2Ccomment
 
 Response — 200, text/event-stream:
 
@@ -1715,7 +1718,8 @@ Response — 200, text/event-stream:
 {
   "type": "run.requested",
   "taskId": "T12",
-  "agent": "claude-code"
+  "agent": "claude-code",
+  "comment": "Keep the public API as it is."
 }
 ```
 

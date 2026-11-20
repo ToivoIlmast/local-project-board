@@ -747,13 +747,15 @@ describe('POST /tasks/:id/run with kind research (ADR-0029 T54)', () => {
     expect(await historyFiles(task.id)).toEqual(files);
   });
 
-  it('refuses a comment without research, one too long, and a mode but new: 400, nothing handed (INVARIANT)', async () => {
+  it('refuses a comment with a check, one too long or with NUL, and a mode but new: 400, nothing handed (INVARIANT)', async () => {
     const task = await createTask();
     const waiting = await runner();
     for (const body of [
-      { agent: 'claude-code', comment: 'Look.' },
       { agent: 'claude-code', kind: 'check', comment: 'Look.' },
       { agent: 'claude-code', kind: 'research', comment: 'x'.repeat(4001) },
+      { agent: 'claude-code', kind: 'research', comment: 'Lo\0ok.' },
+      { agent: 'claude-code', comment: 'x'.repeat(4001) },
+      { agent: 'claude-code', comment: 'Lo\0ok.' },
       { agent: 'claude-code', kind: 'research', comment: '' },
       { agent: 'claude-code', kind: 'research', mode: 'resume' },
       { agent: 'claude-code', kind: 'research', mode: 'restart' },
@@ -761,6 +763,13 @@ describe('POST /tasks/:id/run with kind research (ADR-0029 T54)', () => {
       const answer = await board.post(`${API}/tasks/${task.id}/run`, body);
       expect([body, answer.status, code(answer.body)]).toEqual([body, 400, 'INVALID_REQUEST']);
     }
+    // A valid comment on the work of the task is no longer refused as a request (T2): it goes
+    // only to a runner that accepts `comment`, and this one does not (dispatch: run.test.ts).
+    const work = await board.post(`${API}/tasks/${task.id}/run`, {
+      agent: 'claude-code',
+      comment: 'Look.',
+    });
+    expect([work.status, code(work.body)]).toEqual([409, 'NO_AGENT_RUNNER']);
     expect(waiting.events).toEqual([]);
     expect(waiting.ended()).toBe(false);
   });

@@ -77,3 +77,38 @@ describe('the model of a run (T35)', () => {
     expect(runTaskRequestSchema.parse({ agent: 'claude-code' })).toEqual({ agent: 'claude-code' });
   });
 });
+
+describe('comment of a work run', () => {
+  const base = { agent: 'claude-code' as const };
+  it('is allowed for work, any mode, and for research; refused for check', () => {
+    for (const extra of [
+      {},
+      { kind: 'work' },
+      { mode: 'resume' },
+      { mode: 'restart' },
+      { kind: 'research' },
+    ]) {
+      expect(runTaskRequestSchema.safeParse({ ...base, ...extra, comment: 'hi' }).success).toBe(
+        true,
+      );
+    }
+    expect(runTaskRequestSchema.safeParse({ ...base, kind: 'check', comment: 'hi' }).success).toBe(
+      false,
+    );
+  });
+  it('keeps the limits of a research focus', () => {
+    expect(runTaskRequestSchema.safeParse({ ...base, comment: 'a'.repeat(4000) }).success).toBe(
+      true,
+    );
+    expect(runTaskRequestSchema.safeParse({ ...base, comment: 'a'.repeat(4001) }).success).toBe(
+      false,
+    );
+    expect(runTaskRequestSchema.safeParse({ ...base, comment: 'a\0b' }).success).toBe(false);
+  });
+  it('is allowed in a work run.requested', () => {
+    expect(
+      runRequestSchema.safeParse({ type: 'run.requested', taskId: 'T1', ...base, comment: 'hi' })
+        .success,
+    ).toBe(true);
+  });
+});

@@ -321,8 +321,6 @@ describe('starting a research (ADR-0029 T54)', () => {
     });
     expect(run({ kind: 'research', mode: 'new' })).toMatchObject({ ok: true });
     for (const body of [
-      { comment: 'Look at the API.' },
-      { kind: 'work', comment: 'Look at the API.' },
       { kind: 'check', comment: 'Look at the API.' },
       { kind: 'research', mode: 'resume' },
       { kind: 'research', mode: 'restart' },
@@ -338,7 +336,7 @@ describe('starting a research (ADR-0029 T54)', () => {
     }
   });
 
-  it('lets the runner receive a research with its comment, and a comment with nothing else', () => {
+  it('lets the runner receive a comment with a research or work, never with a check', () => {
     const request = (over: object) =>
       routes['runs.stream'].response.schema.safeParse({
         type: 'run.requested',
@@ -349,7 +347,8 @@ describe('starting a research (ADR-0029 T54)', () => {
     expect(request({ kind: 'research' })).toBe(true);
     expect(request({ kind: 'research', comment: 'Look at the API.' })).toBe(true);
     expect(request({ kind: 'check', comment: 'Look at the API.' })).toBe(false);
-    expect(request({ comment: 'Look at the API.' })).toBe(false);
+    // A work run carries a comment too, to a runner that declared `comment`.
+    expect(request({ comment: 'Look at the API.' })).toBe(true);
     expect(request({ kind: 'research', comment: 'x'.repeat(4001) })).toBe(false);
   });
 

@@ -20,7 +20,7 @@ import { collectChanges, referencesIn } from './changes.mjs';
 import { loadJest } from './jest.mjs';
 import { planTests } from './plan.mjs';
 import { footer, header, toJson } from './report.mjs';
-import { FULL_JEST_ARGS } from './rules.mjs';
+import { FULL_JEST_ARGS, JEST_BIN_ARGS, PROJECT_ARGS } from './rules.mjs';
 
 /**
  * @typedef {import('./report.mjs').Decision} Decision
@@ -242,7 +242,9 @@ export async function decide({ options, env, root, deps = realDeps }) {
 export function jestArgv(decision, options) {
   if (decision.kind === 'forced-full') return [...FULL_JEST_ARGS, ...options.jestFlags];
   if (decision.kind === 'manual') {
-    return [...FULL_JEST_ARGS, ...options.jestFlags, ...options.selection];
+    // The selection may start with a path: after `--selectProjects` it would be taken for one
+    // more project and every test would run. The project list goes last, where nothing follows.
+    return [...JEST_BIN_ARGS, ...options.selection, ...options.jestFlags, ...PROJECT_ARGS];
   }
   const { plan } = decision;
   if (plan.mode === 'none') return null;

@@ -137,6 +137,71 @@ describe('POST /tasks/:id/run with a runner waiting', () => {
   });
 });
 
+describe('POST /tasks/:id/run with a comment', () => {
+  const able = async (): Promise<SseClient<RunRequest>> => {
+    const client = await openStream(
+      board.port,
+      `${RUNS}?accepts=comment`,
+      { authorization: `Bearer ${board.token}` },
+      (data) => runRequestSchema.parse(data),
+    );
+    open.push(client);
+    return client;
+  };
+
+  it('goes from /run through /runs and begin into the handoff, and is not echoed to the page', async () => {
+    const comment = 'Mind the tests:\nkeep `parseStatus` as it is.';
+    const waiting = await able();
+
+    const response = await start('T1', { agent: 'claude-code', comment }).expect(200);
+
+    expect(response.body).toEqual({ taskId: 'T1', agent: 'claude-code' });
+    await waiting.waitForEvents(1);
+    const handed = waiting.events[0];
+    expect(handed).toMatchObject({ taskId: 'T1', comment });
+
+    // The runner begins with what it was handed, as `claude --wait` does.
+    const sessionId = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
+    await board
+      .post(`${API}/tasks/T1/ai-run`, { sessionId, mode: 'new', comment: handed?.comment })
+      .expect(200);
+    const task = (await board.get(`${API}/tasks/T1`).expect(200)).body as {
+      aiRun: { comment?: string };
+      aiRunHistory: { comment?: string }[];
+    };
+    expect(task.aiRun.comment).toBe(comment);
+    expect(task.aiRunHistory[0]?.comment).toBe(comment);
+    const handoff = (await board.get(`${API}/tasks/T1/handoff`).expect(200)).text;
+    expect(handoff).toContain(`## Comment from the person`);
+    expect(handoff).toContain(`\`\`\`text\n${comment}\n\`\`\``);
+  });
+
+  it('with only an earlier runner waiting: 409 NO_AGENT_RUNNER, nothing sent, no launch (INVARIANT)', async () => {
+    const older = await runner();
+
+    const response = await start('T1', { agent: 'claude-code', comment: 'x' }).expect(409);
+
+    expect(code(response.body)).toBe('NO_AGENT_RUNNER');
+    // The `outdated` answer, not "nothing waits": the runner cannot pass a comment.
+    expect(message(response.body)).toContain('cannot pass a comment to the agent');
+    expect(message(response.body)).toContain('earlier version');
+    expect(message(response.body)).not.toContain('Nothing is waiting');
+    expect(older.events).toEqual([]);
+    const task = (await board.get(`${API}/tasks/T1`).expect(200)).body as { launch?: unknown };
+    expect(task.launch).toBeUndefined();
+  });
+
+  it('a check with a comment is refused', async () => {
+    await able();
+    const response = await start('T1', {
+      agent: 'claude-code',
+      kind: 'check',
+      comment: 'x',
+    }).expect(400);
+    expect(code(response.body)).toBe('INVALID_REQUEST');
+  });
+});
+
 describe('POST /tasks/:id/run refuses, and hands nothing to a runner', () => {
   it('says that no runner waits, and how to start one or the session itself', async () => {
     const response = await start('T1').expect(409);

@@ -34,7 +34,7 @@ export interface CheckHandoffHistory {
 }
 
 /** A fence longer than any run of backticks in the text, so the text cannot close it. */
-function fenceFor(text: string): string {
+export function fenceFor(text: string): string {
   const longest = Math.max(2, ...(text.match(/`+/g) ?? []).map((run) => run.length));
   return '`'.repeat(longest + 1);
 }

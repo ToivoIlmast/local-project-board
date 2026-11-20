@@ -162,12 +162,19 @@ export const handlers: Handlers = {
       ...(body.model === undefined ? {} : { model: body.model }),
       ...(body.mode === undefined || body.mode === 'new' ? {} : { mode: body.mode }),
     };
+    // The comment goes to the runner only; the answer to the page repeats none of it.
     const handed = await context.aiRun.requestWork(
       params.id,
       { mode: body.mode ?? 'new', requestId: randomUUID() },
-      () => context.runs.reserve(request),
+      () =>
+        context.runs.reserve({
+          ...request,
+          ...(body.comment === undefined ? {} : { comment: body.comment }),
+        }),
     );
     if (handed === undefined) throw noRunner(params.id);
+    // Only a comment makes a waiting runner unable to take a work run.
+    if (handed === 'outdated') throw noRunner(params.id, 'outdated-comment');
     return request;
   },
 

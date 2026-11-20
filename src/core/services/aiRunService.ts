@@ -19,6 +19,8 @@ export interface BeginInput {
   sessionId: string;
   mode: 'new' | 'resume' | 'restart';
   model?: string | undefined;
+  /** The comment of the request, as the runner received it; kept in the record of this run only. */
+  comment?: string | undefined;
   startedAt?: string | undefined;
 }
 
@@ -68,13 +70,15 @@ export interface AiRunService {
   /**
    * `/run` of a work run, as one action under the lock of the task (ADR-0029 T94, K6): the
    * refusals of L1, then a runner is reserved, then `launch` is written, then the runner is told.
-   * Resolves to the task as written, or to nothing when no runner waits: then nothing was written.
+   * Resolves to the task as written, to nothing when no runner waits, or to `outdated` when
+   * runners wait but none can take this request (it has a comment, and they cannot carry it):
+   * then nothing was written either.
    */
   requestWork(
     taskId: string,
     input: RequestWorkInput,
-    reserve: () => RunnerReservation | undefined,
-  ): Promise<Task | undefined>;
+    reserve: () => RunnerReservation | undefined | 'outdated',
+  ): Promise<Task | undefined | 'outdated'>;
   /**
    * A runner's report that the work run of a request did not begin (K8): a compare-and-set on the
    * current `launch` and its `requestId`. The first accepted report stays.
@@ -197,7 +201,7 @@ export function createAiRunService({
 
         // No await between taking the runner and holding it: no other task can take it (I4).
         const runner = reserve();
-        if (runner === undefined) return undefined;
+        if (runner === undefined || runner === 'outdated') return runner;
 
         const launch: Launch = {
           requestId: input.requestId,
@@ -307,6 +311,7 @@ export function createAiRunService({
           sessionId: input.sessionId,
           mode: input.mode,
           ...(input.model !== undefined ? { model: input.model } : {}),
+          ...(input.comment !== undefined ? { comment: input.comment } : {}),
           startedAt: input.startedAt ?? now(),
         };
         // The run begins and the request it answers is gone, in one write, whoever begins (K5).
