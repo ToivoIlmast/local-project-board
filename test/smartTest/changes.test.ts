@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
