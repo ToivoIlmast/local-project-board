@@ -7,6 +7,7 @@ export {
   inEffectText,
   inactiveNote,
   languageLabel,
+  languageOptionLabel,
   onOff,
   sourceLabel,
 } from './model/labels';

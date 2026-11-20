@@ -4,6 +4,7 @@ import { useBoardClient } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useCopyToClipboard } from '../../../shared/hooks/useCopyToClipboard';
 import type { MenuItem } from '../../../shared/ui/index';
+import { useTaskT } from '../i18n/details';
 import { ClaudeCodeLaunch } from '../ui/ClaudeCodeLaunch';
 import type { AgentTarget, DialogTarget, RunTarget } from './agentTarget';
 import { explainError } from './explainError';
@@ -23,10 +24,6 @@ const CLAUDE_CODE: DialogTarget = { label: 'Claude Code', dialog: ClaudeCodeLaun
 
 /** The further ways to send a task, in the order the menus show them. */
 export const AGENT_TARGETS: readonly AgentTarget[] = [CLAUDE_CODE];
-
-const CLIPBOARD_REFUSED = new Error(
-  'The page could not write to the clipboard: the browser refused.',
-);
 
 export interface SendToAiState {
   /** "Copy handoff" and the further targets, ready for a `Menu`. */
@@ -54,17 +51,18 @@ export function useSendToAi(
   targets: readonly AgentTarget[] = AGENT_TARGETS,
   reasons: readonly BlockingReason[] = [],
 ): SendToAiState {
+  const t = useTaskT();
   const client = useBoardClient();
   const { copy } = useCopyToClipboard();
   const [done, setDone] = useState<string | undefined>(undefined);
   const [open, setOpen] = useState<DialogTarget | undefined>(undefined);
 
   const copyHandoff: RunTarget = {
-    label: 'Copy handoff',
+    label: t('ai.send.copyHandoff'),
     run: async (id) => {
       const text = await client.handoff(id);
-      if (!(await copy(text))) throw CLIPBOARD_REFUSED;
-      return 'Handoff copied to the clipboard.';
+      if (!(await copy(text))) throw new Error(t('ai.clipboardRefused'));
+      return t('ai.send.copied');
     },
   };
 
@@ -91,7 +89,7 @@ export function useSendToAi(
     setOpen(target);
   };
 
-  const why = `Blocked: ${reasons.map(reasonText).join('; ')}`;
+  const why = t('ai.send.blocked', { reasons: reasons.map(reasonText).join('; ') });
 
   return {
     items: [copyHandoff, ...targets].map((target) => ({

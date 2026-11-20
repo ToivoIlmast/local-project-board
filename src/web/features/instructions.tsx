@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useBoard } from '../api/react';
 import { useCopyToClipboard } from '../shared/hooks/useCopyToClipboard';
+import { useT } from '../shared/i18n/index';
 import { Button, ErrorState, Panel, Spinner, Text } from '../shared/ui/index';
+import { useTaskT } from './tasks/i18n/details';
 
 export interface InstructionsPanelProps {
   onClose: () => void;
@@ -13,6 +15,8 @@ export interface InstructionsPanelProps {
  * instructions say how to do that without leaving it anywhere (ADR-0008).
  */
 export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
+  const t = useTaskT();
+  const common = useT();
   const { client } = useBoard();
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -30,31 +34,37 @@ export function InstructionsPanel({ onClose }: InstructionsPanelProps) {
   }, [client]);
 
   return (
-    <Panel label="AI instructions">
+    <Panel label={t('ai.instructions.title')}>
       <header className="panel__head">
-        <h2 className="panel__title">AI instructions</h2>
+        <h2 className="panel__title">{t('ai.instructions.title')}</h2>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
 
-      <Text tone="muted">
-        Everything an agent needs to use this board through its API. It holds no token, only a
-        placeholder: the agent gets the token from the board itself, as the text explains.
-      </Text>
+      <Text tone="muted">{t('ai.instructions.intro')}</Text>
 
       {error !== undefined ? (
-        <ErrorState title="The instructions could not be read" message={error} />
+        <ErrorState title={t('ai.instructions.failed')} message={error} />
       ) : text === null ? (
-        <Spinner label="Loading the instructions…" />
+        <Spinner label={t('ai.instructions.loading')} />
       ) : (
         <>
           <div className="panel__actions">
             <Button variant="primary" onClick={() => void copy(text)}>
-              {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
+              {state === 'copied'
+                ? t('ai.instructions.copied')
+                : state === 'failed'
+                  ? t('ai.instructions.copyFailed')
+                  : t('ai.instructions.copy')}
             </Button>
           </div>
-          <pre className="instructions" tabIndex={0} role="region" aria-label="Instructions text">
+          <pre
+            className="instructions"
+            tabIndex={0}
+            role="region"
+            aria-label={t('ai.instructions.region')}
+          >
             {text}
           </pre>
         </>

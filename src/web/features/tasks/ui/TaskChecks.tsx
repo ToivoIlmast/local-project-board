@@ -1,14 +1,15 @@
 import type { CheckSummary, Task, VersionList } from '../../../../contract/v1/index';
 import { formatDate } from '../../../shared/lib/format';
 import { Badge, Button, Text } from '../../../shared/ui/index';
+import { useTaskT } from '../i18n/details';
 import {
-  STATE_LABELS,
-  VERDICT_LABELS,
   checkId,
   countsText,
   isSuperseded,
   kindLabel,
+  stateLabel,
   staleness,
+  verdictLabel,
 } from '../model/history';
 
 export interface TaskChecksProps {
@@ -27,22 +28,20 @@ export interface TaskChecksProps {
  * be today.
  */
 export function TaskChecks({ task, checks, list, onOpen, onNewResearch }: TaskChecksProps) {
+  const t = useTaskT();
   const sorted = [...(checks ?? [])].sort((a, b) => b.number - a.number);
   return (
     <section className="history" aria-labelledby={`checks-${task.id}`}>
       <div className="history__head">
         <h3 className="ai__title" id={`checks-${task.id}`}>
-          AI research
+          {t('check.title')}
         </h3>
         <Button size="small" onClick={onNewResearch}>
-          New research…
+          {t('check.new')}
         </Button>
       </div>
       {checks === undefined ? null : sorted.length === 0 ? (
-        <Text tone="muted">
-          No research or checks yet. A research looks into the task with a focus you give; Check
-          actuality compares the task with the repository.
-        </Text>
+        <Text tone="muted">{t('check.empty')}</Text>
       ) : (
         <ol className="history__list">
           {sorted.map((check) => {
@@ -52,14 +51,16 @@ export function TaskChecks({ task, checks, list, onOpen, onNewResearch }: TaskCh
               <li key={check.number} className="history__item">
                 <span className="history__number">{checkId(task.id, check.number)}</span>
                 <span className="history__what">
-                  {kindLabel(check.kind)} · {STATE_LABELS[check.state]}
-                  {check.verdict === undefined ? '' : ` · ${VERDICT_LABELS[check.verdict]}`} · v
+                  {kindLabel(check.kind)} · {stateLabel(check.state)}
+                  {check.verdict === undefined ? '' : ` · ${verdictLabel(check.verdict)}`} · v
                   {check.version}
                   <span className="history__when"> · {formatDate(check.createdAt)}</span>{' '}
-                  {s.stale ? <Badge tone="warning">Stale</Badge> : null}{' '}
-                  {isSuperseded(sorted, check.number) ? <Badge>Superseded</Badge> : null}
+                  {s.stale ? <Badge tone="warning">{t('check.stale')}</Badge> : null}{' '}
+                  {isSuperseded(sorted, check.number) ? (
+                    <Badge>{t('check.superseded')}</Badge>
+                  ) : null}
                   {check.comment === undefined ? null : (
-                    <span className="history__comment" title="Focus">
+                    <span className="history__comment" title={t('check.focus')}>
                       {check.comment}
                     </span>
                   )}
@@ -69,10 +70,10 @@ export function TaskChecks({ task, checks, list, onOpen, onNewResearch }: TaskCh
                 </span>
                 <Button
                   size="small"
-                  aria-label={`Open ${checkId(task.id, check.number)}`}
+                  aria-label={t('check.openId', { id: checkId(task.id, check.number) })}
                   onClick={() => onOpen(check.number)}
                 >
-                  Open
+                  {t('check.open')}
                 </Button>
               </li>
             );

@@ -193,9 +193,9 @@ describe('the AI settings of a task in another language', () => {
     await choose(user, 'de');
     await user.click(screen.getByRole('button', { name: 'Ship it' }));
     const details = await screen.findByRole('complementary', { name: 'Aufgabe T1' });
-    const ai = within(details).getByRole('region', { name: 'AI' });
-    // The rest of the block is translated with the AI part of a task (T6).
-    await user.click(within(ai).getByRole('button', { name: 'Customize for this task' }));
+    const ai = within(details).getByRole('region', { name: 'KI' });
+    // The block as a whole is translated with the AI part of a task (T6).
+    await user.click(within(ai).getByRole('button', { name: 'Für diese Aufgabe anpassen' }));
     const push = within(ai).getByLabelText('Pushen');
     await waitFor(() => expect(push).toHaveAccessibleDescription(/^Wirksam/));
 

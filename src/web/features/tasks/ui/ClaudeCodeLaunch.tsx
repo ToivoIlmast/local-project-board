@@ -1,13 +1,11 @@
 import { useId, useState, type FormEvent } from 'react';
-import {
-  SUPPORTED_LANGUAGES,
-  languageName,
-  type SupportedLanguage,
-} from '../../../../contract/v1/index';
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
-import { Button, Field, Modal, Select, type SelectOption } from '../../../shared/ui/index';
-import { setTaskLanguage } from '../../settings/index';
+import { useT } from '../../../shared/i18n/index';
+import { Button, Field, Modal, Select } from '../../../shared/ui/index';
+import { languageOptionLabel, setTaskLanguage } from '../../settings/index';
+import { useTaskT } from '../i18n/details';
 import type { TargetDialogProps } from '../model/agentTarget';
 import {
   chosenModel,
@@ -19,16 +17,10 @@ import {
 } from '../model/claudeLaunch';
 import { explainError } from '../model/explainError';
 import { launchNotice } from '../model/history';
-import { LAUNCH_LABELS as L } from '../model/launchLabels';
 import { settingsRequest } from '../model/taskWorkflow';
 import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
 import { useTaskHistory } from '../model/useTaskHistory';
 import { ModelField } from './ModelField';
-
-const LANGUAGE_OPTIONS: SelectOption[] = SUPPORTED_LANGUAGES.map((code) => ({
-  value: code,
-  label: languageName(code),
-}));
 
 /**
  * The parameters of a start of Claude Code (T38): the model, the language of the report and the
@@ -47,6 +39,8 @@ export function ClaudeCodeLaunch({
   /** The session the dialog opens with; Resume of a failed run (T39) opens it on `resume`. */
   initialSession?: 'new' | 'resume';
 }) {
+  const t = useTaskT();
+  const common = useT();
   const { client, store } = useBoard();
   const formId = useId();
   const [model, setModel] = useState<ModelDraft>(() => initialModel(task.aiRun));
@@ -54,6 +48,12 @@ export function ClaudeCodeLaunch({
   const [session, setSession] = useState<'new' | 'resume'>(initialSession);
   const read = useEffectiveWorkflow(task, true);
   const research = launchNotice(useTaskHistory(task.id).history?.checks);
+
+  // The names of the languages are said in the language shown, as the settings say them.
+  const languageOptions = SUPPORTED_LANGUAGES.map((code) => ({
+    value: code,
+    label: languageOptionLabel(code),
+  }));
 
   const inEffect: SupportedLanguage | undefined =
     read.effective === undefined ? undefined : (read.effective.values.reportLanguage ?? 'en');
@@ -76,7 +76,7 @@ export function ClaudeCodeLaunch({
       // A task that became blocked since the page last read it: the reasons are the answer.
       throw explainError(error);
     }
-    onDone(L.sent(task.id));
+    onDone(t('ai.launch.sent', { task: task.id }));
   });
 
   const submit = (event: FormEvent): void => {
@@ -86,18 +86,18 @@ export function ClaudeCodeLaunch({
 
   return (
     <Modal
-      title={L.title(task.id)}
+      title={t('ai.launch.title', { task: task.id })}
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>{L.cancel}</Button>
+          <Button onClick={onClose}>{common('ui.cancel')}</Button>
           <Button
             type="submit"
             form={formId}
             variant="primary"
             disabled={working || sent === null || start.pending}
           >
-            {start.pending ? L.sending : L.start}
+            {start.pending ? t('ai.launch.sending') : t('ai.launch.start')}
           </Button>
         </>
       }
@@ -105,7 +105,7 @@ export function ClaudeCodeLaunch({
       <form id={formId} className="form" onSubmit={submit}>
         {working ? (
           <p className="notice" role="status">
-            {L.working}
+            {t('ai.launch.working')}
           </p>
         ) : null}
 
@@ -118,16 +118,18 @@ export function ClaudeCodeLaunch({
         <ModelField model={model} onChange={setModel} />
 
         <Field
-          label={L.language.label}
+          label={t('ai.language.label')}
           hint={
-            inEffect === undefined ? `${L.language.hint} ${L.language.reading}` : L.language.hint
+            inEffect === undefined
+              ? `${t('ai.language.hint')} ${t('ai.language.reading')}`
+              : t('ai.language.hint')
           }
         >
           {(id, hintId) => (
             <Select
               id={id}
               aria-describedby={hintId}
-              options={LANGUAGE_OPTIONS}
+              options={languageOptions}
               disabled={inEffect === undefined}
               value={language ?? inEffect ?? 'en'}
               onChange={(event) => setLanguage(event.target.value as SupportedLanguage)}
@@ -136,17 +138,25 @@ export function ClaudeCodeLaunch({
         </Field>
 
         <Field
-          label={L.session.label}
-          hint={blocked === undefined ? L.session.available : L.session.blocked[blocked]}
+          label={t('ai.session.label')}
+          hint={
+            blocked === undefined
+              ? t('ai.session.available')
+              : t(blocked === 'noSession' ? 'ai.session.noSession' : 'ai.session.workingBlocked')
+          }
         >
           {(id, hintId) => (
             <Select
               id={id}
               aria-describedby={hintId}
               options={[
-                { value: 'new', label: L.session.new },
+                { value: 'new', label: t('ai.session.new') },
                 // The session itself is never sent: the runner reads it from the board.
-                { value: 'resume', label: L.session.resume, disabled: blocked !== undefined },
+                {
+                  value: 'resume',
+                  label: t('ai.session.resume'),
+                  disabled: blocked !== undefined,
+                },
               ]}
               value={mode}
               onChange={(event) => setSession(event.target.value as 'new' | 'resume')}
@@ -158,7 +168,7 @@ export function ClaudeCodeLaunch({
           <div className="notice" role="alert">
             <span>{read.error}</span>
             <Button size="small" onClick={read.retry}>
-              {L.retry}
+              {common('ui.tryAgain')}
             </Button>
           </div>
         )}

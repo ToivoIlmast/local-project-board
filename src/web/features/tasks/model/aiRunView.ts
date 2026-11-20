@@ -1,43 +1,11 @@
 import type { AiRun } from '../../../../contract/v1/index';
+import { taskT } from '../i18n/details';
 import { resumeBlocked } from './claudeLaunch';
 
 /**
  * How the run of a task is told to the person (T39): why it ended, in words, and what can be done
  * about it. Pure, so that the table of states and kinds is read in one place.
  */
-
-export const RUN_LABELS = {
-  title: 'AI run',
-  agentWord: 'reported by the agent',
-  copyCommand: 'Copy command to continue by hand',
-  copied: 'Command copied.',
-  copyRefused: 'The page could not write to the clipboard: the browser refused.',
-  resume: 'Resume',
-  restart: 'Restart',
-  restartTitle: (taskId: string) => `Start ${taskId} over?`,
-  restartMessage: (branch: string | undefined, attempt: number) =>
-    `${
-      branch === undefined
-        ? `The agent is asked to rename the old branch to …-attempt-${attempt}`
-        : `The agent is asked to rename the old branch ${branch} to ${branch}-attempt-${attempt}`
-    } and to keep its report as report-attempt-${attempt}.md, then the work starts over in a new ` +
-    'session from the base branch. The board does not do this itself and it is not checked: ' +
-    'if the agent skips it, the old work stays reachable only through the git reflog.',
-  sent: (taskId: string) =>
-    `Sent ${taskId} to the runner in the terminal where ` +
-    '`local-project-board claude --wait` runs. Claude Code has not begun yet: the task shows ' +
-    'it when it does.',
-  failure: {
-    launch: 'Claude Code could not be started.',
-    exit: (code: number | undefined) =>
-      code === undefined
-        ? 'The session ended without a final report.'
-        : `The session ended without a final report (code ${code}).`,
-    lost: 'The run was lost: the runner ended without a result.',
-  },
-  exitWarning: (code: number) =>
-    `The agent reported the run as finished, but the session exited with code ${code}.`,
-} as const;
 
 /** The failure of a run that did not end well, in words; nothing for a run that did. */
 export function failureText(run: AiRun): string | undefined {
@@ -47,11 +15,13 @@ export function failureText(run: AiRun): string | undefined {
   }
   switch (failure.kind) {
     case 'launch':
-      return RUN_LABELS.failure.launch;
+      return taskT('ai.run.failure.launch');
     case 'exit':
-      return RUN_LABELS.failure.exit(failure.exitCode);
+      return failure.exitCode === undefined
+        ? taskT('ai.run.failure.exit')
+        : taskT('ai.run.failure.exitCode', { code: failure.exitCode });
     case 'lost':
-      return RUN_LABELS.failure.lost;
+      return taskT('ai.run.failure.lost');
     case 'agent':
       return failure.message;
   }
@@ -61,7 +31,7 @@ export function failureText(run: AiRun): string | undefined {
 export function exitWarning(run: AiRun): string | undefined {
   const code = run.failure?.exitCode;
   return run.state === 'finished' && code !== undefined && code !== 0
-    ? RUN_LABELS.exitWarning(code)
+    ? taskT('ai.run.exitWarning', { code })
     : undefined;
 }
 

@@ -5,8 +5,8 @@ import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useCopyToClipboard } from '../../../shared/hooks/useCopyToClipboard';
 import { formatDate } from '../../../shared/lib/format';
 import { Button, ConfirmDialog, Text } from '../../../shared/ui/index';
+import { useTaskT } from '../i18n/details';
 import {
-  RUN_LABELS as L,
   canResume,
   exitWarning,
   failureText,
@@ -37,6 +37,7 @@ interface Row {
  * commits and flags a mismatch if the SHA is not found there (T20).
  */
 export function TaskAiRun({ task }: TaskAiRunProps) {
+  const t = useTaskT();
   const { client } = useBoard();
   const { copy } = useCopyToClipboard();
   const run = task.aiRun;
@@ -71,7 +72,7 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
     const model = chosenModel(initialModel(run));
     await client.runTask(task.id, runRequest(model ?? undefined, 'restart'));
     setRestarting(false);
-    setNote(L.sent(task.id));
+    setNote(t('ai.launch.sent', { task: task.id }));
   });
 
   if (run === undefined) return null;
@@ -80,21 +81,41 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
     run.commit === undefined
       ? undefined
       : task.branch !== undefined && commitCheck?.sha === run.commit && !commitCheck.inBranch
-        ? `${run.commit} ⚠ not found in branch`
+        ? t('ai.run.notInBranch', { commit: run.commit })
         : run.commit;
 
+  // What the board and the agent wrote stays as it is, except the words that name a state.
+  const named = <K extends string>(
+    prefix: string,
+    value: string | undefined,
+    known: readonly K[],
+  ) =>
+    value !== undefined && (known as readonly string[]).includes(value)
+      ? t(`${prefix}.${value}` as 'ai.run.state.working')
+      : value;
+
   const rows: Row[] = [
-    { term: 'Attempt', value: run.runId === undefined ? undefined : `#${run.runId}` },
-    { term: 'State', value: run.state },
-    { term: 'Model', value: run.model },
-    { term: 'Mode', value: run.mode },
-    { term: 'Agent', value: run.agent, byAgent: true },
-    { term: 'Checks', value: run.checks, byAgent: true },
-    { term: 'Commit', value: commitDisplay, byAgent: true },
-    { term: 'Branch', value: task.branch },
-    { term: 'Started', value: run.startedAt === undefined ? undefined : formatDate(run.startedAt) },
+    { term: t('ai.run.attempt'), value: run.runId === undefined ? undefined : `#${run.runId}` },
     {
-      term: 'Finished',
+      term: t('ai.run.state'),
+      value: named('ai.run.state', run.state, ['working', 'finished', 'failed', 'needs-review']),
+    },
+    { term: t('ai.run.model'), value: run.model },
+    { term: t('ai.run.mode'), value: named('ai.run.mode', run.mode, ['new', 'resume', 'restart']) },
+    { term: t('ai.run.agent'), value: run.agent, byAgent: true },
+    {
+      term: t('ai.run.checks'),
+      value: named('ai.run.checks', run.checks, ['passed', 'failed', 'skipped']),
+      byAgent: true,
+    },
+    { term: t('ai.run.commit'), value: commitDisplay, byAgent: true },
+    { term: t('ai.run.branch'), value: task.branch },
+    {
+      term: t('ai.run.started'),
+      value: run.startedAt === undefined ? undefined : formatDate(run.startedAt),
+    },
+    {
+      term: t('ai.run.finished'),
       value: run.finishedAt === undefined ? undefined : formatDate(run.finishedAt),
     },
   ];
@@ -104,14 +125,14 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
 
   const copyCommand = async (sessionId: string): Promise<void> => {
     setCopyError(false);
-    if (await copy(resumeCommand(sessionId))) setNote(L.copied);
+    if (await copy(resumeCommand(sessionId))) setNote(t('ai.run.copied'));
     else setCopyError(true);
   };
 
   return (
     <section className="ai" aria-labelledby={`ai-run-${task.id}`}>
       <h3 className="ai__title" id={`ai-run-${task.id}`}>
-        {L.title}
+        {t('ai.run.title')}
       </h3>
       <dl className="ai__values">
         {rows
@@ -120,21 +141,23 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
             <div key={term} className="ai__value">
               <dt>
                 {term}
-                {byAgent === true ? <small className="ai__source">{L.agentWord}</small> : null}
+                {byAgent === true ? (
+                  <small className="ai__source">{t('ai.run.byAgent')}</small>
+                ) : null}
               </dt>
               <dd>{value}</dd>
             </div>
           ))}
         {run.sessionId === undefined ? null : (
           <div className="ai__value">
-            <dt>Session</dt>
+            <dt>{t('ai.run.session')}</dt>
             <dd>{run.sessionId}</dd>
           </div>
         )}
       </dl>
       {run.sessionId === undefined ? null : (
         <Button size="small" onClick={() => void copyCommand(run.sessionId as string)}>
-          {L.copyCommand}
+          {t('ai.run.copyCommand')}
         </Button>
       )}
       {failure === undefined ? null : (
@@ -145,19 +168,21 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
       {warning === undefined ? null : <Text tone="muted">⚠ {warning}</Text>}
       {copyError ? (
         <p className="form__error" role="alert">
-          {L.copyRefused}
+          {t('ai.clipboardRefused')}
         </p>
       ) : null}
       {recoverable ? (
         <div className="ai__actions">
-          {canResume(run) ? <Button onClick={() => setResuming(true)}>{L.resume}</Button> : null}
+          {canResume(run) ? (
+            <Button onClick={() => setResuming(true)}>{t('ai.run.resume')}</Button>
+          ) : null}
           <Button
             onClick={() => {
               restart.clearError();
               setRestarting(true);
             }}
           >
-            {L.restart}
+            {t('ai.run.restart')}
           </Button>
         </div>
       ) : null}
@@ -178,9 +203,13 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
       ) : null}
       {restarting ? (
         <ConfirmDialog
-          title={L.restartTitle(task.id)}
-          message={L.restartMessage(task.branch, run.runId ?? 0)}
-          confirmLabel={L.restart}
+          title={t('ai.run.restartTitle', { task: task.id })}
+          message={
+            task.branch === undefined
+              ? t('ai.run.restartNoBranch', { attempt: run.runId ?? 0 })
+              : t('ai.run.restartWithBranch', { branch: task.branch, attempt: run.runId ?? 0 })
+          }
+          confirmLabel={t('ai.run.restart')}
           pending={restart.pending}
           error={restart.error}
           onConfirm={() => void restart.run()}

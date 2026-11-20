@@ -6,6 +6,7 @@ import {
   type Task,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
+import { taskT } from '../i18n/details';
 import { itemState, progress, seriesOf, type Series, type SeriesRow } from './series';
 
 /** The series of one completed task: what its completion asks to check, and where each stands. */
@@ -86,7 +87,7 @@ export function useSeries(tasks: readonly Task[]): {
           alive &&
           setFailure((current) => ({
             ...current,
-            [id]: problem instanceof Error ? problem.message : 'Something went wrong.',
+            [id]: problem instanceof Error ? problem.message : taskT('ai.error.generic'),
           })),
       );
     }
