@@ -5,6 +5,12 @@ import { collectChanges, parseNameStatus } from '../../scripts/smart-test/change
 import { commitAll, git, initRepo, writeRepoFile } from '../support/gitRepo.js';
 import { cleanTmpDirs, tmpDir } from '../support/tmp.js';
 
+/**
+ * Every case builds a real repository and asks git a dozen questions; on Windows, and while the
+ * rest of the suite runs, one git process can take a second.
+ */
+jest.setTimeout(30_000);
+
 afterEach(cleanTmpDirs);
 
 /** `main` with three files, and a branch `feature` checked out from it. */
