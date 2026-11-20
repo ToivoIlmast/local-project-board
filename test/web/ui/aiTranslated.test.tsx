@@ -1,5 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import type { AiRun, Task } from '../../../src/contract/v1/index';
+import { UI_LANGUAGES, formatMessage } from '../../../src/web/shared/i18n/index';
+import { lookup } from '../../../src/web/shared/i18n/catalog';
+import { taskCatalogs } from '../../../src/web/features/tasks/i18n/details';
 import { aResearch, aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
 
@@ -8,6 +11,8 @@ import { renderBoard, type RenderedBoard } from '../support/render';
  * Claude Code, the state and the history of a run. What is sent to the board, and the text the
  * board wrote for the agent, stay as they are whatever language the page is shown in.
  */
+
+type TaskKey = keyof typeof taskCatalogs.en;
 
 const failedRun: AiRun = {
   agent: 'claude-code',
@@ -102,5 +107,25 @@ describe('the run of a task in another language', () => {
     expect(within(section).getByText('Look at the git adapter only.')).toBeVisible();
     expect(within(section).getByRole('button', { name: 'T1-C1 öffnen' })).toBeInTheDocument();
     expect(within(section).getByRole('button', { name: 'Neue Recherche…' })).toBeInTheDocument();
+  });
+});
+
+describe('the words of the AI part in every language', () => {
+  const language = (code: (typeof UI_LANGUAGES)[number]) => ({
+    say: (key: Parameters<typeof lookup<TaskKey>>[2], params?: Record<string, string | number>) =>
+      formatMessage(code, lookup(taskCatalogs, code, key), params),
+  });
+
+  it.each(UI_LANGUAGES)('%s: names the state and the mode of a run differently', (code) => {
+    const { say } = language(code);
+    expect(say('ai.run.state')).not.toBe(say('ai.run.mode'));
+  });
+
+  it.each(UI_LANGUAGES)('%s: says one undecided recommendation in the singular', (code) => {
+    const { say } = language(code);
+    const one = say('ai.launch.undecided', { check: 'T1-C1', count: 1 });
+    const many = say('ai.launch.undecided', { check: 'T1-C1', count: 5 });
+    expect(one).toContain('1');
+    if (['en', 'fi', 'sv', 'no', 'da', 'is', 'de'].includes(code)) expect(one).not.toBe(many);
   });
 });

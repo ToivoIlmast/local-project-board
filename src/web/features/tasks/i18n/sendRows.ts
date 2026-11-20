@@ -440,11 +440,26 @@ export const sendRows = rows({
       one: '{check} has {count} undecided recommendation. Starting now does not decide them.',
       other: '{check} has {count} undecided recommendations. Starting now does not decide them.',
     },
-    '{check}: {count} ratkaisematonta suositusta. Käynnistys nyt ei ratkaise niitä.',
-    '{check} har {count} obeslutade rekommendationer. Att starta nu avgör dem inte.',
-    '{check} har {count} ubesluttede anbefalinger. Å starte nå avgjør dem ikke.',
-    '{check} har {count} ubesluttede anbefalinger. Hvis du starter nu, afgøres de ikke.',
-    '{check} er með {count} óafgreiddar tillögur. Ræsing núna afgreiðir þær ekki.',
+    {
+      one: '{check}: {count} ratkaisematon suositus. Käynnistys nyt ei ratkaise sitä.',
+      other: '{check}: {count} ratkaisematonta suositusta. Käynnistys nyt ei ratkaise niitä.',
+    },
+    {
+      one: '{check} har {count} obeslutad rekommendation. Att starta nu avgör den inte.',
+      other: '{check} har {count} obeslutade rekommendationer. Att starta nu avgör dem inte.',
+    },
+    {
+      one: '{check} har {count} ubesluttet anbefaling. Å starte nå avgjør den ikke.',
+      other: '{check} har {count} ubesluttede anbefalinger. Å starte nå avgjør dem ikke.',
+    },
+    {
+      one: '{check} har {count} ubeslutet anbefaling. Hvis du starter nu, afgøres den ikke.',
+      other: '{check} har {count} ubesluttede anbefalinger. Hvis du starter nu, afgøres de ikke.',
+    },
+    {
+      one: '{check} er með {count} óafgreidda tillögu. Ræsing núna afgreiðir hana ekki.',
+      other: '{check} er með {count} óafgreiddar tillögur. Ræsing núna afgreiðir þær ekki.',
+    },
     {
       one: '{check} hat {count} unentschiedene Empfehlung. Ein Start jetzt entscheidet sie nicht.',
       other:
