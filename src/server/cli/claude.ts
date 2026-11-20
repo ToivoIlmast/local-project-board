@@ -99,6 +99,7 @@ export async function startSession(
   env: NodeJS.ProcessEnv,
   model?: string,
   mode: 'new' | 'resume' | 'restart' = 'new',
+  comment?: string,
 ): Promise<number> {
   const boardUrl = board.url.replace(/\/+$/, '');
   // Resume continues the session the board recorded for the last run, never a new one (T36);
@@ -112,7 +113,7 @@ export async function startSession(
   let runId: number;
   try {
     sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
-    runId = await beginRun(board, id, sessionId, model, mode);
+    runId = await beginRun(board, id, sessionId, model, mode, comment);
   } catch (error) {
     throw notBegun(error);
   }
@@ -223,11 +224,14 @@ async function beginRun(
   sessionId: string,
   model: string | undefined,
   mode: 'new' | 'resume' | 'restart',
+  comment: string | undefined,
 ): Promise<number> {
   const response = await post(board, `/tasks/${taskId}/ai-run`, {
     sessionId,
     mode,
     ...(model === undefined ? {} : { model }),
+    // Only the begin carries it: never argv, the runner log or the run journal (T8).
+    ...(comment === undefined ? {} : { comment }),
   });
   if (response === undefined) {
     throw new Error(
