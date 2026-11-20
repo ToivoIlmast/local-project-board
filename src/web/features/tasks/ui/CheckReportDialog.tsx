@@ -16,10 +16,10 @@ import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { formatDate } from '../../../shared/lib/format';
 import { Markdown } from '../../../shared/lib/Markdown';
+import { useT } from '../../../shared/i18n/index';
 import { Badge, Button, Field, Modal, Text, Textarea } from '../../../shared/ui/index';
+import { taskT, useTaskT } from '../i18n/details';
 import {
-  STATE_LABELS,
-  VERDICT_LABELS,
   axisLabels,
   checkId,
   decisionOf,
@@ -32,8 +32,10 @@ import {
   repoChanged,
   staleness,
   stalenessText,
+  stateLabel,
   taskContent,
   treeChange,
+  verdictLabel,
 } from '../model/history';
 import { useCheck, useReportMarkdown } from '../model/useTaskHistory';
 
@@ -61,14 +63,6 @@ export interface CheckReportDialogProps {
   onNewResearch: () => void;
 }
 
-const NOT_APPLIED_REASON = {
-  advice: 'it is advice, with nothing to apply',
-  'not-found': 'the text it replaces is no longer in the description',
-  ambiguous: 'the text it replaces now occurs more than once',
-  'blank-title': 'the title it proposes is blank',
-  elsewhere: 'it is aimed at a document or a file, not at the task: carry it over by hand',
-} as const;
-
 /**
  * One check or research as the board stored it: the report exactly as the agent sent it, the
  * state of each recommendation on three axes, and the way to decide on them and to apply them
@@ -86,6 +80,8 @@ export function CheckReportDialog({
   onCheckAgain,
   onNewResearch,
 }: CheckReportDialogProps) {
+  const t = useTaskT();
+  const common = useT();
   const { state, store, client } = useBoard();
   const { check, error, retry } = useCheck(task.id, number);
   const [head, setHead] = useState<string | null | undefined>(undefined);
@@ -153,7 +149,7 @@ export function CheckReportDialog({
         notApplied: [],
         // By hand, the person weighs all of them against the content as it is now.
         recommendations: report.recommendations,
-        title: `Reconcile ${task.id} with ${checkId(task.id, number)}`,
+        title: t('check.reconcileTitle', { task: task.id, check: checkId(task.id, number) }),
       });
       return;
     }
@@ -168,20 +164,22 @@ export function CheckReportDialog({
         ...result.notApplied.map(({ id, reason }) => ({
           id,
           text: accepted.find((r) => r.id === id)?.text ?? id,
-          reason: NOT_APPLIED_REASON[reason],
+          reason: t(`check.na.${reason}`),
         })),
         ...accepted
           .filter(elsewhere)
-          .map(({ id, text }) => ({ id, text, reason: NOT_APPLIED_REASON.elsewhere })),
+          .map(({ id, text }) => ({ id, text, reason: t('check.na.elsewhere') })),
       ],
       recommendations: accepted,
-      title: `Apply ${checkId(task.id, number)} to ${task.id}`,
+      title: t('check.applyTitle', { check: checkId(task.id, number), task: task.id }),
     });
   };
 
   return (
     <Modal
-      title={`${check === undefined ? 'Check' : research ? 'Research' : 'Check'} ${checkId(task.id, number)}`}
+      title={t(research ? 'check.dialog.research' : 'check.dialog.check', {
+        id: checkId(task.id, number),
+      })}
       onClose={onClose}
       width="wide"
       footer={
@@ -189,12 +187,12 @@ export function CheckReportDialog({
           {report === undefined || stale === undefined ? null : stale.stale ? (
             <>
               {research ? (
-                <Button onClick={onNewResearch}>New research…</Button>
+                <Button onClick={onNewResearch}>{t('check.new')}</Button>
               ) : (
-                <Button onClick={onCheckAgain}>Check again</Button>
+                <Button onClick={onCheckAgain}>{t('check.checkAgain')}</Button>
               )}
               <Button disabled={accepted.length === 0} onClick={() => apply('manual')}>
-                Reconcile by hand
+                {t('check.reconcile')}
               </Button>
             </>
           ) : (
@@ -203,10 +201,10 @@ export function CheckReportDialog({
               disabled={applicable.length === 0}
               onClick={() => apply('report')}
             >
-              Apply accepted
+              {t('check.applyAccepted')}
             </Button>
           )}
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{common('ui.close')}</Button>
         </>
       }
     >
@@ -214,69 +212,81 @@ export function CheckReportDialog({
         <div className="notice" role="alert">
           <span>{error}</span>
           <Button size="small" onClick={retry}>
-            Try again
+            {common('ui.tryAgain')}
           </Button>
         </div>
       )}
       {check === undefined ? (
         error === undefined ? (
-          <Text tone="muted">Loading…</Text>
+          <Text tone="muted">{t('check.loading')}</Text>
         ) : null
       ) : (
         <div className="check">
           <p className="check__meta">
-            <Badge>{kindLabel(check.begin.kind)}</Badge> <Badge>{STATE_LABELS[check.state]}</Badge>{' '}
+            <Badge>{kindLabel(check.begin.kind)}</Badge> <Badge>{stateLabel(check.state)}</Badge>{' '}
             {report?.verdict === undefined ? null : (
               <Badge tone={report.verdict === 'current' ? 'accent' : 'warning'}>
-                {VERDICT_LABELS[report.verdict]}
+                {verdictLabel(report.verdict)}
               </Badge>
             )}{' '}
-            {superseded ? <Badge>Superseded</Badge> : null}{' '}
+            {superseded ? <Badge>{t('check.superseded')}</Badge> : null}{' '}
             <span>
-              {research ? 'Researched' : 'Checked'} v{check.begin.version} ·{' '}
-              {formatDate(check.begin.createdAt)} · {check.begin.agent}
+              {t(research ? 'check.researched' : 'check.checked', {
+                version: check.begin.version,
+                date: formatDate(check.begin.createdAt),
+                agent: check.begin.agent,
+              })}
               {check.begin.model === undefined ? '' : ` (${check.begin.model})`}
             </span>
           </p>
 
           {staleText === undefined ? null : (
             <p className="notice" role="status">
-              {staleText} Its recommendations are not applied to the current content.
+              {staleText} {t('check.reportNotApplied')}
             </p>
           )}
           {!superseded ? null : (
             <p className="notice" role="note">
-              A later check or research has reported since. This report is kept as it was; deciding
-              on it and applying it are still possible.
+              {t('check.supersededNote')}
             </p>
           )}
 
           {tree === undefined ? null : (
             <p className="notice" role="status">
-              The working tree changed during the {research ? 'research' : 'check'}
-              {tree.files.length === 0 ? '.' : `: ${tree.files.join(', ')}.`}
-              {tree.dirtyAtStart ? ' It already had uncommitted changes when it began.' : ''} The
-              board shows what changed, not who changed it: the tree may also have been edited by
-              you or by another program meanwhile.
+              {t(
+                tree.files.length === 0
+                  ? research
+                    ? 'check.tree.research'
+                    : 'check.tree.check'
+                  : research
+                    ? 'check.tree.researchFiles'
+                    : 'check.tree.checkFiles',
+                { files: tree.files.join(', ') },
+              )}
+              {tree.dirtyAtStart ? ` ${t('check.tree.dirtyStart')}` : ''} {t('check.tree.blame')}
             </p>
           )}
           {changedDocuments.length === 0 ? null : (
             <p className="notice" role="status">
-              Documents changed since the research:{' '}
-              {changedDocuments.map(({ name, change }) => `${name} (${change})`).join(', ')}.
+              {t('check.docsChanged', {
+                list: changedDocuments
+                  .map(({ name, change }) => `${name} (${t(`check.doc.${change}`)})`)
+                  .join(', '),
+              })}
             </p>
           )}
           {!movedOn ? null : (
             <p className="notice" role="note">
-              The repository moved on since the report: it was made at {reportHead?.slice(0, 7)},
-              and HEAD is now {head?.slice(0, 7)}. This blocks nothing; the report speaks of the
-              repository as it was.
+              {t('check.movedOn', {
+                made: reportHead?.slice(0, 7) ?? '',
+                now: head?.slice(0, 7) ?? '',
+              })}
             </p>
           )}
 
           {check.begin.comment === undefined ? null : (
-            <section aria-label="Focus">
-              <h3 className="check__heading">Focus</h3>
+            <section aria-label={t('check.focus')}>
+              <h3 className="check__heading">{t('check.focus')}</h3>
               <p className="check__focus">{check.begin.comment}</p>
             </section>
           )}
@@ -284,45 +294,48 @@ export function CheckReportDialog({
           {report === undefined ? (
             <Text tone="muted">
               {check.state === 'failed'
-                ? `The ${research ? 'research' : 'check'} ended without a report${
-                    check.end?.exitCode === undefined || check.end.exitCode === 0
-                      ? '.'
-                      : ` (exit code ${check.end.exitCode}).`
-                  }`
-                : `The ${research ? 'research' : 'check'} has no report yet. It may still be working, or its process may have ended without one.`}
+                ? check.end?.exitCode === undefined || check.end.exitCode === 0
+                  ? t(research ? 'check.ended.research' : 'check.ended.check')
+                  : t(research ? 'check.endedCode.research' : 'check.endedCode.check', {
+                      code: check.end.exitCode,
+                    })
+                : t(research ? 'check.pending.research' : 'check.pending.check')}
             </Text>
           ) : (
             <>
               {!repoChanged(check) ? null : (
                 <p className="notice" role="status">
-                  The repository changed while the {research ? 'research' : 'check'} ran:{' '}
-                  {describeRepo(check.begin.repo)} at the start, {describeRepo(report.repo)} when
-                  the report came.
+                  {t(research ? 'check.repoChanged.research' : 'check.repoChanged.check', {
+                    before: describeRepo(check.begin.repo),
+                    after: describeRepo(report.repo),
+                  })}
                 </p>
               )}
-              <section aria-label="Summary">
-                <h3 className="check__heading">Summary</h3>
+              <section aria-label={t('check.summary')}>
+                <h3 className="check__heading">{t('check.summary')}</h3>
                 <p>{report.summary}</p>
                 {report.uncertainty === undefined ? null : (
                   <p>
-                    <strong>Uncertainty:</strong> {report.uncertainty}
+                    <strong>{t('check.uncertainty')}</strong> {report.uncertainty}
                   </p>
                 )}
                 <Text tone="muted">
-                  Repository at the start: {describeRepo(check.begin.repo)}. When the report came:{' '}
-                  {describeRepo(report.repo)}.
+                  {t('check.repoLine', {
+                    before: describeRepo(check.begin.repo),
+                    after: describeRepo(report.repo),
+                  })}
                 </Text>
               </section>
 
-              <section aria-label="Recommendations">
-                <h3 className="check__heading">Recommendations</h3>
+              <section aria-label={t('check.recommendations')}>
+                <h3 className="check__heading">{t('check.recommendations')}</h3>
                 {decide.error === undefined ? null : (
                   <p className="form__error" role="alert">
                     {decide.error}
                   </p>
                 )}
                 {report.recommendations.length === 0 ? (
-                  <Text tone="muted">None.</Text>
+                  <Text tone="muted">{t('check.none')}</Text>
                 ) : (
                   <ul className="check__list">
                     {report.recommendations.map((recommendation) => (
@@ -341,15 +354,15 @@ export function CheckReportDialog({
               </section>
 
               {!research ? null : (
-                <section aria-label="Report">
+                <section aria-label={t('check.report')}>
                   <details className="check__report">
-                    <summary className="check__heading">Report</summary>
+                    <summary className="check__heading">{t('check.report')}</summary>
                     {markdown.error !== undefined ? (
                       <p className="form__error" role="alert">
                         {markdown.error}
                       </p>
                     ) : markdown.markdown === undefined ? (
-                      <Text tone="muted">Loading…</Text>
+                      <Text tone="muted">{t('check.loading')}</Text>
                     ) : (
                       <Markdown headingLevel={4}>{markdown.markdown}</Markdown>
                     )}
@@ -357,16 +370,16 @@ export function CheckReportDialog({
                 </section>
               )}
 
-              <section aria-label="Findings">
-                <h3 className="check__heading">Findings</h3>
+              <section aria-label={t('check.findings')}>
+                <h3 className="check__heading">{t('check.findings')}</h3>
                 {report.findings.length === 0 ? (
-                  <Text tone="muted">None.</Text>
+                  <Text tone="muted">{t('check.none')}</Text>
                 ) : (
                   <ul className="check__list">
                     {report.findings.map((finding) => (
                       <li key={finding.id}>
                         <strong>{finding.title}</strong>{' '}
-                        <Badge title="Finding id">{finding.id}</Badge>
+                        <Badge title={t('check.findingId')}>{finding.id}</Badge>
                         <p>{finding.explanation}</p>
                         {finding.evidence.length === 0 ? null : (
                           <ul className="check__evidence">
@@ -395,10 +408,10 @@ export function CheckReportDialog({
 
 function targetText(target: RecommendationTarget): string {
   return target.kind === 'task'
-    ? 'the task'
+    ? taskT('check.target.task')
     : target.kind === 'document'
-      ? `document ${target.name}`
-      : `file ${target.ref}`;
+      ? taskT('check.target.document', { name: target.name })
+      : taskT('check.target.file', { ref: target.ref });
 }
 
 function RecommendationItem({
@@ -416,6 +429,8 @@ function RecommendationItem({
   pending: boolean;
   onDecide: (decision: 'accepted' | 'rejected', note?: string) => Promise<boolean>;
 }) {
+  const t = useTaskT();
+  const common = useT();
   const latest = latestDecisions(check.decisions).get(recommendation.id);
   const state = latest?.decision ?? 'undecided';
   const edit = recommendation.edit;
@@ -439,29 +454,32 @@ function RecommendationItem({
   return (
     <li className="check__recommendation">
       <p>
-        <Badge title="Recommendation id">{recommendation.id}</Badge> {recommendation.text}
+        <Badge title={t('check.recId')}>{recommendation.id}</Badge> {recommendation.text}
       </p>
       {recommendation.targets === undefined ? null : (
-        <p className="check__edit">Aimed at: {recommendation.targets.map(targetText).join(', ')}</p>
+        <p className="check__edit">
+          {t('check.aimedAt', { targets: recommendation.targets.map(targetText).join(', ') })}
+        </p>
       )}
       {edit === undefined ? (
-        <Text tone="muted">Advice: there is nothing to apply.</Text>
+        <Text tone="muted">{t('check.advice')}</Text>
       ) : (
         <p className="check__edit">
           {edit.field === 'title' ? (
             <>
-              Title → <q>{edit.value}</q>
+              {t('check.edit.title')} <q>{edit.value}</q>
             </>
           ) : edit.field === 'labels' ? (
             <>
-              Labels: {edit.add.map((label) => `+${label}`).join(' ')}{' '}
+              {t('check.edit.labels')} {edit.add.map((label) => `+${label}`).join(' ')}{' '}
               {edit.remove.map((label) => `−${label}`).join(' ')}
             </>
           ) : (
             <>
-              Description: replace <q>{edit.find}</q> with <q>{edit.replace}</q>
+              {t('check.edit.replace')} <q>{edit.find}</q> {t('check.edit.with')}{' '}
+              <q>{edit.replace}</q>
               {occurrences(task.body, edit.find) === 1 ? null : (
-                <span> (no longer exactly once in the current description)</span>
+                <span> {t('check.edit.notOnce')}</span>
               )}
             </>
           )}
@@ -469,35 +487,35 @@ function RecommendationItem({
       )}
       {/* Three values, each derived on its own (ADR-0030 R5): none is read from another. */}
       <p className="check__decision">
-        <span title="Decision">{labels.decision}</span> ·{' '}
-        <span title="Application">{labels.application}</span> ·{' '}
-        <span title="Currency">{labels.currency}</span>
+        <span title={t('check.decision')}>{labels.decision}</span> ·{' '}
+        <span title={t('check.application')}>{labels.application}</span> ·{' '}
+        <span title={t('check.currency')}>{labels.currency}</span>
         {latest?.note === undefined ? null : <span> — {latest.note}</span>}
       </p>
       <div className="check__actions">
         <Button
           size="small"
-          aria-label={`Accept ${recommendation.id}`}
+          aria-label={t('check.acceptId', { id: recommendation.id })}
           aria-pressed={state === 'accepted'}
           disabled={pending || state === 'accepted'}
           onClick={() => void onDecide('accepted')}
         >
-          Accept
+          {t('check.accept')}
         </Button>
         <Button
           size="small"
-          aria-label={`Reject ${recommendation.id}`}
+          aria-label={t('check.rejectId', { id: recommendation.id })}
           aria-pressed={state === 'rejected'}
           aria-expanded={rejecting}
           disabled={pending || state === 'rejected'}
           onClick={() => setRejecting(true)}
         >
-          Reject
+          {t('check.reject')}
         </Button>
       </div>
       {!rejecting ? null : (
         <form className="check__reject" onSubmit={(event) => void reject(event)}>
-          <Field label={`Why reject ${recommendation.id}? (optional)`}>
+          <Field label={t('check.why', { id: recommendation.id })}>
             {(id) => (
               <Textarea
                 id={id}
@@ -513,13 +531,13 @@ function RecommendationItem({
             <Button
               size="small"
               type="submit"
-              aria-label={`Confirm rejecting ${recommendation.id}`}
+              aria-label={t('check.confirmReject', { id: recommendation.id })}
               disabled={pending}
             >
-              Reject
+              {t('check.reject')}
             </Button>
             <Button size="small" onClick={() => setRejecting(false)}>
-              Cancel
+              {common('ui.cancel')}
             </Button>
           </div>
         </form>

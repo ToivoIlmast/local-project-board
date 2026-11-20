@@ -1,34 +1,19 @@
 import { useMemo, useState } from 'react';
-import type { CheckSummary, ScopeBasis, ScopeExclusion, Task } from '../../../../contract/v1/index';
+import type { CheckSummary, ScopeBasis, Task } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { formatDate } from '../../../shared/lib/format';
+import { useT } from '../../../shared/i18n/index';
 import { Badge, Button, ConfirmDialog, Text } from '../../../shared/ui/index';
+import { taskT, useTaskT } from '../i18n/details';
 import { explainError } from '../model/explainError';
-import {
-  nextUnchecked,
-  triggerOf,
-  workingChecks,
-  type ItemState,
-  type SeriesRow,
-} from '../model/series';
+import { nextUnchecked, triggerOf, workingChecks, type SeriesRow } from '../model/series';
 import { useSeries } from '../model/useSeries';
 
-const STATE_TEXT: Record<ItemState, string> = {
-  checked: 'Checked',
-  failed: 'Failed',
-  working: 'Working',
-  unchecked: 'Not checked',
-};
-
-const EXCLUDED_TEXT: Record<ScopeExclusion, string> = {
-  done: 'Done, not checked',
-  'ai-running': 'AI run working, not checked',
-};
-
 function basisText(basis: ScopeBasis, source: string): string {
-  if (basis === 'dependent') return `depends on ${source}`;
-  return basis === 'block' ? 'same block' : 'next block';
+  return basis === 'dependent'
+    ? taskT('series.basis.dependent', { source })
+    : taskT(`series.basis.${basis}`);
 }
 
 interface Question {
@@ -47,6 +32,8 @@ export interface SeriesPanelProps {
  * series is still marked as working it asks first (Q9c), because the new one may run in parallel.
  */
 export function SeriesPanel({ task }: SeriesPanelProps) {
+  const t = useTaskT();
+  const common = useT();
   const { client, state } = useBoard();
   const tasks = useMemo(() => [task], [task]);
   const { views, retry } = useSeries(tasks);
@@ -63,7 +50,7 @@ export function SeriesPanel({ task }: SeriesPanelProps) {
     } catch (error) {
       throw explainError(error);
     }
-    setDone(`A check of ${target} was handed to Claude Code.`);
+    setDone(t('series.started', { task: target }));
   });
 
   if (view === undefined) return null;
@@ -91,7 +78,7 @@ export function SeriesPanel({ task }: SeriesPanelProps) {
     <section className="history" aria-labelledby={`series-${task.id}`}>
       <div className="history__head">
         <h3 className="ai__title" id={`series-${task.id}`}>
-          Series of checks
+          {t('series.title')}
         </h3>
         {view.loaded ? (
           <Button
@@ -99,27 +86,29 @@ export function SeriesPanel({ task }: SeriesPanelProps) {
             disabled={next === undefined || busy}
             onClick={() => next !== undefined && request(next.task)}
           >
-            Check next
+            {t('series.next')}
           </Button>
         ) : null}
       </div>
       <Text tone="muted">
-        {task.id} was completed {task.doneAt === undefined ? '' : formatDate(task.doneAt)}. These
-        tasks may need to be checked again.
+        {t('series.completed', {
+          task: task.id,
+          date: task.doneAt === undefined ? '' : formatDate(task.doneAt),
+        })}
       </Text>
 
       {view.error !== undefined ? (
         <p className="form__error" role="alert">
-          The checks could not be read: {view.error}{' '}
+          {t('series.readFailed', { error: view.error })}{' '}
           <Button size="small" onClick={retry}>
-            Try again
+            {common('ui.tryAgain')}
           </Button>
         </p>
       ) : !view.loaded ? (
-        <Text tone="muted">Loading checks…</Text>
+        <Text tone="muted">{t('series.loading')}</Text>
       ) : (
         <p aria-live="polite">
-          {view.checked} of {view.total} checked
+          {t('series.progress', { checked: view.checked, total: view.total })}
         </p>
       )}
 
@@ -131,19 +120,21 @@ export function SeriesPanel({ task }: SeriesPanelProps) {
               {titleOf(row.task) ?? row.task}
               <span className="history__when"> · {basisText(row.basis, task.id)} · </span>
               {row.excluded !== undefined ? (
-                <Badge>{EXCLUDED_TEXT[row.excluded]}</Badge>
+                <Badge>{t(`series.excluded.${row.excluded}`)}</Badge>
               ) : view.loaded ? (
-                <Badge tone={tone(row)}>{STATE_TEXT[row.state]}</Badge>
+                <Badge tone={tone(row)}>{t(`series.state.${row.state}`)}</Badge>
               ) : null}
             </span>
             {row.excluded !== undefined || !view.loaded ? null : (
               <Button
                 size="small"
                 disabled={start.pending}
-                aria-label={`${row.state === 'failed' ? 'Retry' : 'Check'} ${row.task}`}
+                aria-label={t(row.state === 'failed' ? 'series.retryId' : 'series.checkId', {
+                  task: row.task,
+                })}
                 onClick={() => request(row.task)}
               >
-                {row.state === 'failed' ? 'Retry' : 'Check'}
+                {t(row.state === 'failed' ? 'series.retry' : 'series.check')}
               </Button>
             )}
           </li>
@@ -161,13 +152,13 @@ export function SeriesPanel({ task }: SeriesPanelProps) {
 
       {asking === undefined ? null : (
         <ConfirmDialog
-          title="Start another check?"
-          message={
-            `Check #${asking.working.number} for task ${asking.working.taskId} is still marked as working ` +
-            `since ${formatDate(asking.working.createdAt)}. If its session is still running, the new check ` +
-            'will run in parallel and repeat the cost. Start anyway?'
-          }
-          confirmLabel="Start anyway"
+          title={t('series.ask.title')}
+          message={t('series.ask.message', {
+            number: asking.working.number,
+            task: asking.working.taskId,
+            time: formatDate(asking.working.createdAt),
+          })}
+          confirmLabel={t('series.ask.confirm')}
           confirmVariant="primary"
           onCancel={() => setAsking(undefined)}
           onConfirm={() => {

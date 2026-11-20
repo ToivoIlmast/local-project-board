@@ -8,7 +8,7 @@ import {
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
-import { useStatusLabel } from '../../../shared/i18n/index';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { Button, Text } from '../../../shared/ui/index';
 import {
   FlagChoice,
@@ -28,6 +28,7 @@ import {
   useSettingsT,
   type DraftKit,
 } from '../../settings/index';
+import { useTaskT } from '../i18n/details';
 import { hasOwnSettings, sameSettings, settingsRequest } from '../model/taskWorkflow';
 import { useEffectiveWorkflow } from '../model/useEffectiveWorkflow';
 import type { AgentTarget } from '../model/agentTarget';
@@ -53,8 +54,10 @@ export interface TaskAiSettingsProps {
  */
 export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
   const { state, store } = useBoard();
-  // The sentences built from the words of the settings; the rest of this block is still English.
+  // The sentences built from the words of the settings, and the words of this block.
   const words = useSettingsT();
+  const t = useTaskT();
+  const common = useT();
   const statusLabel = useStatusLabel();
   const form = useOverridesDraft(task.workflow, taskKit);
   const [asked, setAsked] = useState(false);
@@ -94,10 +97,8 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
 
   useUnsavedChanges({
     dirty: form.dirty,
-    what: `the AI settings of ${task.id}`,
-    note: form.changedElsewhere
-      ? 'These settings were also changed elsewhere; saving replaces that change.'
-      : undefined,
+    what: t('ai.settings.what', { task: task.id }),
+    note: form.changedElsewhere ? t('ai.settings.elsewhereNote') : undefined,
     save: () => send.attempt('save'),
     discard: form.discard,
   });
@@ -139,21 +140,21 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
     <section className="ai" aria-labelledby={`ai-${task.id}`}>
       <div className="ai__head">
         <h3 className="ai__title" id={`ai-${task.id}`}>
-          AI
+          {t('ai.settings.title')}
         </h3>
         <SendToAi task={task} targets={targets} reasons={state.readiness[task.id]} />
       </div>
 
       {exceptions ? null : (
         <div className="ai__summary">
-          <Text tone="muted">{`Uses the settings of column ${task.status}.`}</Text>
+          <Text tone="muted">{t('ai.settings.usesColumn', { column })}</Text>
           <Button
             size="small"
             ref={toggleRef}
             aria-expanded={open}
             onClick={() => setAsked(!asked)}
           >
-            {open ? 'Hide the AI settings' : 'Customize for this task'}
+            {open ? t('ai.settings.hide') : t('ai.settings.customize')}
           </Button>
         </div>
       )}
@@ -162,18 +163,15 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
         <form className="form" onSubmit={submit}>
           {form.changedElsewhere ? (
             <div className="notice" role="status">
-              <span>
-                The AI settings of this task were changed elsewhere. Your unsaved changes are kept;
-                saving replaces the other change.
-              </span>
+              <span>{t('ai.settings.changedElsewhere')}</span>
               <Button size="small" onClick={form.takeElsewhere}>
-                Load the new settings
+                {t('ai.settings.loadNew')}
               </Button>
             </div>
           ) : null}
 
           <fieldset className="settings__group">
-            <legend className="settings__legend">AI settings of this task</legend>
+            <legend className="settings__legend">{t('ai.settings.legend')}</legend>
             {WORKFLOW_FLAGS.map((key) => {
               const inherited =
                 canSay === undefined
@@ -224,9 +222,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
 
           {effective === undefined ? null : (
             <>
-              <Text tone="muted">
-                Also in effect. These are set for the whole board, on the Settings page.
-              </Text>
+              <Text tone="muted">{t('ai.settings.boardOnly')}</Text>
               <dl className="ai__values">
                 {BOARD_ONLY_WORKFLOW_KEYS.map((key) => (
                   <div key={key} className="ai__value">
@@ -247,7 +243,7 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
             <div className="notice" role="alert">
               <span>{read.error}</span>
               <Button size="small" onClick={read.retry}>
-                Try again
+                {common('ui.tryAgain')}
               </Button>
             </div>
           )}
@@ -259,16 +255,16 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
 
           <div className="form__actions ai__actions">
             <p className="settings__saved" aria-live="polite">
-              {form.saved ? 'Saved.' : null}
+              {form.saved ? t('ai.settings.saved') : null}
             </p>
             <Button type="submit" variant="primary" disabled={!form.dirty || send.pending}>
-              {send.pending ? 'Saving…' : 'Save'}
+              {send.pending ? common('ui.saving') : common('ui.save')}
             </Button>
             <Button
               disabled={!hasOwnSettings(task.workflow) || send.pending}
               onClick={() => void send.run('reset')}
             >
-              {`Reset to the settings of column ${task.status}`}
+              {t('ai.settings.reset', { column })}
             </Button>
           </div>
         </form>

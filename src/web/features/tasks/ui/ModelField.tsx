@@ -1,13 +1,7 @@
 import { CLAUDE_MODEL_ALIASES } from '../../../../contract/v1/index';
-import { Field, Input, Select, type SelectOption } from '../../../shared/ui/index';
+import { Field, Input, Select } from '../../../shared/ui/index';
 import { chosenModel, type ModelChoice, type ModelDraft } from '../model/claudeLaunch';
-import { LAUNCH_LABELS as L } from '../model/launchLabels';
-
-const MODEL_OPTIONS: SelectOption[] = [
-  { value: '', label: L.model.default },
-  ...CLAUDE_MODEL_ALIASES.map((alias) => ({ value: alias, label: alias })),
-  { value: 'other', label: L.model.other },
-];
+import { useTaskT } from '../i18n/details';
 
 /**
  * The model of a start of Claude Code (T38): the default, an alias, or a name typed in. The same
@@ -20,15 +14,22 @@ export function ModelField({
   model: ModelDraft;
   onChange: (next: ModelDraft) => void;
 }) {
+  const t = useTaskT();
   const sent = chosenModel(model);
+  const options = [
+    { value: '', label: t('ai.model.default') },
+    // The names of the models are the model's own: they are never translated.
+    ...CLAUDE_MODEL_ALIASES.map((alias) => ({ value: alias, label: alias })),
+    { value: 'other', label: t('ai.model.other') },
+  ];
   return (
     <>
-      <Field label={L.model.label} hint={L.model.hint}>
+      <Field label={t('ai.model.label')} hint={t('ai.model.hint')}>
         {(id, hintId) => (
           <Select
             id={id}
             aria-describedby={hintId}
-            options={MODEL_OPTIONS}
+            options={options}
             value={model.choice}
             onChange={(event) => onChange({ ...model, choice: event.target.value as ModelChoice })}
           />
@@ -36,8 +37,8 @@ export function ModelField({
       </Field>
       {model.choice !== 'other' ? null : (
         <Field
-          label={L.model.name}
-          hint={sent === null && model.name !== '' ? L.model.invalid : L.model.nameHint}
+          label={t('ai.model.name')}
+          hint={sent === null && model.name !== '' ? t('ai.model.invalid') : t('ai.model.nameHint')}
         >
           {(id, hintId) => (
             <Input

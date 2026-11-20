@@ -6,6 +6,7 @@ import {
   type Task,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
+import { useT } from '../../../shared/i18n/index';
 import { itemState, progress, seriesOf, type Series, type SeriesRow } from './series';
 
 /** The series of one completed task: what its completion asks to check, and where each stands. */
@@ -30,6 +31,7 @@ export function useSeries(tasks: readonly Task[]): {
   views: Map<string, SeriesView>;
   retry: () => void;
 } {
+  const t = useT();
   const { state, store } = useBoard();
   const [failure, setFailure] = useState<Record<string, string>>({});
   const [attempt, setAttempt] = useState(0);
@@ -86,7 +88,7 @@ export function useSeries(tasks: readonly Task[]): {
           alive &&
           setFailure((current) => ({
             ...current,
-            [id]: problem instanceof Error ? problem.message : 'Something went wrong.',
+            [id]: problem instanceof Error ? problem.message : '',
           })),
       );
     }
@@ -111,12 +113,12 @@ export function useSeries(tasks: readonly Task[]): {
         series,
         rows,
         loaded,
-        error: missing === undefined ? undefined : failure[missing.task],
+        error: missing === undefined ? undefined : failure[missing.task] || t('ui.somethingWrong'),
         ...progress(rows),
       });
     }
     return built;
-  }, [scopes, state.history, failure]);
+  }, [scopes, state.history, failure, t]);
 
   return { views, retry: useCallback(() => setAttempt((count) => count + 1), []) };
 }

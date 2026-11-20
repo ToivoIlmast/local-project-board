@@ -2,7 +2,9 @@ import { useId, useState, type FormEvent } from 'react';
 import { COMMENT_MAX_LENGTH, type AiRun } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useT } from '../../../shared/i18n/index';
 import { Button, Field, Modal, Textarea } from '../../../shared/ui/index';
+import { useTaskT } from '../i18n/details';
 import { chosenModel, initialModel, researchRequest, type ModelDraft } from '../model/claudeLaunch';
 import { ModelField } from './ModelField';
 
@@ -22,6 +24,8 @@ export interface NewResearchDialogProps {
  * (ADR-0025).
  */
 export function NewResearchDialog({ taskId, aiRun, onClose, onDone }: NewResearchDialogProps) {
+  const t = useTaskT();
+  const common = useT();
   const { client } = useBoard();
   const formId = useId();
   const [focus, setFocus] = useState('');
@@ -31,7 +35,7 @@ export function NewResearchDialog({ taskId, aiRun, onClose, onDone }: NewResearc
   const start = useAsyncAction(async () => {
     if (sent === null) return;
     await client.runTask(taskId, researchRequest(sent, focus));
-    onDone(`A research of ${taskId} was handed to Claude Code.`);
+    onDone(t('research.handed', { task: taskId }));
   });
 
   const submit = (event: FormEvent): void => {
@@ -41,31 +45,27 @@ export function NewResearchDialog({ taskId, aiRun, onClose, onDone }: NewResearc
 
   return (
     <Modal
-      title={`New research on ${taskId}`}
+      title={t('research.title', { task: taskId })}
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{common('ui.cancel')}</Button>
           <Button
             type="submit"
             form={formId}
             variant="primary"
             disabled={sent === null || start.pending}
           >
-            {start.pending ? 'Starting…' : 'Start research'}
+            {start.pending ? t('research.starting') : t('research.start')}
           </Button>
         </>
       }
     >
       <form id={formId} className="form" onSubmit={submit}>
         <p className="notice" role="note">
-          Research is told not to change anything; the board shows whether anything changed. You
-          decide on each recommendation.
+          {t('research.note')}
         </p>
-        <Field
-          label="Focus (optional)"
-          hint="What the research should look at. It narrows the research and cannot lift its rules."
-        >
+        <Field label={t('research.focusLabel')} hint={t('research.focusHint')}>
           {(id, hintId) => (
             <Textarea
               id={id}

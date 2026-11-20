@@ -184,18 +184,15 @@ export function checkId(taskId: string, number: number): string {
   return `${taskId}-C${number}`;
 }
 
-export const STATE_LABELS = {
-  working: 'Working',
-  reported: 'Reported',
-  failed: 'Failed',
-} as const;
+/** The state of a check in the language shown. */
+export function stateLabel(state: CheckSummary['state']): string {
+  return taskT(`check.state.${state}`);
+}
 
-export const VERDICT_LABELS = {
-  current: 'Current',
-  'partly-outdated': 'Partly outdated',
-  outdated: 'Outdated',
-  'insufficient-data': 'Insufficient data',
-} as const;
+/** The verdict of a check report in the language shown. */
+export function verdictLabel(verdict: NonNullable<CheckSummary['verdict']>): string {
+  return taskT(`check.verdict.${verdict}`);
+}
 
 export interface Staleness {
   /** The version the check read. */
@@ -228,14 +225,17 @@ export function staleness(
 export function stalenessText(s: Staleness): string | undefined {
   if (!s.stale) return undefined;
   return s.now === null
-    ? `This report is for v${s.version}; the task was changed outside the history since.`
-    : `This report is for v${s.version}; the task is now v${s.now}.`;
+    ? taskT('check.staleOutside', { version: s.version })
+    : taskT('check.staleNow', { version: s.version, now: s.now });
 }
 
 export function describeRepo(repo: RepoState): string {
-  if (repo === null) return 'no git repository';
-  const head = repo.head === null ? 'no commits' : repo.head.slice(0, 7);
-  return `${repo.branch ?? 'detached'} @ ${head}, ${repo.clean ? 'clean' : 'uncommitted changes'}`;
+  if (repo === null) return taskT('check.repo.none');
+  return taskT('check.repo.line', {
+    branch: repo.branch ?? taskT('check.repo.detached'),
+    head: repo.head === null ? taskT('check.repo.noCommits') : repo.head.slice(0, 7),
+    state: repo.clean ? taskT('check.repo.clean') : taskT('check.repo.dirty'),
+  });
 }
 
 /** Whether the branch or HEAD moved between the begin and the report; the tree is `treeChange`. */
@@ -320,17 +320,13 @@ export function decisionHistory(check: Check, recommendation: string): Decision[
 
 export { isSuperseded };
 
-export const KIND_LABELS = { research: 'Research', check: 'Actuality check' } as const;
-
 /** A check without a kind is an actuality check (ADR-0030 R1). */
 export function kindLabel(kind: CheckKind | undefined): string {
-  return kind === 'research' ? KIND_LABELS.research : KIND_LABELS.check;
+  return kind === 'research' ? taskT('check.kind.research') : taskT('check.kind.check');
 }
 
 export function countsText(counts: DecisionCounts | undefined): string | undefined {
-  return counts === undefined
-    ? undefined
-    : `${counts.accepted} accepted · ${counts.rejected} rejected · ${counts.undecided} undecided`;
+  return counts === undefined ? undefined : taskT('check.counts', { ...counts });
 }
 
 /**
@@ -354,9 +350,10 @@ export function recommendationState(
   });
 }
 
-export const AXIS_LABELS = {
-  decision: { undecided: 'Undecided', accepted: 'Accepted', rejected: 'Rejected' },
-  currency: { current: 'Current', stale: 'Stale', superseded: 'Superseded' },
+const CURRENCY_KEYS = {
+  current: 'check.verdict.current',
+  stale: 'check.stale',
+  superseded: 'check.superseded',
 } as const;
 
 /** Each axis said on its own: none is read from another (ADR-0030 R5). */
@@ -367,14 +364,14 @@ export function axisLabels(axes: RecommendationAxes): {
 } {
   const { application } = axes;
   return {
-    decision: AXIS_LABELS.decision[axes.decision],
+    decision: taskT(`check.axis.${axes.decision}`),
     application:
       application.state === 'applied'
-        ? `Applied in ${application.versions.map((n) => `v${n}`).join(', ')}`
+        ? taskT('check.applied', { versions: application.versions.map((n) => `v${n}`).join(', ') })
         : application.state === 'not-applied'
-          ? 'Not applied'
-          : 'Not applicable here',
-    currency: AXIS_LABELS.currency[axes.currency],
+          ? taskT('check.notApplied')
+          : taskT('check.notApplicable'),
+    currency: taskT(CURRENCY_KEYS[axes.currency]),
   };
 }
 
@@ -387,15 +384,16 @@ export function launchNotice(checks: readonly CheckSummary[] | undefined): strin
   const lines = [
     ...research
       .filter((check) => check.state === 'working')
-      .map(
-        (check) =>
-          `${checkId(check.taskId, check.number)} is still researching this task. Starting now does not wait for it.`,
+      .map((check) =>
+        taskT('ai.launch.researching', { check: checkId(check.taskId, check.number) }),
       ),
     ...research
       .filter((check) => (check.decisions?.undecided ?? 0) > 0)
-      .map(
-        (check) =>
-          `${checkId(check.taskId, check.number)} has ${check.decisions?.undecided} undecided recommendation${check.decisions?.undecided === 1 ? '' : 's'}. Starting now does not decide them.`,
+      .map((check) =>
+        taskT('ai.launch.undecided', {
+          check: checkId(check.taskId, check.number),
+          count: check.decisions?.undecided ?? 0,
+        }),
       ),
   ];
   return lines.length === 0 ? undefined : lines.join(' ');
