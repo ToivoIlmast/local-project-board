@@ -19,6 +19,7 @@ import {
   type VersionList,
   type VersionSummary,
 } from '../../../../contract/v1/index';
+import { taskT } from '../i18n/details';
 
 /**
  * What the page works out about the history of a task, with the functions the server runs
@@ -69,10 +70,11 @@ export function versionOptions(task: Task, list: VersionList | undefined): Versi
   const at = currentVersion(task, list);
   const first: VersionOption =
     at !== null
-      ? { value: CURRENT, label: `v${at} · Current` }
+      ? { value: CURRENT, label: taskT('versions.currentLabeled', { version: at }) }
       : {
           value: CURRENT,
-          label: versions.length === 0 ? 'Current' : 'Current (changed outside history)',
+          label:
+            versions.length === 0 ? taskT('versions.current') : taskT('versions.currentOutside'),
         };
   return [
     first,
@@ -80,7 +82,7 @@ export function versionOptions(task: Task, list: VersionList | undefined): Versi
       .filter((version) => version.number !== at)
       .map((version) => ({
         value: String(version.number),
-        label: `v${version.number} · historical`,
+        label: taskT('versions.historical', { version: version.number }),
       })),
   ];
 }
@@ -94,20 +96,43 @@ export function normalizeSelection(
   return selected !== CURRENT && selected === currentVersion(task, list) ? CURRENT : selected;
 }
 
-export const SOURCE_LABELS = {
-  create: 'created',
-  baseline: 'first seen',
-  external: 'changed outside the board',
-  edit: 'edited',
-  restore: 'restored',
+const SOURCE_KEYS = {
+  create: 'source.create',
+  baseline: 'source.baseline',
+  external: 'source.external',
+  edit: 'source.edit',
+  restore: 'source.restore',
 } as const;
 
+/** A name the page knows is said in the language shown; any other is left as the board sent it. */
+function known<K extends string>(
+  names: readonly K[],
+  value: string,
+  say: (name: K) => string,
+): string {
+  return (names as readonly string[]).includes(value) ? say(value as K) : value;
+}
+
 export function versionSummaryText(version: VersionSummary): string {
-  const parts: string[] = [SOURCE_LABELS[version.source]];
-  if (version.restoredFrom !== undefined) parts.push(`from v${version.restoredFrom}`);
-  if (version.changed.length > 0) parts.push(`changed: ${version.changed.join(', ')}`);
+  const parts: string[] = [taskT(SOURCE_KEYS[version.source])];
+  if (version.restoredFrom !== undefined) {
+    parts.push(taskT('summary.from', { version: version.restoredFrom }));
+  }
+  if (version.changed.length > 0) {
+    const fields = version.changed.map((field) =>
+      known(['title', 'labels', 'body'] as const, field, (name) => taskT(`summary.field.${name}`)),
+    );
+    parts.push(taskT('summary.changed', { fields: fields.join(', ') }));
+  }
   if (version.fromCheck !== undefined) {
-    parts.push(`from check C${version.fromCheck.check} (${version.fromCheck.basis})`);
+    parts.push(
+      taskT('summary.fromCheck', {
+        check: version.fromCheck.check,
+        basis: known(['report', 'manual'] as const, version.fromCheck.basis, (name) =>
+          taskT(`summary.basis.${name}`),
+        ),
+      }),
+    );
   }
   return parts.join(' · ');
 }

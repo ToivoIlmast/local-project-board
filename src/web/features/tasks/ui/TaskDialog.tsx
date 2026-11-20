@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useBoard } from '../../../api/react';
 import type { FromCheck, Task } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useTaskT } from '../i18n/details';
 import { Modal } from '../../../shared/ui/index';
 import type { TaskDraft } from '../model/history';
 import { placementRefusal, type FieldErrors, type PlacementField } from '../model/placement';
@@ -41,6 +42,7 @@ export function TaskDialog({
   title,
 }: TaskDialogProps) {
   const { store } = useBoard();
+  const t = useTaskT();
   const createdRef = useRef<string | undefined>(undefined);
   // The task the person started from, kept: their changes are measured against it, even when
   // the task moves under them.
@@ -80,7 +82,8 @@ export function TaskDialog({
   };
   const refused = Object.keys(fieldErrors).length > 0;
 
-  const dialogTitle = title ?? (task === undefined ? 'New task' : `Edit ${task.id}`);
+  const dialogTitle =
+    title ?? (task === undefined ? t('dialog.new') : t('dialog.edit', { id: task.id }));
 
   return (
     <Modal title={dialogTitle} onClose={onClose} width="wide">
@@ -116,7 +119,7 @@ export function TaskDialog({
               task={task}
               initial={kept ?? draft}
               defaultStatus={defaultStatus}
-              submitLabel={task === undefined ? 'Create' : 'Review changes'}
+              submitLabel={task === undefined ? t('form.create') : t('form.review')}
               pending={create.pending}
               error={refused ? undefined : create.error}
               fieldErrors={fieldErrors}

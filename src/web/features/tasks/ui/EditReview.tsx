@@ -8,7 +8,9 @@ import {
 import { ApiError } from '../../../api/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { Button, Text } from '../../../shared/ui/index';
+import { useTaskT } from '../i18n/details';
 import { currentHash, draftChanges, hasChanges, type TaskDraft } from '../model/history';
 import {
   describeMove,
@@ -58,6 +60,9 @@ export function EditReview({
   onSaved,
 }: EditReviewProps) {
   const { client, store, state } = useBoard();
+  const t = useTaskT();
+  const common = useT();
+  const statusLabel = useStatusLabel();
   const [conflict, setConflict] = useState(false);
 
   const changes = draftChanges(original, draft);
@@ -113,11 +118,7 @@ export function EditReview({
           await store.handleEvent({ type: 'task.updated', task: current });
         }
         setConflict(true);
-        throw new Error(
-          'The task changed while you were reviewing. Your changes are kept below, against its ' +
-            'current content; save again, or cancel.',
-          { cause: error },
-        );
+        throw new Error(t('review.conflict'), { cause: error });
       }
       throw error;
     }
@@ -126,30 +127,39 @@ export function EditReview({
 
   return (
     <div className="review">
-      <h3 className="review__title">Review changes to {task.id}</h3>
+      <h3 className="review__title">{t('review.title', { id: task.id })}</h3>
       {movedUnderneath && !conflict ? (
         <p className="notice" role="status">
-          The task changed since you started editing. Below are your changes put over its current
-          content.
+          {t('review.moved')}
         </p>
       ) : null}
 
       {contentChanged ? (
-        <ContentDiffView before={now} after={proposed} label={`Changes to ${task.id}`} />
+        <ContentDiffView
+          before={now}
+          after={proposed}
+          label={t('diff.changesTo', { id: task.id })}
+        />
       ) : (
-        <Text tone="muted">No changes to the title, the labels or the description.</Text>
+        <Text tone="muted">{t('diff.none')}</Text>
       )}
 
       {changes.status === undefined && changes.branch === undefined ? null : (
         <ul className="review__other">
           {changes.status === undefined ? null : (
             <li>
-              Status: {task.status} → {changes.status}
+              {t('review.status', {
+                from: statusLabel(task.status),
+                to: statusLabel(changes.status),
+              })}
             </li>
           )}
           {changes.branch === undefined ? null : (
             <li>
-              Branch: {task.branch ?? 'none'} → {changes.branch ?? 'none'}
+              {t('review.branch', {
+                from: task.branch ?? t('review.none'),
+                to: changes.branch ?? t('review.none'),
+              })}
             </li>
           )}
         </ul>
@@ -158,8 +168,11 @@ export function EditReview({
       {statusAsked ? (
         <div className="notice" role="status">
           <p>
-            {task.id} is blocked. Changing its status from {task.status} to {changes.status} by hand
-            is allowed; the board will not stop it.
+            {t('review.blocked', {
+              id: task.id,
+              from: statusLabel(task.status),
+              to: statusLabel(changes.status ?? ''),
+            })}
           </p>
           <ul>
             {reasons.map((reason) => (
@@ -170,21 +183,29 @@ export function EditReview({
       ) : null}
 
       {move === undefined ? null : (
-        <section className="review__move" aria-label="Move">
-          <h4 className="review__title">Move {task.id}</h4>
+        <section className="review__move" aria-label={t('review.move')}>
+          <h4 className="review__title">{t('review.moveTitle', { id: task.id })}</h4>
           <dl className="review__places">
-            <dt>From</dt>
+            <dt>{t('review.from')}</dt>
             <dd>{move.from}</dd>
-            <dt>To</dt>
+            <dt>{t('review.to')}</dt>
             <dd>{move.to}</dd>
           </dl>
           <p>
-            Readiness now:{' '}
-            {move.before.length === 0 ? 'ready' : `blocked — ${move.before.join('; ')}`}
+            {t('review.readinessNow', {
+              state:
+                move.before.length === 0
+                  ? t('review.ready')
+                  : t('review.blockedWith', { reasons: move.before.join('; ') }),
+            })}
           </p>
           <p>
-            Readiness after:{' '}
-            {move.after.length === 0 ? 'ready' : `blocked — ${move.after.join('; ')}`}
+            {t('review.readinessAfter', {
+              state:
+                move.after.length === 0
+                  ? t('review.ready')
+                  : t('review.blockedWith', { reasons: move.after.join('; ') }),
+            })}
           </p>
           <ul>
             {move.blocks.map((line) => (
@@ -200,14 +221,14 @@ export function EditReview({
         </p>
       )}
       <div className="form__actions">
-        <Button onClick={onBack}>Back to editing</Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onBack}>{t('review.back')}</Button>
+        <Button onClick={onCancel}>{common('ui.cancel')}</Button>
         <Button
           variant="primary"
           disabled={save.pending || !(hasChanges(changes) || placeChanged)}
           onClick={() => void save.run()}
         >
-          {save.pending ? 'Saving…' : 'Save'}
+          {save.pending ? common('ui.saving') : common('ui.save')}
         </Button>
       </div>
     </div>

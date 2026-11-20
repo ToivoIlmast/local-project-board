@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import { useT } from '../../../shared/i18n/index';
 import { Button, Field, Input, Textarea } from '../../../shared/ui/index';
+import { useDocumentT } from '../i18n';
 
 export interface DocumentEditorProps {
   /** Set when an existing document is being rewritten; its name cannot change. */
@@ -19,6 +21,8 @@ export function DocumentEditor({
   onSubmit,
   onCancel,
 }: DocumentEditorProps) {
+  const t = useDocumentT();
+  const common = useT();
   const [fileName, setFileName] = useState(name ?? '');
   const [content, setContent] = useState(initialContent);
 
@@ -29,7 +33,7 @@ export function DocumentEditor({
 
   return (
     <form className="form" onSubmit={submit}>
-      <Field label="File name" hint="Ends in .md or .html">
+      <Field label={t('docs.fileName')} hint={t('docs.fileHint')}>
         {(id) => (
           <Input
             id={id}
@@ -40,7 +44,7 @@ export function DocumentEditor({
           />
         )}
       </Field>
-      <Field label="Content">
+      <Field label={t('docs.content')}>
         {(id) => (
           <Textarea
             id={id}
@@ -56,9 +60,9 @@ export function DocumentEditor({
         </p>
       )}
       <div className="form__actions">
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{common('ui.cancel')}</Button>
         <Button type="submit" variant="primary" disabled={pending || fileName.trim() === ''}>
-          {pending ? 'Saving…' : 'Save'}
+          {pending ? common('ui.saving') : common('ui.save')}
         </Button>
       </div>
     </form>

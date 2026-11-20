@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Task, VersionList } from '../../../../contract/v1/index';
+import { useT } from '../../../shared/i18n/index';
 import { formatDate } from '../../../shared/lib/format';
 import { Button, Field, Select, Text } from '../../../shared/ui/index';
 import {
@@ -9,6 +10,7 @@ import {
   versionSummaryText,
   type Selected,
 } from '../model/history';
+import { useTaskT } from '../i18n/details';
 import { useVersion } from '../model/useTaskHistory';
 import { ContentDiffView } from './ContentDiffView';
 
@@ -29,6 +31,8 @@ type Side = typeof CURRENT | number;
  * from and what it changed, and a comparison of any two (ADR-0030). Only what the board said.
  */
 export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersionsProps) {
+  const t = useTaskT();
+  const common = useT();
   const versions = [...(list?.versions ?? [])].sort((a, b) => b.number - a.number);
   const at = currentVersion(task, list);
   const [from, setFrom] = useState<Side | undefined>(undefined);
@@ -39,7 +43,10 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
   const fromSide: Side | undefined = from ?? older?.number;
 
   const sides: { value: string; label: string }[] = [
-    { value: CURRENT, label: at === null ? 'Current' : `Current (v${at})` },
+    {
+      value: CURRENT,
+      label: at === null ? t('versions.current') : t('versions.currentAt', { version: at }),
+    },
     ...versions
       .filter((version) => version.number !== at)
       .map((version) => ({ value: String(version.number), label: `v${version.number}` })),
@@ -49,20 +56,18 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
   return (
     <section className="history" aria-labelledby={`versions-${task.id}`}>
       <h3 className="ai__title" id={`versions-${task.id}`}>
-        Versions
+        {t('versions.title')}
       </h3>
       {error === undefined ? null : (
         <div className="notice" role="alert">
           <span>{error}</span>
           <Button size="small" onClick={onRetry}>
-            Try again
+            {common('ui.tryAgain')}
           </Button>
         </div>
       )}
       {list === undefined ? null : versions.length === 0 ? (
-        <Text tone="muted">
-          No versions yet: the first change to the title, the labels or the description makes one.
-        </Text>
+        <Text tone="muted">{t('versions.empty')}</Text>
       ) : (
         <ol className="history__list">
           {versions.map((version) => (
@@ -74,10 +79,10 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
               </span>
               <Button
                 size="small"
-                aria-label={`View v${version.number}`}
+                aria-label={t('versions.viewAria', { version: version.number })}
                 onClick={() => onView(version.number === at ? CURRENT : version.number)}
               >
-                View
+                {t('versions.view')}
               </Button>
             </li>
           ))}
@@ -86,7 +91,7 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
 
       {versions.length < 1 || sides.length < 2 ? null : (
         <div className="history__compare">
-          <Field label="Compare">
+          <Field label={t('versions.compare')}>
             {(id) => (
               <Select
                 id={id}
@@ -96,7 +101,7 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
               />
             )}
           </Field>
-          <Field label="With">
+          <Field label={t('versions.with')}>
             {(id) => (
               <Select
                 id={id}
@@ -114,9 +119,10 @@ export function TaskVersions({ task, list, error, onRetry, onView }: TaskVersion
 }
 
 function Comparison({ task, from, to }: { task: Task; from: Side; to: Side }) {
+  const t = useTaskT();
   const a = useVersion(task.id, from === CURRENT ? undefined : from);
   const b = useVersion(task.id, to === CURRENT ? undefined : to);
-  const label = (side: Side): string => (side === CURRENT ? 'now' : `v${side}`);
+  const label = (side: Side): string => (side === CURRENT ? t('diff.now') : `v${side}`);
 
   const before = from === CURRENT ? taskContent(task) : a.version?.snapshot;
   const after = to === CURRENT ? taskContent(task) : b.version?.snapshot;
@@ -128,12 +134,13 @@ function Comparison({ task, from, to }: { task: Task; from: Side; to: Side }) {
       </p>
     );
   }
-  if (before === undefined || after === undefined) return <Text tone="muted">Loading…</Text>;
+  if (before === undefined || after === undefined)
+    return <Text tone="muted">{t('versions.loading')}</Text>;
   return (
     <ContentDiffView
       before={before}
       after={after}
-      label={`Changes from ${label(from)} to ${label(to)}`}
+      label={t('diff.between', { from: label(from), to: label(to) })}
     />
   );
 }

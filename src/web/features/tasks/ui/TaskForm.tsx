@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Task } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import {
   Button,
   Field,
@@ -15,6 +16,7 @@ import {
   type FieldErrors,
   type PlacementField,
 } from '../model/placement';
+import { useTaskT } from '../i18n/details';
 
 export interface TaskValues {
   title: string;
@@ -71,6 +73,9 @@ export function TaskForm({
   onCancel,
 }: TaskFormProps) {
   const { state } = useBoard();
+  const t = useTaskT();
+  const common = useT();
+  const statusLabel = useStatusLabel();
   const [title, setTitle] = useState(initial?.title ?? task?.title ?? '');
   const [status, setStatus] = useState(
     initial?.status ?? task?.status ?? defaultStatus ?? statuses[0] ?? '',
@@ -96,19 +101,19 @@ export function TaskForm({
   const blocks = blockOptions(state.topics, topic === '' ? undefined : topic);
   const topicChoices = withStale(
     [
-      { value: '', label: 'No topic' },
+      { value: '', label: t('form.noTopic') },
       ...state.topics.map((held) => ({ value: held.id, label: `${held.id} · ${held.title}` })),
     ],
     topic,
-    `${topic} (not on the board)`,
+    t('form.topicStale', { topic }),
   );
   const blockChoices = withStale(
     [
-      { value: '', label: 'No block' },
+      { value: '', label: t('form.noBlock') },
       ...blocks.map((held) => ({ value: held.id, label: `${held.id} · ${held.title}` })),
     ],
     block,
-    `${block} (not in this topic)`,
+    t('form.blockStale', { block }),
   );
 
   const changeTopic = (next: string): void => {
@@ -141,7 +146,7 @@ export function TaskForm({
 
   return (
     <form className="form" onSubmit={submit}>
-      <Field label="Title">
+      <Field label={t('field.title')}>
         {(id) => (
           <Input
             id={id}
@@ -152,17 +157,17 @@ export function TaskForm({
           />
         )}
       </Field>
-      <Field label="Status">
+      <Field label={t('field.status')}>
         {(id) => (
           <Select
             id={id}
-            options={statuses}
+            options={statuses.map((value) => ({ value, label: statusLabel(value) }))}
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           />
         )}
       </Field>
-      <Field label="Topic" error={fieldErrors?.topic}>
+      <Field label={t('field.topic')} error={fieldErrors?.topic}>
         {(id, describedBy) => (
           <Select
             id={id}
@@ -175,8 +180,8 @@ export function TaskForm({
         )}
       </Field>
       <Field
-        label="Block"
-        hint={topic === '' ? 'Choose a topic first' : undefined}
+        label={t('field.block')}
+        hint={topic === '' ? t('form.blockHint') : undefined}
         error={fieldErrors?.block}
       >
         {(id, describedBy) => (
@@ -194,7 +199,11 @@ export function TaskForm({
           />
         )}
       </Field>
-      <Field label="Depends on" hint="Task IDs, separated by commas" error={fieldErrors?.dependsOn}>
+      <Field
+        label={t('field.dependsOn')}
+        hint={t('form.dependsHint')}
+        error={fieldErrors?.dependsOn}
+      >
         {(id, describedBy) => (
           <Input
             id={id}
@@ -209,7 +218,7 @@ export function TaskForm({
           />
         )}
       </Field>
-      <Field label="Labels" hint="Separated by commas">
+      <Field label={t('field.labels')} hint={t('form.labelsHint')}>
         {(id) => (
           <Input
             id={id}
@@ -219,7 +228,7 @@ export function TaskForm({
           />
         )}
       </Field>
-      <Field label="Branch" hint="A note, not a checkout">
+      <Field label={t('field.branch')} hint={t('form.branchHint')}>
         {(id) => (
           <Input
             id={id}
@@ -229,7 +238,7 @@ export function TaskForm({
           />
         )}
       </Field>
-      <Field label="Description" hint="Markdown">
+      <Field label={t('field.description')} hint={t('form.descriptionHint')}>
         {(id) => (
           <Textarea
             id={id}
@@ -246,9 +255,9 @@ export function TaskForm({
         </p>
       )}
       <div className="form__actions">
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{common('ui.cancel')}</Button>
         <Button type="submit" variant="primary" disabled={pending || title.trim() === ''}>
-          {pending ? 'Saving…' : submitLabel}
+          {pending ? common('ui.saving') : submitLabel}
         </Button>
       </div>
     </form>
