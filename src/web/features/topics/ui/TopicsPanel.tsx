@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useT } from '../../../shared/i18n/index';
 import { Badge, Button, ConfirmDialog, EmptyState, Panel } from '../../../shared/ui/index';
+import { useTopicsT } from '../i18n';
 import { TopicForm } from './TopicForm';
 
 export interface TopicsPanelProps {
@@ -13,6 +15,8 @@ export interface TopicsPanelProps {
 /** The topics of the board: made, renamed and described here, deleted once nothing is in them. */
 export function TopicsPanel({ onClose, onDeleted }: TopicsPanelProps) {
   const { state, store } = useBoard();
+  const t = useTopicsT();
+  const common = useT();
   // `new`, or the id of the topic being changed.
   const [form, setForm] = useState<'new' | string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -32,20 +36,20 @@ export function TopicsPanel({ onClose, onDeleted }: TopicsPanelProps) {
   };
 
   return (
-    <Panel label="Topics">
+    <Panel label={t('title')}>
       <div ref={panelRef}>
         <header className="panel__head">
-          <h2 className="panel__title">Topics</h2>
+          <h2 className="panel__title">{t('title')}</h2>
           <Button
             size="small"
             data-new-topic=""
             disabled={form !== null}
             onClick={() => setForm('new')}
           >
-            New topic
+            {t('new')}
           </Button>
           <Button size="small" onClick={onClose}>
-            Close
+            {common('ui.close')}
           </Button>
         </header>
 
@@ -61,8 +65,8 @@ export function TopicsPanel({ onClose, onDeleted }: TopicsPanelProps) {
         )}
 
         {state.topics.length === 0 ? (
-          <EmptyState title="No topics">
-            <p>A topic groups the tasks of one piece of work. Create one with “New topic”.</p>
+          <EmptyState title={t('empty.title')}>
+            <p>{t('empty.text', { action: t('new') })}</p>
           </EmptyState>
         ) : (
           <ul className="topics__list">
@@ -73,21 +77,21 @@ export function TopicsPanel({ onClose, onDeleted }: TopicsPanelProps) {
                 <Button
                   size="small"
                   data-edit-topic={topic.id}
-                  aria-label={`Edit ${topic.id}`}
+                  aria-label={t('edit.label', { id: topic.id })}
                   disabled={form !== null}
                   onClick={() => setForm(topic.id)}
                 >
-                  Edit
+                  {t('edit')}
                 </Button>
                 <Button
                   size="small"
-                  aria-label={`Delete ${topic.id}`}
+                  aria-label={t('delete.label', { id: topic.id })}
                   onClick={() => {
                     remove.clearError();
                     setDeleting(topic.id);
                   }}
                 >
-                  Delete
+                  {common('ui.delete')}
                 </Button>
               </li>
             ))}
@@ -96,9 +100,9 @@ export function TopicsPanel({ onClose, onDeleted }: TopicsPanelProps) {
 
         {deleting === null ? null : (
           <ConfirmDialog
-            title={`Delete ${deleting}?`}
-            message="The topic is removed from the board. It can only be deleted when it has no tasks and no blocks. This cannot be undone."
-            confirmLabel="Delete"
+            title={t('delete.title', { id: deleting })}
+            message={t('delete.message')}
+            confirmLabel={common('ui.delete')}
             pending={remove.pending}
             error={remove.error}
             onCancel={() => setDeleting(null)}

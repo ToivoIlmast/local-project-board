@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
+import { useT } from '../../../shared/i18n/index';
 import { formatDate } from '../../../shared/lib/format';
 import { Badge, Button, ConfirmDialog, EmptyState, Panel } from '../../../shared/ui/index';
+import { useReportsT } from '../i18n';
 import { ReportView } from './ReportView';
 
 export interface ReportsPanelProps {
@@ -12,6 +14,8 @@ export interface ReportsPanelProps {
 /** What an agent left behind: audits, summaries, anything it wrote as a file (§10). */
 export function ReportsPanel({ onClose }: ReportsPanelProps) {
   const { state, store } = useBoard();
+  const t = useReportsT();
+  const common = useT();
   const [open, setOpen] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const remove = useAsyncAction((id: string) => store.deleteReport(id));
@@ -19,17 +23,17 @@ export function ReportsPanel({ onClose }: ReportsPanelProps) {
   const reports = [...state.reports].reverse();
 
   return (
-    <Panel label="Reports">
+    <Panel label={t('title')}>
       <header className="panel__head">
-        <h2 className="panel__title">Reports</h2>
+        <h2 className="panel__title">{t('title')}</h2>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
 
       {reports.length === 0 ? (
-        <EmptyState title="No reports">
-          <p>An agent can store one through the API.</p>
+        <EmptyState title={t('empty.title')}>
+          <p>{t('empty.text')}</p>
         </EmptyState>
       ) : (
         <ul className="reports__list">
@@ -46,10 +50,10 @@ export function ReportsPanel({ onClose }: ReportsPanelProps) {
               <span className="reports__date">{formatDate(report.createdAt)}</span>
               <Button
                 size="small"
-                aria-label={`Delete ${report.id}`}
+                aria-label={t('delete.label', { id: report.id })}
                 onClick={() => setDeleting(report.id)}
               >
-                Delete
+                {common('ui.delete')}
               </Button>
             </li>
           ))}
@@ -60,9 +64,9 @@ export function ReportsPanel({ onClose }: ReportsPanelProps) {
 
       {deleting === null ? null : (
         <ConfirmDialog
-          title={`Delete ${deleting}?`}
-          message="The report file is removed from the board. This cannot be undone."
-          confirmLabel="Delete"
+          title={t('delete.title', { id: deleting })}
+          message={t('delete.message')}
+          confirmLabel={common('ui.delete')}
           pending={remove.pending}
           error={remove.error}
           onCancel={() => setDeleting(null)}

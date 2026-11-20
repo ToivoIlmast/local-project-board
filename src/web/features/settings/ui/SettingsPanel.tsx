@@ -1,5 +1,7 @@
 import { useBoard } from '../../../api/react';
+import { useT } from '../../../shared/i18n/index';
 import { Button, Panel, Spinner } from '../../../shared/ui/index';
+import { useSettingsT } from '../i18n/index';
 import { WorkflowForm } from './WorkflowForm';
 
 export interface SettingsPanelProps {
@@ -12,19 +14,21 @@ export interface SettingsPanelProps {
  */
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { state, store } = useBoard();
+  const t = useSettingsT();
+  const common = useT();
   const { project, workflow } = state;
 
   return (
-    <Panel label="Settings">
+    <Panel label={t('title')}>
       <header className="panel__head">
-        <h2 className="panel__title">Settings</h2>
+        <h2 className="panel__title">{t('title')}</h2>
         <Button size="small" onClick={onClose}>
-          Close
+          {common('ui.close')}
         </Button>
       </header>
 
       {project === undefined || workflow === undefined ? (
-        <Spinner label="Loading the settings…" />
+        <Spinner label={t('panel.loading')} />
       ) : (
         <WorkflowForm
           workflow={workflow}

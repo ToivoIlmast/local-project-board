@@ -3,7 +3,9 @@ import {
   type WorkflowOverrides,
   type WorkflowSettings,
 } from '../../../../contract/v1/index';
+import { useStatusLabel } from '../../../shared/i18n/index';
 import { Button } from '../../../shared/ui/index';
+import { useSettingsT } from '../i18n/index';
 import {
   effectiveFlag,
   inactiveFlags,
@@ -11,7 +13,7 @@ import {
   setColumnFlag,
   type Effective,
 } from '../model/draft';
-import { INACTIVE_NOTE, WORKFLOW_LABELS, onOff, sourceLabel } from '../model/labels';
+import { inEffectText, inactiveNote, onOff, sourceLabel } from '../model/labels';
 import { FlagChoice } from './FlagChoice';
 
 export interface ColumnSettingsProps {
@@ -27,19 +29,23 @@ export interface ColumnSettingsProps {
  * the levels in their head.
  */
 export function ColumnSettings({ status, overrides, defaults, onChange }: ColumnSettingsProps) {
+  const t = useSettingsT();
+  const statusLabel = useStatusLabel();
   const inactive = inactiveFlags(overrides, defaults, status);
 
   return (
     <fieldset className="settings__group">
-      <legend className="settings__legend">{`Column ${status}`}</legend>
+      <legend className="settings__legend">
+        {t('legend.column', { status: statusLabel(status) })}
+      </legend>
       {WORKFLOW_FLAGS.map((key) => {
         const own = overrides.statuses[status]?.[key];
         const board = effectiveFlag(overrides, defaults, key);
         const { value, source }: Effective = effectiveFlag(overrides, defaults, key, status);
         const muted = inactive.includes(key);
         const hint = [
-          `In effect: ${onOff(value)}, from ${sourceLabel(source)}.`,
-          muted ? INACTIVE_NOTE : undefined,
+          inEffectText(onOff(value), sourceLabel(source)),
+          muted ? inactiveNote() : undefined,
         ]
           .filter(Boolean)
           .join(' ');
@@ -48,7 +54,7 @@ export function ColumnSettings({ status, overrides, defaults, onChange }: Column
             key={key}
             flag={key}
             own={own}
-            inheritLabel={`Same as the board (now ${onOff(board.value)})`}
+            inheritLabel={t('inherit.board', { value: onOff(board.value) })}
             hint={hint}
             muted={muted}
             onChange={(chosen) =>
@@ -69,10 +75,14 @@ export interface StaleColumnProps {
 
 /** A column of the file that the board no longer has: shown, never silently dropped. */
 export function StaleColumn({ status, overrides, onChange }: StaleColumnProps) {
+  const t = useSettingsT();
+  const statusLabel = useStatusLabel();
   const flags = overrides.statuses[status] ?? {};
   return (
     <fieldset className="settings__group">
-      <legend className="settings__legend">{`Column ${status} (not a status of this board)`}</legend>
+      <legend className="settings__legend">
+        {t('legend.stale', { status: statusLabel(status) })}
+      </legend>
       <ul className="settings__stale">
         {WORKFLOW_FLAGS.flatMap((key) => {
           const value = flags[key];
@@ -80,13 +90,13 @@ export function StaleColumn({ status, overrides, onChange }: StaleColumnProps) {
             ? []
             : [
                 <li key={key}>
-                  {WORKFLOW_LABELS[key].label}: {onOff(value)}
+                  {t('stale.flag', { label: t(`label.${key}`), value: onOff(value) })}
                 </li>,
               ];
         })}
       </ul>
       <Button size="small" onClick={() => onChange((current) => removeColumn(current, status))}>
-        {`Remove the settings of ${status}`}
+        {t('stale.remove', { status: statusLabel(status) })}
       </Button>
     </fieldset>
   );

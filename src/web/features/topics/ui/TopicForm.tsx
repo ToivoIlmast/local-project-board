@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Topic } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
+import { useT } from '../../../shared/i18n/index';
 import { Button, Field, Input, Textarea } from '../../../shared/ui/index';
+import { useTopicsT } from '../i18n';
 
 export interface TopicFormProps {
   /** The topic being changed; none when a new one is made. */
@@ -14,6 +16,8 @@ export interface TopicFormProps {
 
 /** One form for making a topic and for changing its title and description. */
 export function TopicForm({ topic, onSave, onDone }: TopicFormProps) {
+  const t = useTopicsT();
+  const common = useT();
   const [title, setTitle] = useState(topic?.title ?? '');
   const [body, setBody] = useState(topic?.body ?? '');
   const titleRef = useRef<HTMLInputElement>(null);
@@ -27,9 +31,9 @@ export function TopicForm({ topic, onSave, onDone }: TopicFormProps) {
 
   useUnsavedChanges({
     dirty,
-    what: topic === undefined ? 'the new topic' : `the topic ${topic.id}`,
+    what: topic === undefined ? t('unsaved.new') : t('unsaved.topic', { id: topic.id }),
     save: async () => {
-      if (title.trim() === '') return 'The title must not be blank.';
+      if (title.trim() === '') return t('error.blank');
       const failure = await saving.attempt();
       if (failure === undefined) onDone();
       return failure;
@@ -47,7 +51,7 @@ export function TopicForm({ topic, onSave, onDone }: TopicFormProps) {
 
   return (
     <form className="form topics__form" onSubmit={submit}>
-      <Field label="Title">
+      <Field label={t('field.title')}>
         {(id) => (
           <Input
             id={id}
@@ -59,7 +63,7 @@ export function TopicForm({ topic, onSave, onDone }: TopicFormProps) {
           />
         )}
       </Field>
-      <Field label="Description" hint="Markdown">
+      <Field label={t('field.description')} hint="Markdown">
         {(id) => (
           <Textarea
             id={id}
@@ -76,9 +80,13 @@ export function TopicForm({ topic, onSave, onDone }: TopicFormProps) {
         </p>
       )}
       <div className="form__actions">
-        <Button onClick={onDone}>Cancel</Button>
+        <Button onClick={onDone}>{common('ui.cancel')}</Button>
         <Button type="submit" variant="primary" disabled={saving.pending || title.trim() === ''}>
-          {saving.pending ? 'Saving…' : topic === undefined ? 'Create' : 'Save'}
+          {saving.pending
+            ? common('ui.saving')
+            : topic === undefined
+              ? t('create')
+              : common('ui.save')}
         </Button>
       </div>
     </form>

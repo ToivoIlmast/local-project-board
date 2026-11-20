@@ -2,27 +2,30 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   BOARD_ONLY_WORKFLOW_KEYS,
   WORKFLOW_FLAGS,
-  languageName,
   type Task,
   type TaskWorkflowOverrides,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
+import { useStatusLabel } from '../../../shared/i18n/index';
 import { Button, Text } from '../../../shared/ui/index';
 import {
   FlagChoice,
-  INACTIVE_NOTE,
+  inEffectText,
+  inactiveNote,
   LanguageChoice,
   WORKFLOW_LABELS,
   boardValueText,
   effectiveFlag,
   effectiveLanguage,
+  languageLabel,
   onOff,
   setFlag,
   setTaskLanguage,
   sourceLabel,
   useOverridesDraft,
+  useSettingsT,
   type DraftKit,
 } from '../../settings/index';
 import { hasOwnSettings, sameSettings, settingsRequest } from '../model/taskWorkflow';
@@ -50,6 +53,9 @@ export interface TaskAiSettingsProps {
  */
 export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
   const { state, store } = useBoard();
+  // The sentences built from the words of the settings; the rest of this block is still English.
+  const words = useSettingsT();
+  const statusLabel = useStatusLabel();
   const form = useOverridesDraft(task.workflow, taskKit);
   const [asked, setAsked] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -106,23 +112,25 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
 
   const boardLanguage =
     canSay === undefined ? undefined : effectiveLanguage(canSay, canSay.defaults);
+  // The column is named as the board names it: the four standard statuses in the language shown.
+  const column = statusLabel(task.status);
   const languageInheritLabel =
     boardLanguage === undefined
-      ? 'Like the board'
-      : `Like the board (now ${languageName(boardLanguage.value ?? 'en')}, from ${sourceLabel(
-          boardLanguage.source,
-          task.status,
-        )})`;
+      ? words('task.languageInheritPlain')
+      : words('task.languageInherit', {
+          value: languageLabel(boardLanguage.value ?? 'en'),
+          source: sourceLabel(boardLanguage.source, column),
+        });
   const languageHint = [
     effective === undefined
       ? read.error === undefined
-        ? 'Reading what is in effect…'
-        : 'What is in effect could not be read.'
-      : `In effect: ${languageName(effective.values.reportLanguage ?? 'en')}, from ${sourceLabel(
-          effective.sources.reportLanguage,
-          task.status,
-        )}.`,
-    form.draft.reportLanguage !== task.workflow?.reportLanguage ? 'Not saved yet.' : undefined,
+        ? words('task.reading')
+        : words('task.readFailed')
+      : inEffectText(
+          languageLabel(effective.values.reportLanguage ?? 'en'),
+          sourceLabel(effective.sources.reportLanguage, column),
+        ),
+    form.draft.reportLanguage !== task.workflow?.reportLanguage ? words('task.unsaved') : undefined,
   ]
     .filter(Boolean)
     .join(' ');
@@ -176,14 +184,14 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
               const hint = [
                 effective === undefined
                   ? read.error === undefined
-                    ? 'Reading what is in effect…'
-                    : 'What is in effect could not be read.'
-                  : `In effect: ${onOff(effective.values[key])}, from ${sourceLabel(
-                      effective.sources[key],
-                      task.status,
-                    )}.`,
-                muted ? INACTIVE_NOTE : undefined,
-                unsaved ? 'Not saved yet.' : undefined,
+                    ? words('task.reading')
+                    : words('task.readFailed')
+                  : inEffectText(
+                      onOff(effective.values[key]),
+                      sourceLabel(effective.sources[key], column),
+                    ),
+                muted ? inactiveNote() : undefined,
+                unsaved ? words('task.unsaved') : undefined,
               ]
                 .filter(Boolean)
                 .join(' ');
@@ -194,11 +202,11 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
                   own={form.draft[key]}
                   inheritLabel={
                     inherited === undefined
-                      ? 'Inherit'
-                      : `Inherit (now ${onOff(inherited.value)}, from ${sourceLabel(
-                          inherited.source,
-                          task.status,
-                        )})`
+                      ? words('task.inheritPlain')
+                      : words('task.inherit', {
+                          value: onOff(inherited.value),
+                          source: sourceLabel(inherited.source, column),
+                        })
                   }
                   hint={hint}
                   muted={muted}
@@ -224,10 +232,10 @@ export function TaskAiSettings({ task, targets }: TaskAiSettingsProps) {
                   <div key={key} className="ai__value">
                     <dt>{WORKFLOW_LABELS[key].label}</dt>
                     <dd>
-                      {`${boardValueText(key, effective.values)}, from ${sourceLabel(
-                        effective.sources[key],
-                        task.status,
-                      )}`}
+                      {words('task.valueFrom', {
+                        value: boardValueText(key, effective.values, statusLabel),
+                        source: sourceLabel(effective.sources[key], column),
+                      })}
                     </dd>
                   </div>
                 ))}

@@ -2,9 +2,10 @@ import type { FormEvent } from 'react';
 import type { WorkflowOverrides, WorkflowState } from '../../../../contract/v1/index';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useUnsavedChanges } from '../../../shared/hooks/unsavedChanges';
+import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { Button, Text } from '../../../shared/ui/index';
+import { useSettingsT } from '../i18n/index';
 import { orphanStatuses } from '../model/draft';
-import { WORKFLOW_LABELS } from '../model/labels';
 import { useWorkflowDraft } from '../model/useWorkflowDraft';
 import { BoardSettings } from './BoardSettings';
 import { ColumnSettings, StaleColumn } from './ColumnSettings';
@@ -21,16 +22,17 @@ export interface WorkflowFormProps {
  * stored as. One button saves both sections whole (`PUT /workflow`, last write wins).
  */
 export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) {
+  const t = useSettingsT();
+  const common = useT();
+  const statusLabel = useStatusLabel();
   const form = useWorkflowDraft(workflow);
   const saving = useAsyncAction(async () => {
     await form.save(onSave);
   });
   useUnsavedChanges({
     dirty: form.dirty,
-    what: 'the AI workflow settings of the board and its columns',
-    note: form.changedElsewhere
-      ? 'These settings were also changed elsewhere; saving replaces that change.'
-      : undefined,
+    what: t('unsaved.what'),
+    note: form.changedElsewhere ? t('elsewhere.note') : undefined,
     save: () => saving.attempt(),
     discard: form.discard,
   });
@@ -44,37 +46,30 @@ export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) 
 
   return (
     <form className="form settings" onSubmit={submit}>
-      <h3 className="settings__section">AI workflow</h3>
-      <Text tone="muted">
-        How an agent works on a task. Only what you change here is stored; everything else stays at
-        its default, and a column that says “same as the board” follows it.
-      </Text>
+      <h3 className="settings__section">{t('form.title')}</h3>
+      <Text tone="muted">{t('form.intro')}</Text>
 
       {form.changedElsewhere ? (
         <div className="notice" role="status">
-          <span>
-            These settings were changed elsewhere — in the file or by another window. Your unsaved
-            changes are kept; saving replaces the other change.
-          </span>
+          <span>{t('elsewhere')}</span>
           <Button size="small" onClick={form.takeElsewhere}>
-            Load the new settings
+            {t('elsewhere.load')}
           </Button>
         </div>
       ) : null}
 
       {hasOrphans ? (
         <div className="read-issues" role="alert">
-          <p className="read-issues__title">
-            These settings name a status this board does not have. The board refuses to save them:
-            remove them or choose another status.
-          </p>
+          <p className="read-issues__title">{t('orphans.title')}</p>
           <ul>
             {orphans.columns.map((status) => (
-              <li key={`column-${status}`}>Column “{status}”</li>
+              <li key={`column-${status}`}>
+                {t('orphans.column', { status: statusLabel(status) })}
+              </li>
             ))}
             {orphans.board.map(({ key, status }) => (
               <li key={key}>
-                {WORKFLOW_LABELS[key].label}: “{status}”
+                {t('orphans.setting', { label: t(`label.${key}`), status: statusLabel(status) })}
               </li>
             ))}
           </ul>
@@ -88,10 +83,8 @@ export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) 
         onChange={form.edit}
       />
 
-      <h4 className="settings__subsection">Columns</h4>
-      <Text tone="muted">
-        A column can differ from the board. “Same as the board” stores nothing for it.
-      </Text>
+      <h4 className="settings__subsection">{t('columns')}</h4>
+      <Text tone="muted">{t('columns.intro')}</Text>
       {statuses.map((status) => (
         <ColumnSettings
           key={status}
@@ -105,9 +98,7 @@ export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) 
         <StaleColumn key={status} status={status} overrides={form.draft} onChange={form.edit} />
       ))}
 
-      <Text tone="muted">
-        Project rules (ai.rules) are not settings; they are kept in board.config.yaml.
-      </Text>
+      <Text tone="muted">{t('rules')}</Text>
 
       {saving.error === undefined ? null : (
         <p className="form__error" role="alert">
@@ -116,10 +107,10 @@ export function WorkflowForm({ workflow, statuses, onSave }: WorkflowFormProps) 
       )}
       <div className="form__actions settings__actions">
         <p className="settings__saved" aria-live="polite">
-          {form.saved ? 'Saved.' : null}
+          {form.saved ? t('saved') : null}
         </p>
         <Button type="submit" variant="primary" disabled={!form.dirty || saving.pending}>
-          {saving.pending ? 'Saving…' : 'Save'}
+          {saving.pending ? common('ui.saving') : common('ui.save')}
         </Button>
       </div>
     </form>
