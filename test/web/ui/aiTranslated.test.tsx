@@ -43,7 +43,7 @@ describe('Send to AI in another language', () => {
     const rendered = await openGerman({ aiRun: failedRun });
 
     await rendered.user.click(within(details()).getByRole('button', { name: 'An KI senden' }));
-    expect(screen.getByRole('button', { name: 'Übergabe kopieren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Handoff kopieren' })).toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Claude Code' }));
 
     for (const label of ['Modell', 'Sitzung']) {
@@ -67,10 +67,10 @@ describe('Send to AI in another language', () => {
     const rendered = await openGerman({ body: 'Do the thing.', labels: ['ai'] });
 
     await rendered.user.click(within(details()).getByRole('button', { name: 'An KI senden' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Übergabe kopieren' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Handoff kopieren' }));
 
     expect(
-      await within(details()).findByText('Übergabe in die Zwischenablage kopiert.'),
+      await within(details()).findByText('Handoff in die Zwischenablage kopiert.'),
     ).toBeVisible();
     const expected = await rendered.board.client.handoff('T1');
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(expected));

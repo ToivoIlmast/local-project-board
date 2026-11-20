@@ -2,9 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Check, TaskVersion } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import type { TaskHistory } from '../../../api/index';
+import { useT } from '../../../shared/i18n/index';
+
+/** The failure the board gave no words for: its words are chosen when shown, in the language then. */
+const GENERIC = '';
 
 function messageOf(error: unknown): string {
-  return error instanceof Error && error.message !== '' ? error.message : 'Something went wrong.';
+  return error instanceof Error && error.message !== '' ? error.message : GENERIC;
+}
+
+function useSaid(): (message: string | undefined) => string | undefined {
+  const t = useT();
+  return (message) => (message === GENERIC ? t('ui.somethingWrong') : message);
 }
 
 /**
@@ -18,6 +27,7 @@ export function useTaskHistory(taskId: string): {
   retry: () => void;
 } {
   const { state, store } = useBoard();
+  const said = useSaid();
   const history = state.history[taskId];
   // A failure belongs to what the page knew when it happened: a read that lands after it — the
   // page's own, or the one the store makes when the board is back — is newer, and the message is
@@ -40,7 +50,7 @@ export function useTaskHistory(taskId: string): {
 
   return {
     history,
-    error: failure !== undefined && failure.seen === history ? failure.message : undefined,
+    error: said(failure !== undefined && failure.seen === history ? failure.message : undefined),
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
 }
@@ -51,6 +61,7 @@ export function useVersion(
   number: number | undefined,
 ): { version: TaskVersion | undefined; error: string | undefined } {
   const { state, store } = useBoard();
+  const said = useSaid();
   const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -67,7 +78,7 @@ export function useVersion(
 
   return {
     version: number === undefined ? undefined : state.snapshots[`${taskId}/${number}`],
-    error: number === undefined ? undefined : error,
+    error: number === undefined ? undefined : said(error),
   };
 }
 
@@ -77,6 +88,7 @@ export function useCheck(
   number: number,
 ): { check: Check | undefined; error: string | undefined; retry: () => void } {
   const { state, store } = useBoard();
+  const said = useSaid();
   const check = state.checks[`${taskId}/${number}`];
   const [failure, setFailure] = useState<{ message: string; seen: unknown } | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
@@ -99,7 +111,7 @@ export function useCheck(
 
   return {
     check,
-    error: failure !== undefined && failure.seen === check ? failure.message : undefined,
+    error: said(failure !== undefined && failure.seen === check ? failure.message : undefined),
     retry: useCallback(() => setAttempt((count) => count + 1), []),
   };
 }
@@ -114,6 +126,7 @@ export function useReportMarkdown(
   published: boolean,
 ): { markdown: string | undefined; error: string | undefined } {
   const { client } = useBoard();
+  const said = useSaid();
   const key = `${taskId}/${number}`;
   const [read, setRead] = useState<{ key: string; markdown?: string; error?: string }>({ key });
 
@@ -131,6 +144,6 @@ export function useReportMarkdown(
 
   // What was read for another report is never shown for this one.
   return read.key === key
-    ? { markdown: read.markdown, error: read.error }
+    ? { markdown: read.markdown, error: said(read.error) }
     : { markdown: undefined, error: undefined };
 }

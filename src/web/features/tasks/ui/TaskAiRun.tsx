@@ -85,27 +85,37 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
         : run.commit;
 
   // What the board and the agent wrote stays as it is, except the words that name a state.
-  const named = <K extends string>(
-    prefix: string,
-    value: string | undefined,
-    known: readonly K[],
-  ) =>
-    value !== undefined && (known as readonly string[]).includes(value)
-      ? t(`${prefix}.${value}` as 'ai.run.state.working')
-      : value;
+  const stateWords: Record<string, string> = {
+    working: t('ai.run.state.working'),
+    finished: t('ai.run.state.finished'),
+    failed: t('ai.run.state.failed'),
+    'needs-review': t('ai.run.state.needs-review'),
+  };
+  const modeWords: Record<string, string> = {
+    new: t('ai.run.mode.new'),
+    resume: t('ai.run.mode.resume'),
+    restart: t('ai.run.mode.restart'),
+  };
+  const checkWords: Record<string, string> = {
+    passed: t('ai.run.checks.passed'),
+    failed: t('ai.run.checks.failed'),
+    skipped: t('ai.run.checks.skipped'),
+  };
+  const said = (words: Record<string, string>, value: string | undefined) =>
+    value === undefined ? undefined : (words[value] ?? value);
 
   const rows: Row[] = [
     { term: t('ai.run.attempt'), value: run.runId === undefined ? undefined : `#${run.runId}` },
     {
       term: t('ai.run.state'),
-      value: named('ai.run.state', run.state, ['working', 'finished', 'failed', 'needs-review']),
+      value: said(stateWords, run.state),
     },
     { term: t('ai.run.model'), value: run.model },
-    { term: t('ai.run.mode'), value: named('ai.run.mode', run.mode, ['new', 'resume', 'restart']) },
+    { term: t('ai.run.mode'), value: said(modeWords, run.mode) },
     { term: t('ai.run.agent'), value: run.agent, byAgent: true },
     {
       term: t('ai.run.checks'),
-      value: named('ai.run.checks', run.checks, ['passed', 'failed', 'skipped']),
+      value: said(checkWords, run.checks),
       byAgent: true,
     },
     { term: t('ai.run.commit'), value: commitDisplay, byAgent: true },
