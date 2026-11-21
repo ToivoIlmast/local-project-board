@@ -12,6 +12,7 @@ import {
   type View,
   useBoardT,
 } from '../features/board/index';
+import { ArchivePage } from '../features/archive/index';
 import { BlocksView } from '../features/blocks/index';
 import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
@@ -51,7 +52,12 @@ function BoardScreen() {
   const [viewParam, setViewParam] = useSearchParam('view');
   // `?panel=blocks` was the Blocks of T91, before they had the main area: it is the view now.
   const legacyBlocks = panel === 'blocks';
-  const view: View = viewParam === 'blocks' || legacyBlocks ? 'blocks' : 'board';
+  const view: View =
+    viewParam === 'archive'
+      ? 'archive'
+      : viewParam === 'blocks' || legacyBlocks
+        ? 'blocks'
+        : 'board';
   const [creating, setCreating] = useState<{ status?: string | undefined } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -117,6 +123,10 @@ function BoardScreen() {
         onNewTask={() => setCreating({})}
         onReload={() => void store.load()}
         onShowPanel={show}
+        onShowArchive={() => {
+          if (view !== 'archive') setViewParam('archive');
+        }}
+        archiveOpen={view === 'archive'}
       />
 
       <ReadIssues issues={project.readIssues} />
@@ -153,12 +163,16 @@ function BoardScreen() {
           value={view}
           onChange={(next) => setViewParam(next === 'blocks' ? 'blocks' : null)}
         />
-        <TopicFilter topics={state.topics} value={topicFilter} onChange={setTopicFilter} />
+        {view === 'archive' ? null : (
+          <TopicFilter topics={state.topics} value={topicFilter} onChange={setTopicFilter} />
+        )}
       </div>
 
       <div className="page__body">
         <main className="page__board">
-          {view === 'blocks' ? (
+          {view === 'archive' ? (
+            <ArchivePage onOpen={open} />
+          ) : view === 'blocks' ? (
             <BlocksView topicFilter={topicFilter} onOpen={open} />
           ) : (
             <Board
