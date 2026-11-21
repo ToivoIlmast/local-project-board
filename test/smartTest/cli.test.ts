@@ -1,5 +1,14 @@
+import { jest } from '@jest/globals';
 import { createRequire } from 'node:module';
-import { decide, isCi, jestArgv, main, parseArgs } from '../../scripts/smart-test/cli.mjs';
+import {
+  decide,
+  isCi,
+  jestArgv,
+  main,
+  parseArgs,
+  withWorkerLimit,
+} from '../../scripts/smart-test/cli.mjs';
+import { PROFILE_ENV, type Resources } from '../../scripts/resources.mjs';
 import {
   FULL_JEST_ARGS,
   JEST_BIN_ARGS,
@@ -303,5 +312,75 @@ describe('what the person reads', () => {
     expect(code).toBe(2);
     expect(ran).toEqual([]);
     expect(text).toContain('--base needs a value');
+  });
+});
+
+describe('the workers of a local Jest run (scripts/resources.mjs)', () => {
+  const GIB = 1024 ** 3;
+  const small: () => Resources = () => ({
+    totalBytes: 4 * GIB,
+    availableBytes: 0.3 * GIB,
+    cores: 4,
+    load: undefined,
+  });
+  const large: () => Resources = () => ({
+    totalBytes: 16 * GIB,
+    availableBytes: 10 * GIB,
+    cores: 8,
+    load: undefined,
+  });
+  const smart = [...FULL_JEST_ARGS, '--runTestsByPath', 'test/t1.test.ts'];
+
+  function limit(args: string[], env: NodeJS.ProcessEnv, read: () => Resources) {
+    const lines: string[] = [];
+    return { args: withWorkerLimit(args, env, (line) => lines.push(line), read), lines };
+  }
+
+  it('little free memory: in band, right after the Jest binary, and the run says why', () => {
+    const { args, lines } = limit(smart, {}, small);
+    expect(args).toEqual([
+      ...JEST_BIN_ARGS,
+      '--maxWorkers=1',
+      ...smart.slice(JEST_BIN_ARGS.length),
+    ]);
+    expect(lines).toEqual([expect.stringMatching(/^Resources: CONSERVATIVE .* Jest: in band/)]);
+  });
+
+  it('room to spare, small Smart run: several workers, no idle limit (keeps Jest’s in-band path)', () => {
+    const { args } = limit(smart, {}, large);
+    expect(args.slice(0, JEST_BIN_ARGS.length + 2)).toEqual([
+      ...JEST_BIN_ARGS,
+      '--maxWorkers=7',
+      expect.not.stringContaining('workerIdleMemoryLimit'),
+    ]);
+    expect(args).not.toContain('--workerIdleMemoryLimit=768MB');
+  });
+
+  it('room to spare, Full run: several workers, held to their memory', () => {
+    const { args } = limit(FULL_JEST_ARGS, {}, large);
+    expect(args.slice(0, JEST_BIN_ARGS.length + 2)).toEqual([
+      ...JEST_BIN_ARGS,
+      '--maxWorkers=7',
+      '--workerIdleMemoryLimit=768MB',
+    ]);
+  });
+
+  it('CI: the command is left exactly as it was, and the machine is not even read', () => {
+    const read = jest.fn(large);
+    expect(limit(FULL_JEST_ARGS, { CI: 'true' }, read)).toEqual({
+      args: FULL_JEST_ARGS,
+      lines: [],
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('the person’s own --maxWorkers stands', () => {
+    const own = [...JEST_BIN_ARGS, 'test/a.test.ts', '--maxWorkers', '3', ...PROJECT_ARGS];
+    expect(limit(own, {}, small)).toEqual({ args: own, lines: [] });
+  });
+
+  it('the profile set in the environment is used', () => {
+    const { args } = limit(smart, { [PROFILE_ENV]: 'conservative' }, large);
+    expect(args).toContain('--maxWorkers=1');
   });
 });

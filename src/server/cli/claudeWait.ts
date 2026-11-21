@@ -63,6 +63,10 @@ export async function waitForRuns(
   };
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', abort);
+  // The terminal closed. During a session the session hears it too (spawnSession passes it on)
+  // and its end is still recorded; after that the runner stops, instead of staying behind with
+  // no terminal and taking tasks that would start Claude Code where nobody can see it.
+  process.on('SIGHUP', abort);
 
   let toldGone = false;
   // The token of a board that refused `signals`: one of an earlier version. It is not offered
@@ -208,6 +212,7 @@ export async function waitForRuns(
   } finally {
     process.off('SIGINT', interrupt);
     process.off('SIGTERM', abort);
+    process.off('SIGHUP', abort);
     environment.signal?.removeEventListener('abort', abort);
   }
   return 0;

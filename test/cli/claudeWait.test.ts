@@ -313,6 +313,23 @@ describe('local-project-board claude --wait', () => {
       expect((await sendToClaude(state, 'T1')).status).toBe(409);
       expect(await claude.calls()).toEqual([]);
     });
+
+    it('stops when its terminal closes (SIGHUP), instead of waiting on with no terminal', async () => {
+      const { root, state } = await boardWithTasks();
+      const claude = await fakeClaude();
+      const runner = cliInBackground(['claude', '--wait'], { cwd: root, env: claude.env() });
+      await runner.printed(WAITING);
+
+      const before = process.listenerCount('SIGHUP');
+      // Only the listeners run: the event is emitted, no signal is sent to the test process.
+      process.emit('SIGHUP', 'SIGHUP');
+      const ended = await Promise.race([runner.done, refusedWithin(5_000)]);
+
+      expect(ended.exitCode).toBe(0);
+      expect(process.listenerCount('SIGHUP')).toBe(before - 1);
+      expect((await sendToClaude(state, 'T1')).status).toBe(409);
+      expect(await claude.calls()).toEqual([]);
+    });
   });
 
   it('finds the board again when it was restarted, on its new address', async () => {
