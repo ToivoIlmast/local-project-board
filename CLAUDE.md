@@ -32,6 +32,14 @@ passing. Run `npm run test:full` (or `npm test -- --full`) only when the task or
 If git cannot tell what changed, `npm run check` fails and says why, rather than linting
 everything.
 
+The steps run one at a time. Jest gets as many workers as the machine can spare **now** — free
+memory, idle cores and load, not installed RAM — in one of three profiles: Conservative (in
+band, one process; also whenever the resources cannot be read), Balanced or Performance. The run
+prints a `Resources:` line saying which and why. Do not pass `--maxWorkers` or start tests in
+parallel yourself. To choose by hand: `BOARD_RESOURCE_PROFILE=conservative|balanced|performance`
+(default `auto`), e.g. in `.claude/settings.json` → `env`. Thresholds: docs/local-resources.md.
+Stopping a check (Ctrl+C; on Linux and macOS also SIGTERM and SIGHUP) stops its child process too and starts no further step.
+
 **Do not run automatically** (CI runs them on every push and pull request): `npm run lint`,
 `npm run format:check`, `npm run typecheck`, `npm run check:cycles`, `npm run test:full`,
 `npm run build`, `npm run test:pack`, `npm run test:e2e`, or any other whole-project,
@@ -50,7 +58,9 @@ far a change reaches (dependencies, configuration, the git state, most of the su
 - **Never report a Smart run as "all tests pass".** Quote its last line, e.g. "Smart mode
   passed: 12 of 145 test files ran, 133 did not". Only Full mode (or CI) checks everything.
 - While iterating, `npm test -- <path or pattern>` runs exactly the tests you name (MANUAL).
-  Finish with plain `npm test` so the selection covers everything you changed.
+  Finish with `npm run check` so the selection covers everything you changed. It already runs
+  the Smart tests: do not run `npm test` again before or after it — the same tests would run
+  twice.
 - `npm test -- --plan` shows what would run and why, without running it.
 - Use `npm test` / `npm run test:full`, not `npx jest`, so every run reports what it covered.
 - `npm run test:pack` and `npm run test:e2e` are separate and build first; CI runs them.

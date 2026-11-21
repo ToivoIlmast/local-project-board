@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  COMMAND_LINE_BUDGET,
   ESLINT_ARGS,
   PRETTIER_ARGS,
   TEST_ARGS,
+  chunkFiles,
   main as check,
 } from '../../scripts/check-changed.mjs';
 import type { decide } from '../../scripts/smart-test/cli.mjs';
@@ -172,5 +174,53 @@ describe('`npm run test:full` keeps its contract', () => {
     ).scripts;
     expect(scripts['test:full']).toBe(`node ${FULL_JEST_ARGS.join(' ')}`);
     expect(scripts['check']).toBe('node scripts/check.mjs');
+  });
+});
+
+describe('`npm run check` keeps its tools few and one at a time', () => {
+  it('cuts the file list by command-line length, not by a count: one ESLint call where it fits', () => {
+    const files = Array.from({ length: 200 }, (_, i) => `src/server/module${i}.ts`);
+    expect(chunkFiles(ESLINT_ARGS, files)).toEqual([files]);
+  });
+
+  it('never makes a command line longer than the budget, and keeps every file in order', () => {
+    const files = Array.from({ length: 50 }, (_, i) => `src/${'x'.repeat(40)}${i}.ts`);
+    const chunks = chunkFiles(ESLINT_ARGS, files, 1_000);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.flat()).toEqual(files);
+    for (const chunk of chunks) {
+      const length = [process.execPath, ...ESLINT_ARGS, ...chunk].reduce(
+        (sum, arg) => sum + arg.length + 3,
+        0,
+      );
+      expect(length).toBeLessThanOrEqual(1_000);
+    }
+    expect(COMMAND_LINE_BUDGET).toBeLessThan(32_767);
+  });
+
+  it('waits for each tool before starting the next', async () => {
+    const events: string[] = [];
+    let running = 0;
+    const code = await check({
+      root: '/repo',
+      deps: {
+        collectChanges: changed('src/a.ts'),
+        exists: () => true,
+        node: async (args) => {
+          running += 1;
+          events.push(`start ${String(args[0])} with ${running} running`);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          running -= 1;
+          return 0;
+        },
+        out: () => undefined,
+      },
+    });
+    expect(code).toBe(0);
+    expect(events).toEqual([
+      `start ${PRETTIER_ARGS[0]} with 1 running`,
+      `start ${ESLINT_ARGS[0]} with 1 running`,
+      `start ${TEST_ARGS[0]} with 1 running`,
+    ]);
   });
 });

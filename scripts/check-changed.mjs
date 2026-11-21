@@ -14,18 +14,22 @@
  * git cannot answer, this does not guess and does not widen to a full lint: it says why and fails,
  * naming the full commands to run by hand.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runChild } from './run-child.mjs';
 import { collectChanges } from './smart-test/changes.mjs';
 import { SKIPPED_FULL_EXIT } from './smart-test/cli.mjs';
 
 /** Extensions ESLint is configured for in this repository. */
 const LINTED = /\.(?:[cm]?js|jsx|ts|tsx|mts|cts)$/;
 
-/** Windows limits a command line to ~32k characters; keep each call well under it. */
-const CHUNK = 80;
+/**
+ * Windows limits a command line to 32 767 characters; each call stays well under it. Calls are
+ * cut by length, not by a count of files: every ESLint call builds the TypeScript program of the
+ * project again (typed rules, `projectService`), so fewer calls is less time and memory.
+ */
+export const COMMAND_LINE_BUDGET = 24_000;
 
 export const PRETTIER_ARGS = [
   'node_modules/prettier/bin/prettier.cjs',
@@ -50,7 +54,8 @@ export function filesToCheck(changes) {
  * @typedef {object} CheckDeps
  * @property {typeof collectChanges} collectChanges
  * @property {(path: string) => boolean} exists
- * @property {(args: string[], root: string) => number | null} node  Runs `node <args>`.
+ * @property {(args: string[], root: string) => number | null | Promise<number | null>} node
+ *   Runs `node <args>` and waits for it; a stop of this process is passed on to it.
  * @property {(line: string) => void} out
  */
 
@@ -58,9 +63,38 @@ export function filesToCheck(changes) {
 const realDeps = {
   collectChanges,
   exists: existsSync,
-  node: (args, root) => spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit' }).status,
+  node: (args, root) => runChild(process.execPath, args, { cwd: root }),
   out: (line) => process.stdout.write(`${line}\n`),
 };
+
+/**
+ * The files split into calls whose command lines stay under the budget, in order.
+ * @param {string[]} command  node arguments before the file list
+ * @param {string[]} files
+ * @param {number} [budget]
+ * @returns {string[][]}
+ */
+export function chunkFiles(command, files, budget = COMMAND_LINE_BUDGET) {
+  // Each argument costs its length plus a space and the quotes Windows may add.
+  const fixed = [process.execPath, ...command].reduce((sum, arg) => sum + arg.length + 3, 0);
+  /** @type {string[][]} */
+  const chunks = [];
+  /** @type {string[]} */
+  let current = [];
+  let length = fixed;
+  for (const file of files) {
+    const cost = file.length + 3;
+    if (current.length > 0 && length + cost > budget) {
+      chunks.push(current);
+      current = [];
+      length = fixed;
+    }
+    current.push(file);
+    length += cost;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
 
 /**
  * @param {CheckDeps} deps
@@ -68,17 +102,18 @@ const realDeps = {
  * @param {string} label
  * @param {string[]} command  node arguments before the file list
  * @param {string[]} files
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-function runOn(deps, root, label, command, files) {
+async function runOn(deps, root, label, command, files) {
   if (files.length === 0) {
     deps.out(`\n${label}: no changed files to check.`);
     return true;
   }
   deps.out(`\n${label}: ${files.length} changed file(s).`);
   let ok = true;
-  for (let i = 0; i < files.length; i += CHUNK) {
-    if (deps.node([...command, ...files.slice(i, i + CHUNK)], root) !== 0) ok = false;
+  // One call at a time: the tools never run side by side.
+  for (const chunk of chunkFiles(command, files)) {
+    if ((await deps.node([...command, ...chunk], root)) !== 0) ok = false;
   }
   return ok;
 }
@@ -105,11 +140,11 @@ export async function main({
   const existing = (/** @type {string[]} */ files) =>
     files.filter((f) => deps.exists(join(root, f)));
 
-  const formatOk = runOn(deps, root, 'Prettier', PRETTIER_ARGS, existing(format));
-  const lintOk = runOn(deps, root, 'ESLint', ESLINT_ARGS, existing(lint));
+  const formatOk = await runOn(deps, root, 'Prettier', PRETTIER_ARGS, existing(format));
+  const lintOk = await runOn(deps, root, 'ESLint', ESLINT_ARGS, existing(lint));
 
   deps.out('\nTests: npm test -- --never-full (Smart mode, never Full)');
-  const testCode = deps.node(TEST_ARGS, root);
+  const testCode = await deps.node(TEST_ARGS, root);
   const testsSkipped = testCode === SKIPPED_FULL_EXIT;
   const testsOk = testCode === 0 || testsSkipped;
 

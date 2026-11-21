@@ -14,7 +14,6 @@
  *   npm test -- --changed <path>     pretend <path> changed (repeatable); git is not read
  *   npm test -- <file|pattern> | -t  MANUAL: Jest runs exactly what you named
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +22,14 @@ import { loadJest } from './jest.mjs';
 import { planTests } from './plan.mjs';
 import { footer, header, skippedFull, toJson } from './report.mjs';
 import { FULL_JEST_ARGS, JEST_BIN_ARGS, PROJECT_ARGS } from './rules.mjs';
+import {
+  describePlan,
+  hasWorkerOption,
+  jestWorkerArgs,
+  planResources,
+  readResources,
+} from '../resources.mjs';
+import { runChild } from '../run-child.mjs';
 
 /**
  * The exit code of a `--never-full` run that would have been Full and so started no Jest:
@@ -275,7 +282,8 @@ export function jestArgv(decision, options) {
 
 /**
  * @param {{ argv: string[], env: NodeJS.ProcessEnv, root?: string,
- *   out?: (line: string) => void, run?: (args: string[], root: string) => number | null,
+ *   out?: (line: string) => void,
+ *   run?: (args: string[], root: string) => number | null | Promise<number | null>,
  *   deps?: DecideDeps }} io
  * @returns {Promise<number>}
  */
@@ -284,7 +292,7 @@ export async function main({
   env,
   root = realpathSync.native(fileURLToPath(new URL('../..', import.meta.url))),
   out = (line) => process.stdout.write(`${line}\n`),
-  run = runNode,
+  run = (args, at) => runJest(args, at, env, out),
   deps = realDeps,
 }) {
   /** @type {Options} */
@@ -318,19 +326,42 @@ export async function main({
   for (const line of header(decision)) out(line);
   const args = jestArgv(decision, options);
   if (args === null) return 0;
-  const code = run(args, root);
+  const code = await run(args, root);
   for (const line of footer(decision, code)) out(line);
   return code ?? 1;
 }
 
 /**
+ * The Jest command line with the workers this machine can afford now (scripts/resources.mjs),
+ * placed right after the Jest binary. Unchanged under CI, and when the command line already says
+ * how many processes to use.
+ * @param {string[]} args  A command line from `jestArgv`.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {(line: string) => void} out
+ * @param {() => import('../resources.mjs').Resources} [read]
+ * @returns {string[]}
+ */
+export function withWorkerLimit(args, env, out, read = readResources) {
+  const own = args.slice(JEST_BIN_ARGS.length);
+  // Neither CI nor a choice of the person's own needs the machine to be read at all.
+  if (isCi(env) || hasWorkerOption(own)) return args;
+  const { plan, warning } = planResources(read(), env);
+  const extra = jestWorkerArgs(plan, own);
+  if (warning !== undefined) out(`! ${warning}`);
+  if (extra.length === 0) return args;
+  out(describePlan(plan));
+  return [...JEST_BIN_ARGS, ...extra, ...own];
+}
+
+/**
+ * Starts Jest and waits for it; a stop of this process is passed on to Jest (scripts/run-child.mjs).
  * @param {string[]} args
  * @param {string} root
+ * @param {NodeJS.ProcessEnv} env
+ * @param {(line: string) => void} out
  */
-function runNode(args, root) {
-  const result = spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit' });
-  if (result.error) throw result.error;
-  return result.status;
+function runJest(args, root, env, out) {
+  return runChild(process.execPath, withWorkerLimit(args, env, out), { cwd: root });
 }
 
 const USAGE = `npm test — Smart mode: only the tests your changes can reach (docs/adr/0033).
