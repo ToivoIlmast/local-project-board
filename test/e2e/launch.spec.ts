@@ -51,3 +51,34 @@ test('the dialog of a start of Claude Code is used from the keyboard, and the ru
   const task = (await board.api('/api/v1/tasks/T1')) as { workflow?: unknown };
   expect(task.workflow).toEqual({ reportLanguage: 'fi' });
 });
+
+test('the comment of the dialog reaches a runner that accepts it, and the task is left as it was (T9)', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: { title: 'Ship it', status: 'todo', body: 'The description.' },
+  });
+  const runner = await board.waitForRun('check,research,comment');
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Ship it' }).click();
+  const details = page.getByRole('complementary', { name: 'Task T1' });
+  await details.getByRole('button', { name: 'Send to AI' }).click();
+  await page.getByRole('button', { name: 'Claude Code' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Start Claude Code on T1' });
+  await dialog.getByLabel('Comment (optional)').fill('Keep the public API.');
+  await dialog.getByRole('button', { name: 'Start' }).click();
+
+  await expect(details.getByText(/^Sent T1 to the runner /)).toBeVisible();
+  expect(await runner.request).toEqual({
+    type: 'run.requested',
+    taskId: 'T1',
+    agent: 'claude-code',
+    comment: 'Keep the public API.',
+  });
+  const task = (await board.api('/api/v1/tasks/T1')) as { body: string };
+  expect(task.body).toContain('The description.');
+  expect(task.body).not.toContain('Keep the public API.');
+});

@@ -1,14 +1,19 @@
 import { useId, useState, type FormEvent } from 'react';
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../../../../contract/v1/index';
+import {
+  COMMENT_MAX_LENGTH,
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
+} from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
 import { useAsyncAction } from '../../../shared/hooks/useAsyncAction';
 import { useT } from '../../../shared/i18n/index';
-import { Button, Field, Modal, Select } from '../../../shared/ui/index';
+import { Button, Field, Modal, Select, Textarea } from '../../../shared/ui/index';
 import { languageOptionLabel, setTaskLanguage } from '../../settings/index';
 import { useTaskT } from '../i18n/details';
 import type { TargetDialogProps } from '../model/agentTarget';
 import {
   chosenModel,
+  commentTooLong,
   initialModel,
   isWorking,
   resumeBlocked,
@@ -45,6 +50,7 @@ export function ClaudeCodeLaunch({
   const formId = useId();
   const [model, setModel] = useState<ModelDraft>(() => initialModel(task.aiRun));
   const [language, setLanguage] = useState<SupportedLanguage | undefined>(undefined);
+  const [comment, setComment] = useState('');
   const [session, setSession] = useState<'new' | 'resume'>(initialSession);
   const read = useEffectiveWorkflow(task, true);
   const research = launchNotice(useTaskHistory(task.id).history?.checks);
@@ -58,20 +64,21 @@ export function ClaudeCodeLaunch({
   const inEffect: SupportedLanguage | undefined =
     read.effective === undefined ? undefined : (read.effective.values.reportLanguage ?? 'en');
   const sent = chosenModel(model);
+  const tooLong = commentTooLong(comment);
   const working = isWorking(task.aiRun);
   const blocked = resumeBlocked(task.aiRun);
   // A Resume that is no longer possible — the run went on while the dialog was open — is not sent.
   const mode = session === 'resume' && blocked === undefined ? 'resume' : 'new';
 
   const start = useAsyncAction(async () => {
-    if (sent === null || working) return;
+    if (sent === null || working || tooLong) return;
     if (language !== undefined && inEffect !== undefined && language !== inEffect) {
       await store.updateTask(task.id, {
         workflow: settingsRequest(setTaskLanguage(task.workflow ?? {}, language)),
       });
     }
     try {
-      await client.runTask(task.id, runRequest(sent, mode));
+      await client.runTask(task.id, runRequest(sent, mode, comment));
     } catch (error) {
       // A task that became blocked since the page last read it: the reasons are the answer.
       throw explainError(error);
@@ -95,7 +102,7 @@ export function ClaudeCodeLaunch({
             type="submit"
             form={formId}
             variant="primary"
-            disabled={working || sent === null || start.pending}
+            disabled={working || sent === null || tooLong || start.pending}
           >
             {start.pending ? t('ai.launch.sending') : t('ai.launch.start')}
           </Button>
@@ -160,6 +167,27 @@ export function ClaudeCodeLaunch({
               ]}
               value={mode}
               onChange={(event) => setSession(event.target.value as 'new' | 'resume')}
+            />
+          )}
+        </Field>
+
+        <Field
+          label={t('ai.comment.label')}
+          hint={t('ai.comment.hint')}
+          error={
+            tooLong
+              ? t('ai.comment.tooLong', { count: comment.length, max: COMMENT_MAX_LENGTH })
+              : undefined
+          }
+        >
+          {(id, hintId) => (
+            <Textarea
+              id={id}
+              aria-describedby={hintId}
+              rows={4}
+              aria-invalid={tooLong}
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
             />
           )}
         </Field>

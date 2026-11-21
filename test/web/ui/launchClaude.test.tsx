@@ -184,6 +184,69 @@ describe('the dialog of Send to AI → Claude Code (T38)', () => {
     expect(within(details()).queryByText(STARTING)).not.toBeInTheDocument();
   });
 
+  it('has an optional Comment field that says it does not replace the description (T9)', async () => {
+    await openLaunch();
+
+    const comment = within(dialog()).getByLabelText('Comment (optional)');
+    expect(comment).toHaveValue('');
+    expect(comment).toHaveAccessibleDescription(/does not replace the task description/);
+  });
+
+  it('sends the comment as typed, and leaves the task alone (T9)', async () => {
+    const rendered = await openLaunch();
+
+    await rendered.user.type(
+      within(dialog()).getByLabelText('Comment (optional)'),
+      'Line one{Enter}  <b>two</b>',
+    );
+    await rendered.user.click(start());
+
+    await within(details()).findByText(STARTING);
+    expect(rendered.board.runs).toEqual([
+      { taskId: 'T1', agent: 'claude-code', comment: 'Line one\n  <b>two</b>' },
+    ]);
+    expect(rendered.board.calls).not.toContain('updateTask');
+  });
+
+  it('does not send a comment of blanks only: the body is the one without a comment (T9)', async () => {
+    const rendered = await openLaunch();
+
+    await rendered.user.type(within(dialog()).getByLabelText('Comment (optional)'), '  {Enter} ');
+    await rendered.user.click(start());
+
+    await within(details()).findByText(STARTING);
+    expect(rendered.board.runs).toEqual([{ taskId: 'T1', agent: 'claude-code' }]);
+  });
+
+  it('refuses a comment longer than the contract takes, before sending (T9)', async () => {
+    const rendered = await openLaunch();
+
+    const comment = within(dialog()).getByLabelText('Comment (optional)');
+    await rendered.user.click(comment);
+    await rendered.user.paste('x'.repeat(4001));
+
+    expect(await within(dialog()).findByRole('alert')).toHaveTextContent(
+      'The comment is too long: 4001 of 4000 characters.',
+    );
+    expect(comment).toHaveAttribute('aria-invalid', 'true');
+    expect(start()).toBeDisabled();
+    expect(rendered.board.calls).not.toContain('runTask');
+  });
+
+  it('keeps the dialog open and the comment when the run is refused (T9)', async () => {
+    const rendered = await openLaunch();
+    rendered.board.fail(
+      'runTask',
+      new ApiError(409, 'NO_AGENT_RUNNER', 'Nothing is waiting to start Claude Code.'),
+    );
+
+    await rendered.user.type(within(dialog()).getByLabelText('Comment (optional)'), 'Keep me');
+    await rendered.user.click(start());
+
+    expect(await within(dialog()).findByRole('alert')).toHaveTextContent('Nothing is waiting');
+    expect(within(dialog()).getByLabelText('Comment (optional)')).toHaveValue('Keep me');
+  });
+
   it('is cancelled without a request, and gives the focus back to the menu', async () => {
     const rendered = await openLaunch();
 

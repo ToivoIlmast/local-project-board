@@ -145,6 +145,21 @@ describe('"Send to AI → Claude Code" in the menu of a card (T19, T27)', () => 
     expect(rendered.board.runs).toEqual([{ taskId: 'T2', agent: 'claude-code' }]);
     expect(rendered.board.calls).not.toContain('handoff');
   });
+
+  it('has the optional Comment field, and sends what was typed with the run of that card (T9)', async () => {
+    const rendered = await renderBoard({ tasks: seed() });
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Actions for T2' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Send to AI: Claude Code' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T2' });
+    await rendered.user.type(within(dialog).getByLabelText('Comment (optional)'), 'Mind the API');
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
+
+    await within(cardOf('Other task')).findByText(/^Sent T2 to the runner /);
+    expect(rendered.board.runs).toEqual([
+      { taskId: 'T2', agent: 'claude-code', comment: 'Mind the API' },
+    ]);
+  });
 });
 
 describe('"Copy handoff" when the board has not said what blocks a task (fail-open)', () => {

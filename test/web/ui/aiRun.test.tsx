@@ -44,6 +44,24 @@ const run = () => within(details()).queryByRole('region', { name: 'AI run' });
 const value = (term: string): string | null | undefined =>
   within(run() as HTMLElement).getByText(term).nextElementSibling?.textContent;
 
+describe('the comment of a run (T9)', () => {
+  it('shows it read-only, as text with its line breaks, never as markdown or HTML', async () => {
+    await openTask({ aiRun: { ...finished, comment: 'Keep the API.\n**not bold** <b>x</b>' } });
+
+    const text = within(run() as HTMLElement).getByText(/Keep the API\./);
+    expect(text.textContent).toBe('Keep the API.\n**not bold** <b>x</b>');
+    expect(text.querySelector('b, strong')).toBeNull();
+    expect(text.tagName).toBe('P');
+    expect(within(run() as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing when the run has no comment', async () => {
+    await openTask({ aiRun: finished });
+
+    expect(within(run() as HTMLElement).queryByText('Comment')).not.toBeInTheDocument();
+  });
+});
+
 describe('the AI run in the details of a task (T27 + T20)', () => {
   it('shows what the agent reported: who, how it went, the checks, the commit, the times and the branch', async () => {
     await openTask({ aiRun: finished, branch: 'task/T1-ship-it' }, [aCommit(COMMIT_SHA)]);

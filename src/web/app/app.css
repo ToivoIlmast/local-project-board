@@ -887,3 +887,18 @@
 .review__places dd {
   margin: 0;
 }
+
+/* The comment of a run, as its author wrote it: text, with its line breaks. */
+.ai__comment-title {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai__comment-text {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
