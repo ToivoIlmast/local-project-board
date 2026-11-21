@@ -9,5 +9,6 @@ export * from './readiness.js';
 export * from './revalidation.js';
 export * from './routes.js';
 export * from './schemas.js';
+export * from './textRule.js';
 export * from './tokenRule.js';
 export * from './validate.js';

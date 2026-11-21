@@ -3,6 +3,7 @@ import type { DocumentMeta } from '../../core/model/document.js';
 import type { Check, CheckKind, CheckTrigger, TaskVersion } from '../../core/model/history.js';
 import { recommendationAxes, summarizeComment } from '../../core/rules/history.js';
 import { API_BASE_PATH } from './routes.js';
+import { TEXT_RULE } from './textRule.js';
 import { TOKEN_RULE } from './tokenRule.js';
 
 export interface CheckHandoffOptions {
@@ -78,6 +79,7 @@ function commonRules(api: string, taskId: string): string[] {
     `Write nothing to the board except the report below: do not \`PATCH\` task ${taskId}, do not` +
       ' move it, do not write a document, a report or the run of the task.',
     TOKEN_RULE,
+    TEXT_RULE,
     'Do not apply your recommendations yourself. A person decides on each of them, one by one.',
   ];
 }

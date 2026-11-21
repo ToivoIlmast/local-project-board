@@ -1,5 +1,6 @@
 import { API_BASE_PATH, routeList, type Route } from './routes.js';
 import { errorCodeSchema } from './schemas.js';
+import { TEXT_RULE } from './textRule.js';
 import { TOKEN_RULE } from './tokenRule.js';
 
 /**
@@ -106,6 +107,8 @@ export function generateInstructions({
     'The board reads the token from that header only.',
     '',
     TOKEN_RULE,
+    '',
+    TEXT_RULE,
   ];
 
   if (board) {

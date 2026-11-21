@@ -64,6 +64,40 @@ describe('documents over HTTP', () => {
     ]);
   });
 
+  describe('non-ASCII content', () => {
+    const samples: readonly (readonly [string, string])[] = [
+      ['Cyrillic', 'Привет, мир! Всё работает.'],
+      ['quotes, ё and a long dash', '«Ёжик» — в тумане; ёлка, щётка'],
+      ['emoji', 'Готово ✅ 🚀 👨‍👩‍👧'],
+      [
+        'multiline Markdown',
+        '# Отчёт\n\n- пункт «один»\n- item two\n\n```ts\nconst s = "ё";\n```\n',
+      ],
+      ['mixed English and Russian', 'Fixed the баг in `parseTask` — теперь OK.\n'],
+    ];
+
+    it.each(samples)(
+      'keeps %s byte for byte, as bytes of a UTF-8 request body',
+      async (_n, text) => {
+        // The body is the JSON text of a file, sent as it is with the charset named: the way a
+        // file-based client (`curl --data-binary @file`) sends it, with no codepage in between.
+        const body = JSON.stringify({ content: text });
+        await board
+          .put(`${documents()}/ru.md`)
+          .set('Content-Type', 'application/json; charset=utf-8')
+          .send(body)
+          .expect(200);
+
+        const onDisk = await readFile(join(board.root, '.board', 'tasks', taskId, 'ru.md'));
+        expect(onDisk.equals(Buffer.from(text, 'utf8'))).toBe(true);
+
+        const read = await board.get(`${documents()}/ru.md`).buffer(true).expect(200);
+        expect(read.headers['content-type']).toMatch(/charset=utf-8/i);
+        expect(read.text).toBe(text);
+      },
+    );
+  });
+
   it('answers 404 for a document and a task that do not exist', async () => {
     const missing = await board.get(`${documents()}/absent.md`).expect(404);
     expect(errorResponseSchema.parse(missing.body).error.code).toBe('DOCUMENT_NOT_FOUND');
