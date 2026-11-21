@@ -170,6 +170,13 @@ export function TaskAiRun({ task }: TaskAiRunProps) {
           {t('ai.run.copyCommand')}
         </Button>
       )}
+      {run.comment === undefined ? null : (
+        <section className="ai__comment" aria-label={t('ai.run.comment')}>
+          <h4 className="ai__comment-title">{t('ai.run.comment')}</h4>
+          {/* Plain text: no markdown, no HTML; the line breaks are kept by the style. */}
+          <p className="ai__comment-text">{run.comment}</p>
+        </section>
+      )}
       {failure === undefined ? null : (
         <p className="notice" role="alert">
           {failure}

@@ -1,5 +1,6 @@
 import {
   CLAUDE_MODEL_ALIASES,
+  COMMENT_MAX_LENGTH,
   claudeModelSchema,
   type AiRun,
   type RunTaskRequest,
@@ -45,17 +46,27 @@ export function chosenModel(draft: ModelDraft): string | undefined | null {
 }
 
 /**
- * The body of `POST /tasks/:id/run`: the agent, the model only when one was chosen, and the mode
+ * The body of `POST /tasks/:id/run`: the agent, the model only when one was chosen, the mode
  * only when the session is continued or started over — a new session is asked for as it always
- * was, with no word about it (T36, T37, T39).
+ * was, with no word about it (T36, T37, T39) — and the comment only when it has a character
+ * that is not a blank (T9): an empty field leaves the body as it was.
  */
-export function runRequest(model: string | undefined, mode: SessionMode = 'new'): RunTaskRequest {
+export function runRequest(
+  model: string | undefined,
+  mode: SessionMode = 'new',
+  comment = '',
+): RunTaskRequest {
   return {
     agent: 'claude-code',
     ...(model === undefined ? {} : { model }),
     ...(mode === 'new' ? {} : { mode }),
+    ...(/\S/.test(comment) ? { comment } : {}),
   };
 }
+
+/** Whether the comment is longer than the contract takes; a blank one is never sent, so never long. */
+export const commentTooLong = (comment: string): boolean =>
+  /\S/.test(comment) && comment.length > COMMENT_MAX_LENGTH;
 
 /**
  * The body of `POST /tasks/:id/run` for a research (ADR-0029 T54): the kind, the model only when
