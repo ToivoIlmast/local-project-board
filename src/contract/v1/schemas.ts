@@ -212,6 +212,9 @@ export const moveTaskRequestSchema = z.strictObject({
   before: taskSchema.shape.id.optional(),
 });
 
+/** Archive and restore take nothing: an absent body is the same as an empty one. */
+export const archiveTaskRequestSchema = z.strictObject({}).default({});
+
 /**
  * The overrides of the board and of its columns, both sections required: a request that leaves
  * one out would otherwise wipe it without saying so. Never the state that GET answers with —

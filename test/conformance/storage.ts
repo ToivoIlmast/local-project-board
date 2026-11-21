@@ -203,6 +203,41 @@ export function runStorageConformance(harness: StorageHarness): void {
       });
     });
 
+    describe('archived (T3)', () => {
+      const AT = '2026-11-06T10:00:00.000Z';
+
+      it('is set and cleared by updateTask, and nothing else of the task changes', async () => {
+        const created = await storage.createTask(newTask({ branch: 'feat/x' }));
+        const archived = await storage.updateTask(created.id, { archived: { at: AT } });
+        expect(archived.archived).toEqual({ at: AT });
+        expect(taskSchema.parse(archived)).toEqual(archived);
+        expect({ ...archived, archived: undefined, updatedAt: '' }).toEqual({
+          ...created,
+          archived: undefined,
+          updatedAt: '',
+        });
+
+        const restored = await storage.updateTask(created.id, { archived: null });
+        expect(restored).not.toHaveProperty('archived');
+        expect({ ...restored, updatedAt: '' }).toEqual({ ...created, updatedAt: '' });
+      });
+
+      it('is kept by a write of something else, and by a reopen (INVARIANT)', async () => {
+        const created = await storage.createTask(newTask());
+        await storage.updateTask(created.id, { archived: { at: AT } });
+        await storage.updateTask(created.id, { title: 'Renamed', labels: ['y'] });
+        const next = await reopen(storage);
+        expect((await next.getTask(created.id))?.archived).toEqual({ at: AT });
+        expect((await next.listTasks())[0]?.archived).toEqual({ at: AT });
+      });
+
+      it('is not there for a task that never had it', async () => {
+        const created = await storage.createTask(newTask());
+        expect(await storage.getTask(created.id)).not.toHaveProperty('archived');
+        expect(created).not.toHaveProperty('archived');
+      });
+    });
+
     describe('topic, block and dependsOn of a task (ADR-0032 §3, T82)', () => {
       /** P1 with K1 and P2 with K2, so a block of the other topic can be named. */
       async function topics(provider: Storage = storage): Promise<void> {

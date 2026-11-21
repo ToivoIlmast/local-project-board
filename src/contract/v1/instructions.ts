@@ -27,6 +27,8 @@ export const API_RULES: readonly string[] = [
     'on a blocked task. This rule is information for you, not a gate on the server: the board ' +
     'refuses only the start of a run and the handoff of a task without a working run ' +
     '(`409 TASK_BLOCKED`), never your other requests.',
+  'A task with `archived` is not on the board. Do not work on it: the board refuses its handoff ' +
+    'and the start of a run with `409 TASK_ARCHIVED`, and its status does not change.',
 ];
 
 /** What the board itself is called and what a task on it may say; read at generation time. */

@@ -332,6 +332,34 @@ export const routes = {
     ai: { include: true },
   }),
 
+  'tasks.archive': route({
+    id: 'tasks.archive',
+    method: 'POST',
+    path: '/tasks/:id/archive',
+    summary: 'Archive a task: it leaves the board and keeps its status, place and history',
+    params: taskParams,
+    request: s.archiveTaskRequestSchema,
+    response: json(s.taskSchema),
+    example: {
+      params: { id: 'T12' },
+      body: {},
+      response: { ...exampleTask, archived: { at: '2026-09-21T12:00:00.000Z' } },
+    },
+    ai: { include: false },
+  }),
+
+  'tasks.restore': route({
+    id: 'tasks.restore',
+    method: 'POST',
+    path: '/tasks/:id/restore',
+    summary: 'Restore an archived task to its status and its place in the column',
+    params: taskParams,
+    request: s.archiveTaskRequestSchema,
+    response: json(s.taskSchema),
+    example: { params: { id: 'T12' }, body: {}, response: exampleTask },
+    ai: { include: false },
+  }),
+
   'tasks.workflow': route({
     id: 'tasks.workflow',
     method: 'GET',

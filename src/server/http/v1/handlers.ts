@@ -8,7 +8,7 @@ import {
   type RouteId,
 } from '../../../contract/v1/index.js';
 import { randomUUID } from 'node:crypto';
-import { BoardError, type Project } from '../../../core/index.js';
+import { assertNotArchived, BoardError, type Project } from '../../../core/index.js';
 import { LAUNCH_MESSAGE_MAX_LENGTH } from '../../../core/model/launch.js';
 import { documentFormat } from '../../../core/rules/documentName.js';
 import type { RouteContext } from '../context.js';
@@ -118,6 +118,8 @@ export const handlers: Handlers = {
   'tasks.get': (context, { params }) => context.tasks.getWithReadiness(params.id),
   'tasks.update': (context, { params, body }) => context.tasks.update(params.id, body),
   'tasks.move': (context, { params, body }) => context.tasks.move(params.id, body),
+  'tasks.archive': (context, { params }) => context.tasks.archive(params.id),
+  'tasks.restore': (context, { params }) => context.tasks.restore(params.id),
   'tasks.delete': async (context, { params }) => {
     await context.tasks.remove(params.id);
     return deleted;
@@ -128,7 +130,7 @@ export const handlers: Handlers = {
   // Send to AI → Claude Code: the task must exist, and then it goes to one waiting runner or
   // to none. Nothing is started here (ADR-0029, T27); a work run writes only its `launch` (T94).
   'tasks.run': async (context, { params, body }) => {
-    await context.tasks.get(params.id);
+    assertNotArchived(await context.tasks.get(params.id));
     if (body.kind === 'check' || body.kind === 'research') {
       // A check or a research is recorded apart from the run of the task and takes nothing from
       // it: it is not refused while a run works, nor while another check does (ADR-0030 §6,

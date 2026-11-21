@@ -542,3 +542,34 @@ describe('export v4 keeps the comment of a run (T2, INVARIANT)', () => {
     expect(task?.extra).toBeUndefined();
   });
 });
+
+describe('export v4 keeps the archive mark of a task (T3, INVARIANT)', () => {
+  const archived = { at: '2026-11-06T10:00:00.000Z' };
+
+  it('exports archived as stored, restores it as a field of the task, and leaves the rest', async () => {
+    const { storage } = await board();
+    await storage.createTask(newTask('Archived'));
+    await storage.createTask(newTask('On the board'));
+    await storage.updateTask('T1', { archived });
+
+    const snapshot = boardSnapshotSchema.parse(await exported(storage));
+    expect(snapshot.formatVersion).toBe(4);
+    expect(snapshot.tasks.find((task) => task.id === 'T1')?.archived).toEqual(archived);
+    expect(snapshot.tasks.find((task) => task.id === 'T2')).not.toHaveProperty('archived');
+
+    const target = await tmpDir();
+    await restoreSnapshot(target, snapshot);
+    const { storage: restored } = await board(target);
+
+    expect((await restored.getTask('T1'))?.archived).toEqual(archived);
+    expect((await restored.getTask('T1'))?.extra).toBeUndefined();
+    expect(await restored.getTask('T2')).not.toHaveProperty('archived');
+  });
+
+  it('still reads an export made before archive existed', async () => {
+    const { storage } = await board();
+    await storage.createTask(newTask('Plain'));
+    const snapshot = boardSnapshotSchema.parse(await exported(storage));
+    expect(snapshot.tasks.every((task) => task.archived === undefined)).toBe(true);
+  });
+});

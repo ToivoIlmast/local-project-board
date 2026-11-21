@@ -24,6 +24,7 @@ import {
   sameContent,
   summarizeCheck,
 } from '../rules/history.js';
+import { assertNotArchived } from './archive.js';
 import { assertContentHash, latestVersion, syncHistory } from './taskHistory.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
@@ -225,6 +226,7 @@ export function createHistoryService({
     beginCheck: (taskId, input) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
+        assertNotArchived(task);
         if (input.trigger !== undefined && input.kind !== undefined) {
           throw new BoardError(
             'INVALID_REQUEST',

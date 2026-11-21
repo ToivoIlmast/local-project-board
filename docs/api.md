@@ -92,6 +92,21 @@ work on it with `409 TASK_BLOCKED`, and `details.reasons` carries the reasons as
   working is refused as before. `kind: check` and `kind: research` are not gated.
 - Nothing else is refused for readiness: reading and changing the task are as for any task.
 
+A task can be archived (`POST /tasks/:id/archive`) and restored (`POST /tasks/:id/restore`).
+Archiving is not a status: it sets `archived: { at }` and leaves the status, `rank`, `doneAt`,
+runs, topic, block, `dependsOn`, documents and history as they are, makes no version, and
+publishes `task.updated`. Restoring removes `archived`: the task is back in its status, at its
+rank. `GET /tasks` and `GET /tasks/:id` return archived tasks too, with `archived`; the page
+filters them. An archived task counts for readiness by its status, as before. Refusals are
+`409` and change nothing:
+
+- `TASK_ARCHIVED`: archiving a task that is archived; `POST /tasks/:id/move`; `PATCH` with
+  another `status`; `POST /tasks/:id/run` (work, check or research); `GET /tasks/:id/handoff`.
+- `TASK_NOT_ARCHIVED`: restoring a task that is not archived.
+- `AI_RUN_IN_PROGRESS`: archiving a task whose `aiRun.state` is `working`.
+- `CHECK_IN_PROGRESS`: archiving a task with a check or a research that has not ended.
+- Reading, documents, history, changing the content and deleting are as for any task.
+
 ### GET /api/v1/tasks
 
 List every task, ordered by status and rank, each with its `readiness`
@@ -266,6 +281,73 @@ Request body:
   "status": "done",
   "after": "T4"
 }
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "T12",
+  "title": "Extract the git adapter",
+  "status": "in-progress",
+  "rank": "a1",
+  "body": "## Context\n\nThe status parser still lives in the HTTP layer.\n",
+  "labels": [
+    "refactor"
+  ],
+  "branch": "feat/git-adapter",
+  "createdAt": "2026-09-21T09:00:00.000Z",
+  "updatedAt": "2026-09-21T11:30:00.000Z"
+}
+```
+
+### POST /api/v1/tasks/:id/archive
+
+Archive a task: it leaves the board and keeps its status, place and history
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/archive
+
+Request body:
+
+```json
+{}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "id": "T12",
+  "title": "Extract the git adapter",
+  "status": "in-progress",
+  "rank": "a1",
+  "body": "## Context\n\nThe status parser still lives in the HTTP layer.\n",
+  "labels": [
+    "refactor"
+  ],
+  "branch": "feat/git-adapter",
+  "createdAt": "2026-09-21T09:00:00.000Z",
+  "updatedAt": "2026-09-21T11:30:00.000Z",
+  "archived": {
+    "at": "2026-09-21T12:00:00.000Z"
+  }
+}
+```
+
+### POST /api/v1/tasks/:id/restore
+
+Restore an archived task to its status and its place in the column
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/restore
+
+Request body:
+
+```json
+{}
 ```
 
 Response — 200, application/json:
@@ -1763,6 +1845,9 @@ nothing else. The code is one of:
 - CHECK_ALREADY_FINAL
 - CHECK_NOT_REPORTED
 - STALE_CHECK
+- TASK_ARCHIVED
+- TASK_NOT_ARCHIVED
+- CHECK_IN_PROGRESS
 - INVALID_CHECK_REPORT
 - INVALID_JSON
 - UNAUTHORIZED

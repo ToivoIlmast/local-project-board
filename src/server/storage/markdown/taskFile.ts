@@ -19,6 +19,7 @@ const KNOWN = [
   'block',
   'dependsOn',
   'doneAt',
+  'archived',
   'createdAt',
   'updatedAt',
 ];

@@ -763,6 +763,44 @@ describe('task.md and doneAt (T96)', () => {
   });
 });
 
+describe('task.md and archived (T3)', () => {
+  const AT = '2026-11-06T10:00:00.000Z';
+  const file = (extraFields = ''): string =>
+    `---\nid: T7\ntitle: Handwritten\nstatus: todo\nrank: a0\nlabels: []\n${extraFields}createdAt: 2026-09-21T10:00:00.000Z\nupdatedAt: 2026-09-21T10:00:00.000Z\n---\nBody.\n`;
+  const MARK = `archived:\n  at: ${AT}\n`;
+
+  it('reads and writes a task without it byte for byte, and makes none (INVARIANT)', () => {
+    const parsed = parseTask('T7', file());
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.archived).toBeUndefined();
+    expect(serializeTask(parsed.task)).toBe(file());
+  });
+
+  it('reads and writes it byte for byte, and not as an unknown field', () => {
+    const parsed = parseTask('T7', file(MARK));
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.archived).toEqual({ at: AT });
+    expect(parsed.task.extra).toBeUndefined();
+    expect(serializeTask(parsed.task)).toBe(file(MARK));
+  });
+
+  it('does not read an archived that is not a datetime', () => {
+    expect(parseTask('T7', file('archived:\n  at: yesterday\n'))).toHaveProperty('error');
+  });
+
+  it('keeps a field of the user beside it, and writes both back', () => {
+    // A board before this one keeps the key it does not know in `extra` and writes it back as it
+    // was, by the same rule, so the mark survives a round trip through it (INVARIANT).
+    const parsed = parseTask('T7', file(`${MARK}estimate: 3\n`));
+    if (!('task' in parsed)) throw new Error(parsed.error);
+    expect(parsed.task.archived).toEqual({ at: AT });
+    expect(parsed.task.extra).toEqual({ estimate: 3 });
+    const written = serializeTask(parsed.task);
+    expect(written).toContain(MARK);
+    expect(written).toContain('estimate: 3');
+  });
+});
+
 describe('task.md and aiRun runner fields (T31)', () => {
   let root2: string;
   let storage2: Storage;

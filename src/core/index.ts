@@ -1,6 +1,7 @@
 export * from './errors.js';
 export * from './events.js';
 export * from './ports.js';
+export * from './services/archive.js';
 export * from './services/documents.js';
 export * from './services/history.js';
 export * from './services/project.js';

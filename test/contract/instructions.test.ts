@@ -41,6 +41,14 @@ describe('generated AI instructions', () => {
     for (const route of included) expect(instructions).toContain(route.summary);
   });
 
+  it('tells an agent not to work on an archived task (T3)', () => {
+    const rule = API_RULES.find((candidate) => candidate.includes('archived'));
+    expect(rule).toContain('Do not work on it');
+    expect(rule).toContain('TASK_ARCHIVED');
+    expect(instructions).toContain(`- ${rule}`);
+    expect(instructions).not.toContain('/archive');
+  });
+
   it('leaves out routes that are not for agents', () => {
     const excluded = routeList.filter((r) => !r.ai.include);
     // `workflow.update` replaces the board's and the columns' settings whole: it is the
@@ -63,6 +71,9 @@ describe('generated AI instructions', () => {
       'instructions.get',
       // Send to AI and the runner that waits for it: an agent at work starts no agents (T27).
       'runs.stream',
+      // Archiving is the owner's, from the page; an agent works on tasks that are on the board.
+      'tasks.archive',
+      'tasks.restore',
       'tasks.run',
       // The runner's report of a start that did not begin (ADR-0029 T94, K16).
       'tasks.runFailure',

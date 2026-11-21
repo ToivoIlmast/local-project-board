@@ -8,6 +8,7 @@ import { applyContentPatch, changedFields, contentOf } from '../rules/history.js
 import { compareByRank, rankForPosition, type Position } from '../rules/rank.js';
 import type { BlockingReason } from '../rules/readiness.js';
 import { assertKnownStatus, isDone } from '../rules/status.js';
+import { assertNotArchived } from './archive.js';
 import { assertContentHash, assertFromCheck, planSync } from './taskHistory.js';
 import { readBoardReadiness } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
@@ -75,6 +76,14 @@ export interface TaskService {
   create(input: CreateTaskInput): Promise<Task>;
   update(id: string, patch: UpdateTaskInput): Promise<Task>;
   move(id: string, move: MoveTaskInput): Promise<Task>;
+  /**
+   * Sets `archived` and nothing else of the task: status, rank, `doneAt`, runs, documents and
+   * history stay as they are (T3). Refused (409) for a task already archived, one whose run
+   * works and one with a check or a research that has not ended.
+   */
+  archive(id: string): Promise<Task>;
+  /** Removes `archived`: the task is where it was, in its status and at its rank. */
+  restore(id: string): Promise<Task>;
   remove(id: string): Promise<void>;
 }
 
@@ -122,6 +131,9 @@ export function createTaskService({
     const { ifContentHash, fromCheck, ...patch } = input;
     const current = await require(id);
     const before = contentOf(current);
+
+    // An archived task keeps its status until it is restored; content stays editable (T3).
+    if (patch.status !== undefined && patch.status !== current.status) assertNotArchived(current);
 
     // The preconditions, in the order of the ADR: the content hash, then the check.
     await assertContentHash(storage, id, before, ifContentHash);
@@ -262,12 +274,50 @@ export function createTaskService({
       // A change of status takes the lock of the task, as `doneAt` goes with it (T96).
       return locks.run(id, async () => {
         const current = await require(id);
+        assertNotArchived(current);
         assertKnownStatus(status, statuses);
         const task = await storage.updateTask(id, {
           status,
           rank: rankForPosition(await column(status), { after, before }, id),
           ...doneAtFor(current, status),
         });
+        events.publish({ type: 'task.updated', task });
+        return task;
+      });
+    },
+
+    archive(id) {
+      return locks.run(id, async () => {
+        const current = await require(id);
+        assertNotArchived(current);
+        if (current.aiRun?.state === 'working') {
+          throw new BoardError(
+            'AI_RUN_IN_PROGRESS',
+            `Task "${id}" has an AI run in progress and cannot be archived.`,
+            { id },
+          );
+        }
+        const checks = await storage.listChecks(id);
+        if (checks.some((check) => check.state === 'working')) {
+          throw new BoardError(
+            'CHECK_IN_PROGRESS',
+            `Task "${id}" has a check or a research in progress and cannot be archived.`,
+            { id },
+          );
+        }
+        const task = await storage.updateTask(id, { archived: { at: now() } });
+        events.publish({ type: 'task.updated', task });
+        return task;
+      });
+    },
+
+    restore(id) {
+      return locks.run(id, async () => {
+        const current = await require(id);
+        if (current.archived === undefined) {
+          throw new BoardError('TASK_NOT_ARCHIVED', `Task "${id}" is not archived.`, { id });
+        }
+        const task = await storage.updateTask(id, { archived: null });
         events.publish({ type: 'task.updated', task });
         return task;
       });
