@@ -6,6 +6,8 @@
  *
  *   npm test                         Smart mode
  *   npm test -- --full               Full mode (same as `npm run test:full`)
+ *   npm test -- --never-full         Smart mode, but a run that would be Full starts no Jest:
+ *                                    it says why and exits with SKIPPED_FULL_EXIT (`npm run check`)
  *   npm test -- --plan [--json]      only print what would run and why
  *   npm test -- --list-skipped       also list the tests that will not run
  *   npm test -- --base <ref>         compare with <ref> instead of the detected base branch
@@ -19,13 +21,20 @@ import { fileURLToPath } from 'node:url';
 import { collectChanges, referencesIn } from './changes.mjs';
 import { loadJest } from './jest.mjs';
 import { planTests } from './plan.mjs';
-import { footer, header, toJson } from './report.mjs';
+import { footer, header, skippedFull, toJson } from './report.mjs';
 import { FULL_JEST_ARGS, JEST_BIN_ARGS, PROJECT_ARGS } from './rules.mjs';
+
+/**
+ * The exit code of a `--never-full` run that would have been Full and so started no Jest:
+ * neither a pass (0) nor a test failure (1), so a caller can tell the tests were not run.
+ */
+export const SKIPPED_FULL_EXIT = 3;
 
 /**
  * @typedef {import('./report.mjs').Decision} Decision
  * @typedef {object} Options
  * @property {boolean} full
+ * @property {boolean} neverFull   A run that would be Full is skipped instead (unless --full).
  * @property {boolean} plan
  * @property {boolean} json
  * @property {boolean} listSkipped
@@ -88,6 +97,7 @@ export function parseArgs(argv) {
   /** @type {Options} */
   const options = {
     full: false,
+    neverFull: false,
     plan: false,
     json: false,
     listSkipped: false,
@@ -109,6 +119,7 @@ export function parseArgs(argv) {
     };
     if (name === '--full') options.full = true;
     else if (name === '--smart') options.full = false;
+    else if (name === '--never-full') options.neverFull = true;
     else if (name === '--plan') options.plan = true;
     else if (name === '--json') options.json = true;
     else if (name === '--list-skipped') options.listSkipped = true;
@@ -234,6 +245,16 @@ export async function decide({ options, env, root, deps = realDeps }) {
 }
 
 /**
+ * Whether a decision runs every test.
+ * @param {Decision} decision
+ */
+export function isFull(decision) {
+  return (
+    decision.kind === 'forced-full' || (decision.kind === 'plan' && decision.plan.mode === 'full')
+  );
+}
+
+/**
  * The Jest command line for a decision, or null when no test is to run.
  * @param {Decision} decision
  * @param {Options} options
@@ -288,6 +309,12 @@ export async function main({
     return 0;
   }
 
+  // An explicit --full is a request and always wins; every other way to Full is automatic.
+  if (options.neverFull && !options.full && isFull(decision)) {
+    for (const line of skippedFull(decision)) out(line);
+    return SKIPPED_FULL_EXIT;
+  }
+
   for (const line of header(decision)) out(line);
   const args = jestArgv(decision, options);
   if (args === null) return 0;
@@ -311,6 +338,7 @@ const USAGE = `npm test — Smart mode: only the tests your changes can reach (d
   npm test                          Smart mode (CI: always Full mode)
   npm run test:full                 every test of the node and web projects
   npm test -- --full                the same, through this runner
+  npm test -- --never-full          Smart mode; a run that would be Full is skipped, not run
   npm test -- --plan [--json]       show what would run and why; run nothing
   npm test -- --list-skipped        also list the tests that will not run
   npm test -- --base <ref>          compare with <ref> (default: origin/HEAD, main, master)

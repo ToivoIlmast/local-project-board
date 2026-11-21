@@ -34,6 +34,7 @@
     "build:node": "tsc -b tsconfig.build.json",
     "build:web": "vite build",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "check": "node scripts/check.mjs",
     "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json && tsc -p tsconfig.test-web.json && tsc -p tsconfig.e2e.json && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "check:cycles": "dep-health-analyzer cycles --target ./src --mode compact",

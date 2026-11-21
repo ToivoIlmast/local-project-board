@@ -104,6 +104,26 @@ export function header(decision) {
 }
 
 /**
+ * What a `--never-full` run prints instead of starting a Full run.
+ * @param {Decision} decision  a Full decision: forced, or a plan widened to every test
+ * @returns {string[]}
+ */
+export function skippedFull(decision) {
+  /** @type {string[]} */
+  let reasons = [];
+  if (decision.kind === 'forced-full') reasons = [decision.why];
+  else if (decision.kind === 'plan') reasons = decision.plan.fullBecause;
+  return [
+    RULE,
+    '! Tests: SKIPPED — JEST WAS NOT RUN. Smart mode would widen to every test, because:',
+    ...reasons.map((why) => `  • ${why}`),
+    '--never-full never starts a Full run. No test has checked this change locally: CI runs ' +
+      'every test, or run `npm run test:full` (or `npm test -- --full`) yourself.',
+    RULE,
+  ];
+}
+
+/**
  * The last lines, after Jest's own summary.
  * @param {Decision} decision
  * @param {number | null} exitCode
