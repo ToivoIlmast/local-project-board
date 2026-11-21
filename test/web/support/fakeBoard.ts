@@ -361,6 +361,26 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         emit({ type: 'task.updated', task: { ...task } });
         return { ...task };
       }),
+    archiveTask: (id) =>
+      record('archiveTask', () => {
+        const task = require(id);
+        if (task.archived !== undefined) {
+          throw new ApiError(409, 'TASK_ARCHIVED', `Task "${id}" is archived.`, { id });
+        }
+        task.archived = { at: NOW };
+        emit({ type: 'task.updated', task: { ...task } });
+        return { ...task };
+      }),
+    restoreTask: (id) =>
+      record('restoreTask', () => {
+        const task = require(id);
+        if (task.archived === undefined) {
+          throw new ApiError(409, 'TASK_NOT_ARCHIVED', `Task "${id}" is not archived.`, { id });
+        }
+        delete task.archived;
+        emit({ type: 'task.updated', task: { ...task } });
+        return { ...task };
+      }),
     deleteTask: (id) =>
       record('deleteTask', () => {
         require(id);

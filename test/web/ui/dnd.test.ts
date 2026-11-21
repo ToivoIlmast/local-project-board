@@ -70,3 +70,23 @@ describe('what the board asks the server to do', () => {
     expect(isNoop(second!, column, { status: 'done', after: 'T1' })).toBe(false);
   });
 });
+
+describe('the neighbours of a drop, with an archived task in the column (T10)', () => {
+  const archived = { at: '2026-09-22T10:00:00.000Z' };
+  const column = [
+    aTask({ id: 'T1', rank: 'a0' }),
+    aTask({ id: 'T2', rank: 'a1', archived }),
+    aTask({ id: 'T3', rank: 'a2' }),
+  ];
+
+  it('never names an archived task as the neighbour', () => {
+    expect(intentFor(column, 'T3', 1, 'todo')).toEqual({ status: 'todo', after: 'T1' });
+    expect(intentFor(column, 'T1', 1, 'todo')).toEqual({ status: 'todo', after: 'T3' });
+    expect(intentFor([column[1]!], 'T9', 0, 'todo')).toEqual({ status: 'todo' });
+  });
+
+  it('judges a move that changes nothing without it', () => {
+    expect(isNoop(column[2]!, column, { status: 'todo', after: 'T1' })).toBe(true);
+    expect(isNoop(column[0]!, column, { status: 'todo', before: 'T3' })).toBe(true);
+  });
+});

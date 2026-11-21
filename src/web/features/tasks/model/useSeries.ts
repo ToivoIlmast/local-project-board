@@ -6,6 +6,7 @@ import {
   type Task,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
+import { isArchived } from '../../../api/index';
 import { useT } from '../../../shared/i18n/index';
 import { itemState, progress, seriesOf, type Series, type SeriesRow } from './series';
 
@@ -54,11 +55,14 @@ export function useSeries(tasks: readonly Task[]): {
     for (const task of tasks) {
       const series = seriesOf(task);
       if (series === undefined || !launchState(task, []).done) continue;
-      const scope = revalidationScope(input, task.id);
+      // An archived task is not on the board, so it is not offered to be checked (T10).
+      const scope = revalidationScope(input, task.id).filter(
+        (item) => !state.tasks.some((other) => other.id === item.task && isArchived(other)),
+      );
       if (scope.length > 0) found.set(task.id, { series, scope });
     }
     return found;
-  }, [tasks, input]);
+  }, [tasks, input, state.tasks]);
 
   const wanted = useMemo(
     () =>

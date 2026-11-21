@@ -5,7 +5,7 @@ import {
   type Task,
   type Topic,
 } from '../../../../contract/v1/index';
-import { ApiError } from '../../../api/index';
+import { ApiError, isArchived } from '../../../api/index';
 import { taskT } from '../i18n/details';
 import { reasonText } from './readinessText';
 
@@ -71,9 +71,11 @@ const ORDER_REASONS: ReadonlySet<BlockingReason['code']> = new Set([
  * whose tasks are all done is completed.
  */
 export function blockSummary(
-  tasks: readonly Task[],
+  all: readonly Task[],
   reasons: Readonly<Record<string, readonly BlockingReason[]>>,
 ): BlockSummary {
+  // The archive is not on the board: its tasks are not counted in a block (T10).
+  const tasks = all.filter((task) => !isArchived(task));
   const done = tasks.filter((task) => launchState(task, []).done).length;
   const total = tasks.length;
   if (total === 0) return { done, total, state: 'empty' };
@@ -126,7 +128,7 @@ export function describeMove(
   };
   const after = data.tasks.map((candidate) => (candidate.id === id ? moved : candidate));
   const reasonsOf = (tasks: readonly Task[]): string[] =>
-    (readiness({ ...data, tasks })[id] ?? []).map(reasonText);
+    (readiness({ ...data, tasks })[id] ?? []).map((reason) => reasonText(reason));
 
   return {
     from: placeLabel(data.topics, task.topic, task.block),

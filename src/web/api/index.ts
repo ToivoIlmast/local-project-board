@@ -30,6 +30,8 @@ export {
 export {
   applyEvent,
   columnsOf,
+  isArchived,
+  withoutArchived,
   createBoardStore,
   emptyState,
   type BoardState,

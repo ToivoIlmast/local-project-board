@@ -177,3 +177,14 @@ describe('what the page says of a refusal', () => {
     expect(explainError(plain)).toBe(plain);
   });
 });
+
+describe('the count of a block without the archive (T10)', () => {
+  it('does not count an archived task', () => {
+    const archived = { at: '2026-09-22T10:00:00.000Z' };
+    const summary = blockSummary(
+      [aTask({ id: 'T1', status: 'done' }), aTask({ id: 'T2', status: 'todo', archived })],
+      {},
+    );
+    expect(summary).toEqual({ done: 1, total: 1, state: 'completed' });
+  });
+});

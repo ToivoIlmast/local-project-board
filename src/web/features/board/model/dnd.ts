@@ -1,4 +1,5 @@
 import type { Task } from '../../../../contract/v1/index';
+import { isArchived } from '../../../api/index';
 
 export interface CardBox {
   id: string;
@@ -32,7 +33,8 @@ export function intentFor(
   index: number,
   status: string,
 ): MoveIntent {
-  const others = column.filter((task) => task.id !== dragged);
+  // An archived task is not on the board: it is nobody's neighbour (T10).
+  const others = column.filter((task) => task.id !== dragged && !isArchived(task));
   const first = others[0];
   if (first === undefined) return { status };
   if (index <= 0) return { status, before: first.id };
@@ -43,9 +45,10 @@ export function intentFor(
 /** Whether the board would end up exactly as it already is. */
 export function isNoop(task: Task, column: Task[], intent: MoveIntent): boolean {
   if (task.status !== intent.status) return false;
-  const index = column.findIndex((candidate) => candidate.id === task.id);
+  const shown = column.filter((candidate) => !isArchived(candidate));
+  const index = shown.findIndex((candidate) => candidate.id === task.id);
   if (index === -1) return false;
-  if (intent.before !== undefined) return column[index + 1]?.id === intent.before;
-  if (intent.after !== undefined) return column[index - 1]?.id === intent.after;
-  return index === column.length - 1;
+  if (intent.before !== undefined) return shown[index + 1]?.id === intent.before;
+  if (intent.after !== undefined) return shown[index - 1]?.id === intent.after;
+  return index === shown.length - 1;
 }

@@ -89,7 +89,9 @@ export function useSendToAi(
     setOpen(target);
   };
 
-  const why = t('ai.send.blocked', { reasons: reasons.map(reasonText).join('; ') });
+  const why = t('ai.send.blocked', {
+    reasons: reasons.map((reason) => reasonText(reason)).join('; '),
+  });
 
   return {
     items: [copyHandoff, ...targets].map((target) => ({

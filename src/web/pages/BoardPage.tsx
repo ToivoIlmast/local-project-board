@@ -100,6 +100,10 @@ function BoardScreen() {
     else leave(go);
   };
   const closePanel = (): void => leave(() => setPanel(null));
+  // The task leaves the board when the answer arrives; a refusal (409) is said, not swallowed.
+  const archive = (id: string): void => {
+    store.archiveTask(id).catch((error: Error) => setNotice(error.message));
+  };
   const move = (id: string, intent: MoveIntent): void => {
     store.moveTask(id, intent).catch((error: Error) => setNotice(error.message));
   };
@@ -166,6 +170,7 @@ function BoardScreen() {
               onOpen={open}
               onEdit={setEditingId}
               onDelete={setDeletingId}
+              onArchive={archive}
               onCreate={(status) => setCreating({ status })}
               onMove={move}
             />

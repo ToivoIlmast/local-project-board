@@ -3,7 +3,7 @@ import { launchState, type BlockingReason, type Task } from '../../../../contrac
 import { useStatusLabel, useT } from '../../../shared/i18n/index';
 import { Badge, Menu, type MenuItem } from '../../../shared/ui/index';
 import { useCardT } from '../i18n/card';
-import { reasonText } from '../model/readinessText';
+import { useReasonText } from '../model/useReasonText';
 import { hasOwnSettings } from '../model/taskWorkflow';
 import { useSendToAi } from '../model/useSendToAi';
 
@@ -18,6 +18,8 @@ export interface TaskCardProps {
   onOpen: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  /** Takes the task off the board; it can be restored from its details. */
+  onArchive: (id: string) => void;
   onMoveTo: (id: string, status: string) => void;
   onNudge: (id: string, direction: -1 | 1) => void;
   onDragStart: (id: string, event: ReactPointerEvent<HTMLElement>) => void;
@@ -52,6 +54,7 @@ export const TaskCard = memo(function TaskCard({
   onOpen,
   onEdit,
   onDelete,
+  onArchive,
   onMoveTo,
   onNudge,
   onDragStart,
@@ -59,6 +62,7 @@ export const TaskCard = memo(function TaskCard({
   const t = useCardT();
   const common = useT();
   const statusLabel = useStatusLabel();
+  const reasonText = useReasonText();
   const sendToAi = useSendToAi(task, undefined, reasons);
   // ● and 🔒 can be shown together: a run that has started is not stopped (ADR-0032 §7).
   const launch = launchState(task, reasons);
@@ -81,6 +85,7 @@ export const TaskCard = memo(function TaskCard({
         label: t('card.moveTo', { status: statusLabel(status) }),
         onSelect: () => onMoveTo(task.id, status),
       })),
+    { label: t('card.archive'), onSelect: () => onArchive(task.id) },
     'separator',
     { label: common('ui.delete'), tone: 'danger' as const, onSelect: () => onDelete(task.id) },
   ];

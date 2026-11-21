@@ -79,6 +79,10 @@ export interface BoardClient {
   updateTask(id: string, patch: BodyOf<'tasks.update'>, options?: RequestOptions): Promise<Task>;
   moveTask(id: string, move: BodyOf<'tasks.move'>, options?: RequestOptions): Promise<Task>;
   deleteTask(id: string, options?: RequestOptions): Promise<void>;
+  /** Takes the task off the board; it keeps its status and its place (T3). */
+  archiveTask(id: string, options?: RequestOptions): Promise<Task>;
+  /** Puts an archived task back in its column, at its place. */
+  restoreTask(id: string, options?: RequestOptions): Promise<Task>;
 
   /** The overrides of the board and of its columns, with the defaults they lie over. */
   workflow(options?: RequestOptions): Promise<WorkflowState>;
@@ -265,6 +269,8 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     deleteTask: async (id, o) => {
       await call('tasks.delete', { params: { id } }, o);
     },
+    archiveTask: (id, o) => call('tasks.archive', { params: { id }, body: {} }, o),
+    restoreTask: (id, o) => call('tasks.restore', { params: { id }, body: {} }, o),
 
     workflow: (o) => call('workflow.get', {}, o),
     updateWorkflow: (body, o) => call('workflow.update', { body }, o),

@@ -13,7 +13,7 @@ export function explainError<E>(error: E): E | ApiError {
   const parsed = blockingReasonSchema.array().safeParse(error.details['reasons']);
   if (!parsed.success || parsed.data.length === 0) return error;
   const id = error.details['id'];
-  const reasons = parsed.data.map(reasonText).join('; ');
+  const reasons = parsed.data.map((reason) => reasonText(reason)).join('; ');
   return new ApiError(
     error.status,
     error.code,
