@@ -49,14 +49,16 @@ export function Menu({ label, items, children = '⋯', appearance = 'icon' }: Me
     };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return;
+      // Escape in an open menu closes the menu and nothing else: not the dialog it is in.
+      event.stopPropagation();
       setOpen(false);
       triggerRef.current?.focus();
     };
     document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown, true);
     };
   }, [open]);
 
