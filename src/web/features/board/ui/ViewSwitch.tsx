@@ -1,11 +1,12 @@
 import { Button } from '../../../shared/ui/index';
 import { useBoardT } from '../i18n';
 
-export type View = 'board' | 'blocks';
+/** What the main area shows. The archive is reached from the header, so it has no button here. */
+export type View = 'board' | 'blocks' | 'archive';
 
 export interface ViewSwitchProps {
   value: View;
-  onChange: (view: View) => void;
+  onChange: (view: 'board' | 'blocks') => void;
 }
 
 const VIEWS = [

@@ -11,6 +11,9 @@ export interface BoardHeaderProps {
   onNewTask: () => void;
   onReload: () => void;
   onShowPanel: (panel: 'reports' | 'topics' | 'git' | 'instructions' | 'settings') => void;
+  /** Opens the Archive page in the main area (`?view=archive`). */
+  onShowArchive: () => void;
+  archiveOpen?: boolean;
 }
 
 export function BoardHeader({
@@ -20,6 +23,8 @@ export function BoardHeader({
   onNewTask,
   onReload,
   onShowPanel,
+  onShowArchive,
+  archiveOpen = false,
 }: BoardHeaderProps) {
   const t = useBoardT();
   const branch = git?.branch ?? project.git.branch ?? null;
@@ -43,6 +48,9 @@ export function BoardHeader({
       <div className="header__actions">
         <Button variant="primary" onClick={onNewTask}>
           {t('header.new')}
+        </Button>
+        <Button aria-current={archiveOpen ? 'page' : undefined} onClick={onShowArchive}>
+          {t('header.archive')}
         </Button>
         <Button onClick={() => onShowPanel('reports')}>{t('header.reports')}</Button>
         <Button onClick={() => onShowPanel('topics')}>{t('header.topics')}</Button>
