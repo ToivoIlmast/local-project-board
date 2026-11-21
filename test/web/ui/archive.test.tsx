@@ -10,6 +10,10 @@ const archived = { at: '2026-09-22T10:00:00.000Z' };
 
 afterEach(() => window.history.replaceState({}, '', '/'));
 
+/** The card whose actions menu is open: the board header has its own Archive button. */
+const cardOf = (id: string): HTMLElement =>
+  screen.getByRole('button', { name: `Actions for ${id}` }).closest('li') as HTMLElement;
+
 describe('archiving from the menu of a card', () => {
   it.each(STATUSES)('takes a task of %s off the board once the server answers', async (status) => {
     const { user, board } = await renderBoard({
@@ -17,7 +21,7 @@ describe('archiving from the menu of a card', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Actions for T1' }));
-    await user.click(screen.getByRole('button', { name: 'Archive' }));
+    await user.click(within(cardOf('T1')).getByRole('button', { name: 'Archive' }));
 
     await waitFor(() => expect(cardsIn(status)).toEqual(['T2']));
     expect(board.calls).toContain('archiveTask');
@@ -32,7 +36,7 @@ describe('archiving from the menu of a card', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Actions for T1' }));
-    await user.click(screen.getByRole('button', { name: 'Archive' }));
+    await user.click(within(cardOf('T1')).getByRole('button', { name: 'Archive' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('has an AI run in progress');
     expect(cardsIn('todo')).toEqual(['T1']);
