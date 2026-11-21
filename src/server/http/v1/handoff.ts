@@ -6,6 +6,7 @@ import {
   type BoardFacts,
 } from '../../../contract/v1/index.js';
 import {
+  assertNotArchived,
   taskBlocked,
   type DocumentService,
   type HistoryService,
@@ -45,6 +46,7 @@ export async function composeHandoff(
   { baseUrl, board, projectRules }: HandoffSource,
 ): Promise<string> {
   const { readiness, ...task } = await tasks.getWithReadiness(id);
+  assertNotArchived(task);
   if (readiness.reasons.length > 0 && task.aiRun?.state !== 'working') {
     throw taskBlocked(id, readiness.reasons);
   }

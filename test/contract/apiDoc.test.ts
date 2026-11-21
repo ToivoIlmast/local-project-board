@@ -68,6 +68,20 @@ describe('renderApiDoc', () => {
     }
   });
 
+  it('states what archiving a task refuses, and what it leaves as it is (T3)', () => {
+    const doc = renderApiDoc(routeList).replace(/\s+/g, ' ');
+    for (const text of [
+      '`POST /tasks/:id/archive`',
+      'Archiving is not a status',
+      '`TASK_ARCHIVED`',
+      '`TASK_NOT_ARCHIVED`',
+      '`AI_RUN_IN_PROGRESS`',
+      '`CHECK_IN_PROGRESS`',
+    ]) {
+      expect(doc).toContain(text);
+    }
+  });
+
   it('marks each route as given to, or withheld from, AI agents', () => {
     const hidden = routeList.filter((r) => !r.ai.include).map((r) => r.id);
     expect(hidden.sort()).toEqual([
@@ -86,6 +100,9 @@ describe('renderApiDoc', () => {
       'events.stream',
       'instructions.get',
       'runs.stream',
+      // Archiving is the owner's, from the page; an agent works on tasks that are on the board.
+      'tasks.archive',
+      'tasks.restore',
       'tasks.run',
       'tasks.runFailure',
       // Structure of the board is the owner's to change (ADR-0032 §4), so an agent is not told.

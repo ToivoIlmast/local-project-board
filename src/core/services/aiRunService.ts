@@ -4,6 +4,7 @@ import { BoardError } from '../errors.js';
 import type { Launch, LaunchFailureKind } from '../model/launch.js';
 import type { Task } from '../model/task.js';
 import { isLaunchCurrent } from '../rules/launch.js';
+import { assertNotArchived } from './archive.js';
 import { reasonsOf, taskBlocked } from './readiness.js';
 import { createTaskLocks, type TaskLocks } from './taskLocks.js';
 
@@ -194,6 +195,7 @@ export function createAiRunService({
     requestWork: (taskId, input, reserve) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
+        assertNotArchived(task);
         if (task.aiRun?.state === 'working') throw inProgress(taskId);
         if (input.mode === 'resume' && task.aiRun?.sessionId === undefined) throw noSession(taskId);
         if (input.mode === 'restart' && task.aiRun === undefined) throw noRun(taskId);
@@ -290,6 +292,7 @@ export function createAiRunService({
     begin: (taskId, input) =>
       locks.run(taskId, async () => {
         const task = await requireTask(taskId);
+        assertNotArchived(task);
         if (task.aiRun?.state === 'working') throw inProgress(taskId);
 
         // Restart starts an earlier run over; the handoff names its archive after that run.

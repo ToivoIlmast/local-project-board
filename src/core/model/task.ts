@@ -9,6 +9,8 @@ import { taskWorkflowSchema } from './workflow.js';
 export const taskIdSchema = z.string().refine(isTaskId, 'Invalid task id');
 export const isoDateTimeSchema = z.iso.datetime();
 const nonBlank = z.string().regex(/\S/, 'Must not be blank');
+export const archivedSchema = z.strictObject({ at: isoDateTimeSchema });
+export type Archived = z.infer<typeof archivedSchema>;
 
 export const taskSchema = z
   .strictObject({
@@ -45,6 +47,11 @@ export const taskSchema = z
      * lock of the task (T96). A task done before it existed here has none: it is not made up.
      */
     doneAt: isoDateTimeSchema.optional(),
+    /**
+     * Set when the task is archived (T3): it stays in its status, at its rank, with everything it
+     * has, and the board does not show it. Not a status and not content: no version (ADR-0030 §1).
+     */
+    archived: archivedSchema.optional(),
     createdAt: isoDateTimeSchema,
     /** Updates are last-write-wins (ADR-0018). */
     updatedAt: isoDateTimeSchema,

@@ -1,6 +1,7 @@
 import type { BoardEvent } from './events.js';
 import type {
   AiRun,
+  Archived,
   Block,
   Check,
   CheckBegin,
@@ -67,6 +68,8 @@ export interface TaskPatch {
   dependsOn?: string[] | null | undefined;
   /** Written and removed by the task service only, with a change of status (T96). */
   doneAt?: string | null | undefined;
+  /** Written and removed by the task service only, by archive and restore (T3). */
+  archived?: Archived | null | undefined;
   extra?: Record<string, unknown> | undefined;
 }
 

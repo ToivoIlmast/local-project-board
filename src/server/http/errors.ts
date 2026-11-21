@@ -43,6 +43,9 @@ const STATUS_BY_DOMAIN_CODE: Record<BoardErrorCode, number> = {
   CHECK_NOT_REPORTED: 409,
   STALE_CHECK: 409,
   INVALID_CHECK_REPORT: 422,
+  TASK_ARCHIVED: 409,
+  TASK_NOT_ARCHIVED: 409,
+  CHECK_IN_PROGRESS: 409,
 };
 
 /** An error the transport itself raises; the domain raises BoardError instead. */

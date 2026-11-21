@@ -540,6 +540,25 @@ function inCycle(from: string, tasks: readonly ReadinessTask[]): boolean {
   return false;
 }
 
+describe('readiness: an archived task counts by its status (T3)', () => {
+  const archived = { archived: { at: '2026-11-06T10:00:00.000Z' } };
+
+  it('keeps what depends on an archived task blocked until it is done', () => {
+    const waits = task('T2', { dependsOn: ['T1'] });
+    const open = { ...task('T1', { status: 'in-progress' }), ...archived };
+    expect(board({ tasks: [open, waits] }).T2).toEqual([{ code: 'task-not-done', task: 'T1' }]);
+
+    const done = { ...task('T1', { status: 'done' }), ...archived };
+    expect(board({ tasks: [done, waits] }).T2).toEqual([]);
+  });
+
+  it('gives the same answer for the same board with every task archived', () => {
+    const tasks = [task('T1'), task('T2', { dependsOn: ['T1'] }), task('T3', { status: 'done' })];
+    const every = tasks.map((one) => ({ ...one, ...archived }));
+    expect(board({ tasks: every })).toEqual(board({ tasks }));
+  });
+});
+
 describe('readiness: properties over random boards', () => {
   const seeds = Array.from({ length: 2000 }, (_, i) => i + 1);
 

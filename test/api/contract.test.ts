@@ -27,6 +27,8 @@ interface Call {
   /** Below /api/v1, with real ids in place of the example ones. */
   path: string;
   body?: unknown;
+  /** What the route needs to find first, which the shared setup does not give. */
+  prepare?: () => Promise<void>;
 }
 
 /**
@@ -46,6 +48,13 @@ const calls: Record<RouteId, Call | NotCalled> = {
   'tasks.get': { path: '/tasks/T1' },
   'tasks.update': { path: '/tasks/T1', body: { title: 'Renamed' } },
   'tasks.move': { path: '/tasks/T1/move', body: { status: 'done' } },
+  'tasks.archive': { path: '/tasks/T2/archive' },
+  'tasks.restore': {
+    path: '/tasks/T2/restore',
+    prepare: async () => {
+      await board.post(`${API}/tasks/T2/archive`).expect(200);
+    },
+  },
   'tasks.delete': { path: '/tasks/T2' },
   'tasks.workflow': { path: '/tasks/T1/workflow' },
   'tasks.handoff': { path: '/tasks/T1/handoff' },
@@ -192,6 +201,7 @@ describe('every route in the contract', () => {
   )('%s answers exactly what the contract declares', async (id, call) => {
     const route: Route = routes[id];
 
+    await call.prepare?.();
     const response = await send(route, call);
 
     expect(response.status).toBe(route.successStatus ?? 200);

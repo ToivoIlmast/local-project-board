@@ -74,6 +74,15 @@ export const BOARD_ERROR_CODES = [
   'CHECK_NOT_REPORTED',
   /** A report cannot be applied: the content moved on, or the recommendation is not accepted. */
   'STALE_CHECK',
+  /**
+   * A task that is archived cannot be moved, given another status, started or handed off, nor
+   * archived again; restore it first (T3).
+   */
+  'TASK_ARCHIVED',
+  /** Restore was asked for a task that is not archived (T3). */
+  'TASK_NOT_ARCHIVED',
+  /** Archive was asked for a task with an actuality check or a research that has not ended (T3). */
+  'CHECK_IN_PROGRESS',
   /** A check report that does not hold against the version it was made on (ADR-0030 §6). */
   'INVALID_CHECK_REPORT',
 ] as const;
