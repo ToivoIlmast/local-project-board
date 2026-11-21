@@ -22,6 +22,7 @@ import {
   type WorkflowFlagOverrides,
   type WorkflowFlag,
 } from '../../src/core/index.js';
+import { TEXT_RULE, TEXT_RULE_PARTS } from '../support/textRule.js';
 import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const STATUSES = ['backlog', 'todo', 'in-progress', 'done'];
@@ -410,6 +411,8 @@ describe('renderWorkflowSteps', () => {
       expect(text).toContain('Never merge a branch');
       expect(text).toContain(TOKEN_RULE);
       for (const part of TOKEN_RULE_PARTS) expect(text).toContain(part);
+      expect(text).toContain(TEXT_RULE);
+      for (const part of TEXT_RULE_PARTS) expect(text).toContain(part);
       expect(text).toContain('report your run to the board');
       expect(text).toContain('stop and wait for the review');
     });
@@ -429,8 +432,8 @@ describe('renderWorkflowSteps', () => {
       const steps = workflowSteps(effective(), FACTS);
       const rules = steps.filter((step) => step.key === null);
 
-      expect(rules).toHaveLength(4);
-      expect(steps.slice(-4)).toEqual(rules);
+      expect(rules).toHaveLength(5);
+      expect(steps.slice(-5)).toEqual(rules);
       for (const rule of rules) expect(rule.text).not.toContain('source:');
     });
   });
@@ -450,7 +453,8 @@ describe('renderWorkflowSteps', () => {
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           `11. ${TOKEN_RULE}`,
-          '12. When you are done, stop and wait for the review; do not start another task.',
+          `12. ${TEXT_RULE}`,
+          '13. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
     });
@@ -474,7 +478,8 @@ describe('renderWorkflowSteps', () => {
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           `11. ${TOKEN_RULE}`,
-          '12. When you are done, stop and wait for the review; do not start another task.',
+          `12. ${TEXT_RULE}`,
+          '13. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
     });
@@ -505,7 +510,8 @@ describe('renderWorkflowSteps', () => {
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
           `11. ${TOKEN_RULE}`,
-          '12. When you are done, stop and wait for the review; do not start another task.',
+          `12. ${TEXT_RULE}`,
+          '13. When you are done, stop and wait for the review; do not start another task.',
         ].join('\n') + '\n',
       );
     });

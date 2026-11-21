@@ -7,6 +7,7 @@ import {
   type CheckHandoffOptions,
 } from '../../src/contract/v1/index.js';
 import { defaultWorkflow, resolveWorkflow, type Check } from '../../src/core/index.js';
+import { TEXT_RULE, TEXT_RULE_PARTS } from '../support/textRule.js';
 import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const options = (over: Partial<CheckHandoffOptions> = {}): CheckHandoffOptions => ({
@@ -43,6 +44,8 @@ describe('the handoff of a check (ADR-0030 §6)', () => {
     expect(text).toContain('Write nothing to the board except the report');
     expect(text).toContain(TOKEN_RULE);
     for (const part of TOKEN_RULE_PARTS) expect(text).toContain(part);
+    expect(text).toContain(TEXT_RULE);
+    for (const part of TEXT_RULE_PARTS) expect(text).toContain(part);
     expect(text).toContain('Do not apply your recommendations yourself.');
   });
 
@@ -353,10 +356,13 @@ describe('the handoff of a research (ADR-0030 R7)', () => {
     });
     const text = research({ comment: 'x', history });
     expect(effective.values.editCode).toBe(true);
-    // The one step both hold is the rule about the token, which a research keeps by design.
+    // The steps both hold are the rules about the token and about non-ASCII text, which a research keeps by design.
     const own = steps
       .split('\n')
-      .filter((line) => /^\d+\. /.test(line) && !line.includes('session token'));
+      .filter(
+        (line) =>
+          /^\d+\. /.test(line) && !line.includes('session token') && !line.includes(TEXT_RULE),
+      );
     expect(own.length).toBeGreaterThan(3);
     for (const step of own) expect(text).not.toContain(step.replace(/^\d+\. /, ''));
     expect(text).not.toContain('How to work on this task');

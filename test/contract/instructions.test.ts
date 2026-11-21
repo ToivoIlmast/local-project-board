@@ -9,6 +9,7 @@ import {
   type Route,
 } from '../../src/contract/v1/index.js';
 import { defaultWorkflow, resolveWorkflow } from '../../src/core/index.js';
+import { TEXT_RULE, TEXT_RULE_PARTS } from '../support/textRule.js';
 import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
 const BOARD = { name: 'dep-health', statuses: ['backlog', 'todo', 'done'], idPrefix: 'T' };
@@ -193,6 +194,11 @@ describe('generated AI instructions', () => {
     expect(instructions).not.toContain('never write it\ninto a task, a document or a report');
   });
 
+  it('says how text that is not ASCII travels, in the words of the shared rule', () => {
+    expect(instructions).toContain(TEXT_RULE);
+    for (const part of TEXT_RULE_PARTS) expect(instructions).toContain(part);
+  });
+
   it('tells the agent what this very board calls its statuses and ids', () => {
     expect(instructions).toContain('## This board');
     expect(instructions).toContain('backlog, todo, done');
@@ -335,7 +341,7 @@ describe('generated AI instructions', () => {
           // Without the "(source: ...)" note that the handoff adds to each step.
           const text = step.text.replace(/ _\(.*\)_$/, '');
           // The rule about the token is the one thing both say, as one constant (T70).
-          if (text === TOKEN_RULE) continue;
+          if (text === TOKEN_RULE || text === TEXT_RULE) continue;
           expect(own).not.toContain(text);
         }
       });
