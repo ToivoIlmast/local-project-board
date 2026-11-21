@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { filesToCheck } from '../../scripts/check-changed.mjs';
 import { referencesIn } from '../../scripts/smart-test/changes.mjs';
 import { loadJest } from '../../scripts/smart-test/jest.mjs';
 import { planTests } from '../../scripts/smart-test/plan.mjs';
@@ -92,6 +93,42 @@ describe('the instructions every agent and Board Runner task reads', () => {
     const text = read('CLAUDE.md');
     expect(text).toContain('`npm test`');
     expect(text).toContain('`npm run test:full`');
+  });
+
+  it('the local default is `npm run check`, with no whole-project check in it', () => {
+    const block = /## Checks[\s\S]*?```sh\n([\s\S]*?)```/.exec(read('CLAUDE.md'))?.[1];
+    expect(block?.trim()).toBe('npm run check');
+    expect(scripts['check']).toBe('node scripts/check.mjs');
+  });
+});
+
+describe('`npm run check`: changed files only', () => {
+  it('formats every present changed file and lints only code', () => {
+    expect(
+      filesToCheck([
+        { status: 'M', path: 'src/core/a.ts' },
+        { status: 'A', path: 'src/web/b.tsx' },
+        { status: 'M', path: 'scripts/c.mjs' },
+        { status: 'M', path: 'README.md' },
+        { status: 'D', path: 'src/core/gone.ts' },
+      ]),
+    ).toEqual({
+      format: ['src/core/a.ts', 'src/web/b.tsx', 'scripts/c.mjs', 'README.md'],
+      lint: ['src/core/a.ts', 'src/web/b.tsx', 'scripts/c.mjs'],
+    });
+  });
+
+  it('runs no whole-project command', () => {
+    const text = read('scripts/check-changed.mjs');
+    for (const heavy of [
+      /eslint\.js', '\.'/,
+      /tsc\b/,
+      /check:cycles'/,
+      /test:full'/,
+      /playwright/,
+    ]) {
+      expect(text).not.toMatch(heavy);
+    }
   });
 });
 
