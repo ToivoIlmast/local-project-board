@@ -19,7 +19,7 @@ export interface RunningBoard {
    * the board hands to a waiting runner, one of the current version (it accepts a check and a
    * research, as the real runner says). A runner is waiting once this has been called.
    */
-  waitForRun(accepts?: string): Promise<{ request: Promise<unknown> }>;
+  waitForRun(): Promise<{ request: Promise<unknown> }>;
   /** Stop the process the way Ctrl+C does, leaving the project directory as it is. */
   stop(): Promise<void>;
   /** Start it again in the same directory and on the same port, with a new session token. */
@@ -180,8 +180,8 @@ export async function startBoard(): Promise<{
       child.stderr?.on('data', (chunk: Buffer) => (printed += chunk.toString()));
       return { child, printed: () => printed };
     },
-    async waitForRun(accepts = 'check,research') {
-      const response = await fetch(`${url.replace(/\/$/, '')}/api/v1/runs?accepts=${accepts}`, {
+    async waitForRun() {
+      const response = await fetch(`${url.replace(/\/$/, '')}/api/v1/runs?accepts=check,research`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
       });
       if (!response.ok) throw new Error(`/api/v1/runs answered ${response.status}`);

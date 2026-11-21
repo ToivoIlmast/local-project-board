@@ -233,19 +233,39 @@ describe('the dialog of Send to AI → Claude Code (T38)', () => {
     expect(rendered.board.calls).not.toContain('runTask');
   });
 
-  it('keeps the dialog open and the comment when the run is refused (T9)', async () => {
-    const rendered = await openLaunch();
-    rendered.board.fail(
-      'runTask',
+  it.each([
+    [
+      'no runner waits (NO_AGENT_RUNNER)',
       new ApiError(409, 'NO_AGENT_RUNNER', 'Nothing is waiting to start Claude Code.'),
-    );
+      'Nothing is waiting',
+    ],
+    [
+      'the task became blocked (TASK_BLOCKED)',
+      new ApiError(409, 'TASK_BLOCKED', 'Task "T1" is blocked.', {
+        id: 'T1',
+        reasons: [{ code: 'task-not-done', task: 'T2' }],
+      }),
+      'T2',
+    ],
+    [
+      'the board does not answer (network)',
+      new ApiError(0, 'NETWORK_ERROR', 'The board is not answering.'),
+      'The board is not answering.',
+    ],
+  ])(
+    'keeps the dialog open and the comment when the run is refused: %s (T9)',
+    async (_case, refusal, said) => {
+      const rendered = await openLaunch();
+      rendered.board.fail('runTask', refusal);
 
-    await rendered.user.type(within(dialog()).getByLabelText('Comment (optional)'), 'Keep me');
-    await rendered.user.click(start());
+      await rendered.user.type(within(dialog()).getByLabelText('Comment (optional)'), 'Keep me');
+      await rendered.user.click(start());
 
-    expect(await within(dialog()).findByRole('alert')).toHaveTextContent('Nothing is waiting');
-    expect(within(dialog()).getByLabelText('Comment (optional)')).toHaveValue('Keep me');
-  });
+      expect(await within(dialog()).findByRole('alert')).toHaveTextContent(said);
+      expect(within(dialog()).getByLabelText('Comment (optional)')).toHaveValue('Keep me');
+      expect(start()).toBeEnabled();
+    },
+  );
 
   it('is cancelled without a request, and gives the focus back to the menu', async () => {
     const rendered = await openLaunch();
