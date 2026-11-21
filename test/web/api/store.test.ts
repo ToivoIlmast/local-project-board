@@ -292,6 +292,33 @@ describe('the store', () => {
     ).toEqual(['T2', 'T1']);
   });
 
+  it('takes the archived task off the columns when the answer arrives, and puts it back (T10)', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1', status: 'todo' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+    const shown = () => columnsOf(aProject(), store.getState().tasks).columns[1]?.tasks;
+
+    await store.archiveTask('T1');
+    expect(store.getState().tasks[0]?.archived).toBeDefined();
+    expect(shown()).toEqual([]);
+
+    await store.restoreTask('T1');
+    expect(store.getState().tasks[0]?.archived).toBeUndefined();
+    expect(shown()?.map((task) => task.id)).toEqual(['T1']);
+  });
+
+  it('changes nothing when the server refuses to archive (T10)', async () => {
+    const board = fakeBoard({ tasks: [aTask({ id: 'T1', status: 'todo' })] });
+    const store = createBoardStore(board.client);
+    await store.load();
+    board.fail('archiveTask', new ApiError(409, 'AI_RUN_IN_PROGRESS', 'A run is working.'));
+
+    await expect(store.archiveTask('T1')).rejects.toMatchObject({ code: 'AI_RUN_IN_PROGRESS' });
+
+    expect(store.getState().tasks[0]?.archived).toBeUndefined();
+    expect(store.getState().busy).toEqual([]);
+  });
+
   it('marks a card busy while its change is in flight, and clears it when it fails', async () => {
     const board = fakeBoard({ tasks: [aTask({ id: 'T1' })] });
     const store = createBoardStore(board.client);

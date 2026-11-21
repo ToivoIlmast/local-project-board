@@ -5,9 +5,14 @@ import { taskT } from '../i18n/details';
  * The words of the page for a reason not to start a task: the board sends codes with what they
  * are about, and the client says them (ADR-0032 §7), in the language shown. Ids stay as they are.
  */
-export function reasonText(reason: BlockingReason): string {
+export function reasonText(reason: BlockingReason, archived?: ReadonlySet<string>): string {
   switch (reason.code) {
     case 'task-not-done':
+      // A task that is in the archive keeps its status, so it holds this one until it is restored.
+      if (archived?.has(reason.task) === true) {
+        return taskT('reason.task-archived', { task: reason.task });
+      }
+      return taskT(`reason.${reason.code}`, { task: reason.task });
     case 'task-missing':
     case 'task-unreadable':
       return taskT(`reason.${reason.code}`, { task: reason.task });

@@ -9,7 +9,7 @@ import {
 import { useStatusLabel } from '../../../shared/i18n/index';
 import { ConfirmDialog, EmptyState } from '../../../shared/ui/index';
 import { useBoardT } from '../i18n';
-import { TaskCard, needsStatusConfirmation, reasonText } from '../../tasks/index';
+import { TaskCard, needsStatusConfirmation, useReasonText } from '../../tasks/index';
 import { intentFor, isNoop, type MoveIntent } from '../model/dnd';
 import { useDrag } from '../model/useDrag';
 import { Column } from './Column';
@@ -26,6 +26,7 @@ export interface BoardProps {
   onOpen: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
   onCreate: (status: string) => void;
   /** Where the card should go, said the way the API takes it; the server ranks it. */
   onMove: (id: string, intent: MoveIntent) => void;
@@ -45,12 +46,14 @@ export function Board({
   onOpen,
   onEdit,
   onDelete,
+  onArchive,
   onCreate,
   onMove,
   filtered = false,
 }: BoardProps) {
   const t = useBoardT();
   const statusLabel = useStatusLabel();
+  const reasonText = useReasonText();
   const { columns, orphans } = useMemo(() => columnsOf(project, tasks), [project, tasks]);
   /** A status change of a blocked task that waits for the answer to "are you sure"; nothing is sent. */
   const [asking, setAsking] = useState<{ id: string; intent: MoveIntent; follow: boolean } | null>(
@@ -156,6 +159,7 @@ export function Board({
                 onOpen={onOpen}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onArchive={onArchive}
                 onMoveTo={moveTo}
                 onNudge={nudge}
                 onDragStart={onPointerDown}

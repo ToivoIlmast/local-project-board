@@ -40,3 +40,13 @@ describe('filtering the board by topic', () => {
     expect(filterByTopic(tasks, 'none')).not.toBe(tasks);
   });
 });
+
+describe('archived tasks (T10)', () => {
+  const gone = aTask({ id: 'T8', topic: 'P1', archived: { at: '2026-09-22T10:00:00.000Z' } });
+
+  it('are in no filter, and not in All', () => {
+    expect(filterByTopic([...tasks, gone], null)).toEqual(tasks);
+    expect(filterByTopic([...tasks, gone], 'P1')).toEqual([inP1, inP1Block]);
+    expect(filterByTopic([gone, loose], 'none')).toEqual([loose]);
+  });
+});

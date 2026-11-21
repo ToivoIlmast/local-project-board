@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   launchState,
   type BlockingReason,
@@ -6,9 +6,10 @@ import {
   type Topic,
 } from '../../../../contract/v1/index';
 import { useBoard } from '../../../api/react';
+import { withoutArchived } from '../../../api/index';
 import { Badge, EmptyState } from '../../../shared/ui/index';
 import { NO_TOPIC } from '../../board/index';
-import { blockSummary, reasonText, useSeries, type BlockSummary } from '../../tasks/index';
+import { blockSummary, useReasonText, useSeries, type BlockSummary } from '../../tasks/index';
 import { useBlocksT } from '../i18n';
 import { BlockMenu } from './BlockMenu';
 
@@ -42,9 +43,9 @@ export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
   const topics =
     topicFilter === null ? state.topics : state.topics.filter((topic) => topic.id === topicFilter);
   const showGlobal = topicFilter === null || topicFilter === NO_TOPIC;
-  const unplaced = state.tasks.filter(
-    (task) => task.topic === undefined && task.block === undefined,
-  );
+  // An archived task is not on the board, so it is in no block (T10).
+  const shown = useMemo(() => withoutArchived(state.tasks), [state.tasks]);
+  const unplaced = shown.filter((task) => task.topic === undefined && task.block === undefined);
 
   return (
     <section className="blocks" aria-label={t('blocks.title')}>
@@ -62,7 +63,7 @@ export function BlocksView({ topicFilter, onOpen }: BlocksViewProps) {
         <TopicBlocks
           key={topic.id}
           topic={topic}
-          tasks={state.tasks}
+          tasks={shown}
           readiness={state.readiness}
           onOpen={onOpen}
           onDeleted={() => headingRef.current?.focus()}
@@ -147,6 +148,7 @@ interface TaskRowsProps {
 function TaskRows({ tasks, readiness, onOpen }: TaskRowsProps) {
   const t = useBlocksT();
   const { views } = useSeries(tasks);
+  const reasonText = useReasonText();
   if (tasks.length === 0) return null;
   return (
     <ul className="blocks__tasks">

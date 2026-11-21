@@ -18,6 +18,7 @@ import {
 } from '../support/fixtures';
 
 const TOKEN = 'the-session-token';
+const NOW = '2026-09-22T10:00:00.000Z';
 
 /** A task as the reads of tasks answer it: with its readiness beside it (ADR-0032 §8). */
 const ready = <T extends object>(task: T) => ({ ...task, readiness: { reasons: [] } });
@@ -85,6 +86,8 @@ describe('the board client speaks the contract', () => {
       'GET /api/v1/tasks/T1': { json: ready(aTask({ id: 'T1' })) },
       'PATCH /api/v1/tasks/T1': { json: aTask({ id: 'T1' }) },
       'POST /api/v1/tasks/T1/move': { json: aTask({ id: 'T1' }) },
+      'POST /api/v1/tasks/T1/archive': { json: aTask({ id: 'T1', archived: { at: NOW } }) },
+      'POST /api/v1/tasks/T1/restore': { json: aTask({ id: 'T1' }) },
       'DELETE /api/v1/tasks/T1': { json: { deleted: true } },
       'GET /api/v1/workflow': { json: aWorkflow() },
       'PUT /api/v1/workflow': { json: aWorkflow() },
@@ -110,6 +113,8 @@ describe('the board client speaks the contract', () => {
     await client.getTask('T1');
     await client.updateTask('T1', { title: 'Renamed' });
     await client.moveTask('T1', { status: 'done' });
+    await client.archiveTask('T1');
+    await client.restoreTask('T1');
     await client.deleteTask('T1');
     await client.workflow();
     await client.updateWorkflow({ board: {}, statuses: {} });
@@ -138,6 +143,41 @@ describe('the board client speaks the contract', () => {
       `${BASE}${'/api/v1'}${routes['reports.read'].path.replace(':id', 'R3')}`,
     );
     expect(client.eventsUrl()).toBe(`${BASE}/api/v1${routes['events.stream'].path}`);
+  });
+});
+
+describe('archive and restore', () => {
+  it('post to their own routes, with an empty body, and answer with the task', async () => {
+    const { fake, client } = board((url) =>
+      url.endsWith('/archive')
+        ? { json: aTask({ id: 'T4', archived: { at: NOW } }) }
+        : { json: aTask({ id: 'T4' }) },
+    );
+
+    const archived = await client.archiveTask('T4');
+    const restored = await client.restoreTask('T4');
+
+    expect(archived.archived).toEqual({ at: NOW });
+    expect(restored.archived).toBeUndefined();
+    const posts = fake.calls.filter(
+      (call) => call.method === 'POST' && !call.url.endsWith('/session'),
+    );
+    expect(posts.map((call) => call.url.slice(BASE.length))).toEqual([
+      '/api/v1/tasks/T4/archive',
+      '/api/v1/tasks/T4/restore',
+    ]);
+  });
+
+  it('say the refusal of the server as it is', async () => {
+    const { client } = board(() => ({
+      status: 409,
+      json: errorBody('TASK_ARCHIVED', 'Task "T4" is archived.', { id: 'T4' }),
+    }));
+
+    await expect(client.archiveTask('T4')).rejects.toMatchObject({
+      status: 409,
+      code: 'TASK_ARCHIVED',
+    });
   });
 });
 

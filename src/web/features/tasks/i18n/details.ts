@@ -1,4 +1,5 @@
 import { createTranslate, createUseT, defineTable } from '../../../shared/i18n/index';
+import { archiveRows } from './archiveRows';
 import { checkRows } from './checkRows';
 import { detailsRows } from './detailsRows';
 import { reasonRows } from './reasonRows';
@@ -13,6 +14,7 @@ import { sendRows } from './sendRows';
  */
 export const taskCatalogs = defineTable({
   ...detailsRows,
+  ...archiveRows,
   ...reviewRows,
   ...reasonRows,
   ...sendRows,

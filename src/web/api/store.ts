@@ -166,13 +166,24 @@ export function columnsOf(
 ): { columns: Column[]; orphans: Task[] } {
   const statuses = project?.statuses ?? [];
   const known = new Set(statuses);
+  const shown = withoutArchived(tasks);
   return {
     columns: statuses.map((status) => ({
       status,
-      tasks: tasks.filter((task) => task.status === status).sort(byRank),
+      tasks: shown.filter((task) => task.status === status).sort(byRank),
     })),
-    orphans: tasks.filter((task) => !known.has(task.status)),
+    orphans: shown.filter((task) => !known.has(task.status)),
   };
+}
+
+/** Whether the task is archived (T3): it keeps its status and place, and the board does not show it. */
+export function isArchived(task: Pick<Task, 'archived'>): boolean {
+  return task.archived !== undefined;
+}
+
+/** The tasks the board shows: those that are not archived. */
+export function withoutArchived<T extends Pick<Task, 'archived'>>(tasks: readonly T[]): T[] {
+  return tasks.filter((task) => !isArchived(task));
 }
 
 /** The order the server puts a column in: rank as plain text, ties broken by id (ADR-0011). */
@@ -235,6 +246,9 @@ export interface BoardStore {
   updateTask(id: string, patch: Parameters<BoardClient['updateTask']>[1]): Promise<Task>;
   moveTask(id: string, move: Parameters<BoardClient['moveTask']>[1]): Promise<Task>;
   deleteTask(id: string): Promise<void>;
+  /** The task leaves the board when the answer arrives as `task.updated`; nothing is guessed. */
+  archiveTask(id: string): Promise<Task>;
+  restoreTask(id: string): Promise<Task>;
   loadDocuments(taskId: string): Promise<void>;
   writeDocument(taskId: string, name: string, content: string): Promise<void>;
   deleteDocument(taskId: string, name: string): Promise<void>;
@@ -444,6 +458,20 @@ export function createBoardStore(client: BoardClient): BoardStore {
     moveTask: (id, move) =>
       busy(id, async () => {
         const task = await client.moveTask(id, move);
+        apply({ type: 'task.updated', task });
+        return task;
+      }),
+
+    archiveTask: (id) =>
+      busy(id, async () => {
+        const task = await client.archiveTask(id);
+        apply({ type: 'task.updated', task });
+        return task;
+      }),
+
+    restoreTask: (id) =>
+      busy(id, async () => {
+        const task = await client.restoreTask(id);
         apply({ type: 'task.updated', task });
         return task;
       }),
