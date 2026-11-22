@@ -116,12 +116,20 @@ describe('runner log (T76 B2)', () => {
       () => readLog(root),
       (lines) => lines.filter((line) => line.event === 'end').length >= 1,
     );
-    expect((await send('resume')).status).toBe(200);
+    // The `end` line is logged before the runner waits again; a send in between answers 409.
+    const sendWhenWaiting = async (mode: string): Promise<number> =>
+      (
+        await until(
+          () => send(mode),
+          (answer) => answer.status !== 409,
+        )
+      ).status;
+    expect(await sendWhenWaiting('resume')).toBe(200);
     await until(
       () => readLog(root),
       (lines) => lines.filter((line) => line.event === 'end').length >= 2,
     );
-    expect((await send('restart')).status).toBe(200);
+    expect(await sendWhenWaiting('restart')).toBe(200);
     const lines = await until(
       () => readLog(root),
       (all) => all.filter((line) => line.event === 'end').length >= 3,
