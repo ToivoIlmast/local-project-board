@@ -1,6 +1,7 @@
 export * from './apiDoc.js';
 export * from './checkHandoff.js';
 export * from './claudeCode.js';
+export * from './console.js';
 export * from './handoff.js';
 export * from './history.js';
 export * from './instructions.js';
