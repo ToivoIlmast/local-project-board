@@ -287,17 +287,17 @@ test('the details of a task are a window: Back and Forward, a reload, the panel,
   expect(box).not.toBeNull();
   expect(box?.width ?? 0).toBeLessThanOrEqual(1200);
   expect(box?.height ?? 0).toBeLessThanOrEqual((viewport?.height ?? 0) * 0.9 + 1);
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe(
-    'hidden',
-  );
+  expect(
+    (await page.evaluate('getComputedStyle(document.documentElement).overflow')) as string,
+  ).toBe('hidden');
 
   // The panel beside the board: the same task, the same address, and it passes axe as well.
-  const steps = await page.evaluate(() => history.length);
+  const steps = (await page.evaluate('history.length')) as number;
   await dialog.getByRole('button', { name: 'Open in side panel' }).click();
   const panel = page.getByRole('complementary', { name: 'Task T1' });
   await expect(panel).toBeVisible();
   await expect(page).toHaveURL(/task=T1/);
-  expect(await page.evaluate(() => history.length)).toBe(steps);
+  expect((await page.evaluate('history.length')) as number).toBe(steps);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await panel.getByRole('button', { name: 'Open in window' }).click();
   await expect(dialog).toBeVisible();
