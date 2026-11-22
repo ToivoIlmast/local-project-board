@@ -810,3 +810,205 @@ about `signals`.
 
 **What this costs.** To start a check with a trigger, the runner has to be updated (V5). An earlier
 runner keeps starting work, checks without a trigger and research.
+
+## Amendment (T16/C1, 2026-11-22): Console mode — a work run as a stream-json process of the runner
+
+Status of this amendment: **proposed**. It is accepted when the owner says so, and only then do
+the tasks C4 and later of the plan begin. C2 and C3 may be done in parallel with it. This
+amendment is C1 of the plan, and it comes before any code.
+
+Sources:
+
+- the report of the spike T16, `test/spike/console/report.md` (Claude Code 2.1.330, Windows 11),
+  with its fixtures in `test/spike/console/fixtures/` — cited here as "T16";
+- the plan `docs/notes/PLAN_console_mode_after_T16.ru.md`, as revised after T18–T21 — cited here
+  as "the plan §n";
+- the research `docs/notes/RESEARCH_claude_console.ru.md`. Where it and T16 differ, T16 is right.
+
+The rules are numbered M1–M10. This amendment replaces nothing above. It adds one more way to
+start a work run, beside the terminal one, and amends two sentences of the Decision: "`stdio:
+inherit`" (M1) and "the board passes no flags to `claude`" (M3). The server still starts no
+process: the M-rules are about what the **runner** does, and about what the server records.
+
+**M1. Console mode is an opt-in mode of the runner, only for `kind: work`.**
+
+- The runner is started with `local-project-board claude --wait --console` and declares
+  `accepts=…,console`. The terminal mode stays the default, and its code and tests do not change.
+- The process is `claude -p --input-format stream-json --output-format stream-json --verbose
+  --replay-user-messages --permission-prompts none`, with `--session-id <uuid>` (or `--resume
+  <uuid>` for Resume). It is started by `spawn` with no shell, `stdio: pipe`, `detached: false`
+  (plan §2.3, §8.4).
+- Checks (`kind: check`) and research (`kind: research`) stay in the terminal mode. So
+  `checkSession.ts` and the journal of checks are not touched (plan §2.2, point 7).
+- The server does not own the process. It keeps a journal of the console
+  (`.board/console/<ID>-<runId>.ndjson`), orders its events by `seq` and checks compare-and-set by
+  `(taskId, runId, sessionId)` under the lock of the task. It starts nothing.
+- A flag that the terminal mode does not pass is not passed here either: no `--setting-sources`,
+  no `--no-session-persistence` (Resume needs the session), no `--max-budget-usd`, no
+  `--permission-mode`, no `--tools` (plan §2.3).
+
+**M2. The prompt goes through stdin.**
+
+- The first message of the session is the prompt of the task (`claudeCodePrompt` or the
+  continuation prompt), written to stdin like any other message. It is not an argument.
+- One function, `writeUserMessage`, writes to stdin:
+  `{"type":"user","message":{"role":"user","content":<text>},"uuid":<uuid>}` through
+  `JSON.stringify`, then `\n`. Raw text is never written, a message without a `uuid` is never
+  written (the CLI glues it to the next one silently), a text with NUL is never written. T16: one
+  invalid JSON line on stdin **kills the process**.
+- Writes are sequential and respect backpressure.
+
+**M3. `--permission-prompts none`; the user's settings are not changed.**
+
+- The runner always passes `--permission-prompts none`: it says "there is nobody to ask", it is a
+  mode of the interface and not a setting of the user. The refusal is automatic and carries the
+  reason in `decision_reason` (T16).
+- The board passes no `--permission-mode`, `--allowedTools`, `--tools`,
+  `--dangerously-skip-permissions`, and **writes no `.claude/settings*.json`**. The user,
+  project and local settings of Claude Code apply as in the terminal mode (this refines "Nothing
+  is configured" above: one flag is passed, and it is not a setting).
+- The board promises no answer to a permission request from the page. Answers to requests, a
+  `PermissionRequest` hook, the structured AskUserQuestion and the Agent SDK are outside V1.
+- The page and the help of `--console` say it in advance and per denial (plan §7.4). They name
+  what the user can choose: `permissions.allow` rules, `permissions.defaultMode`. They recommend
+  no syntax of a write rule: a bare `"Write"` rule did not allow a write in T16, and the reason
+  is unknown (Q6).
+
+**M4. The status of a message is built on `command_lifecycle`.**
+
+- `command_lifecycle {command_uuid, state}`, with `queued` → `started` → `completed` |
+  `cancelled`, is the only evidence of what happened to a message (T16 §4).
+- The statuses are `accepted` (the server wrote it), `queued` ("received by Claude Code",
+  < 150 ms in T16), `started` ("handed to Claude"), `completed`, `cancelled`, and the two that
+  the end of a process gives: `undelivered` and `interrupted`. A status only moves forward.
+- The replay of a message is **not** a confirmation: for a duplicate uuid the CLI sends a replay
+  at once and runs nothing. `assistant.text` never changes a status. `completed` means that
+  Claude Code finished the command, not that the model did what was asked: a message that joined
+  a running tool turn was `completed`, and the model dropped the original instruction (T16 §3).
+- The state of the console is **computed** from the journal by one pure function (`foldConsole`),
+  the same on the server and in the browser, over five independent axes. The runner passes
+  facts, not conclusions: it never says "awaiting input" (plan §2.2, §5).
+
+**M5. Compatibility is checked by capabilities, not by version; the gate of input is the
+handshake.**
+
+- The version of Claude Code is recorded (`session.info`) and never compared.
+- The **handshake** gates input. The first `system/init` has the expected `session_id`, an array
+  `capabilities` with `msg_lifecycle_v1`, and `user_message_uuids` with the uuid of the prompt;
+  `queued` and `started` and a replay come for the prompt; no line has another `session_id`.
+  Only then is `compat.passed` written, and only then does the server accept a message from the
+  page (plan §6.1). Timeouts: 15 s for `queued`, 120 s for `init`, `started` and the replay, and
+  none for the first `result` (plan §6.2).
+- The form of `result` (`subtype`, `is_error`, `session_id`) is **not** a gate. A broken form is
+  a `notice` with the code `protocol_malformed` and changes nothing. A `result` with
+  `is_error: true` is an error of a turn, and not an incompatibility (plan §6.1, fixture
+  `api-error`).
+- Without the capability, or without `queued`/`started`/replay for the prompt, or with a uuid or
+  session that does not match, the mode **refuses and does not degrade**: the runner closes
+  stdin softly (M9), the first turn — the task itself — finishes without input from the page, and
+  the person is told why (plan §6.3). There is no silent half-mode in which the board accepts
+  messages it cannot confirm.
+- `command_lifecycle` is not documented (Q10). Its disappearance is a refusal of the mode, never a
+  silent loss of confirmation.
+
+**M6. The availability of the Console session does not depend on `aiRun.state`.**
+
+- The report of the agent (`finished`, `failed`, `needs-review`) is a report. It does not close
+  the input. The console accepts a message while all of these hold (one rule, `acceptsMessages`,
+  used by the server, the inbox and the field of input): the run is the current one (`runId` and
+  `sessionId` match, `aiRun.console`); no end of the run is recorded (no `aiRun.endedAt`); the
+  process is running (no `process.exited`, the run is not `lost`, no close was requested); the
+  compatibility is `compatible` (plan §5.3).
+- The report of the agent affects the session only through the automatic close (M9).
+- `endRun` is written as today, after the process exits and the spool is uploaded; the console
+  states never change `aiRun.state`.
+
+**M7. A new run of a task does not begin while the console process of the previous run may be
+alive.**
+
+- This is true of a new run, Resume and Restart, of **any** mode: two processes of Claude Code on
+  one task and one session are the conflict, whatever the mode of the new run is.
+- A console run (`aiRun.console`) **occupies** the task until it has `endedAt` or is `lost`
+  (`abandon` on proof of death, T45). An unknown state of the process (the runner died, no end
+  was delivered) is occupied. `process.exited` is not read from the journal: waiting for
+  `endedAt` is the safe side. The status `done`, archiving and `aiRun.state ≠ working` do not
+  free the process.
+- One condition, `runOccupiesTask(aiRun) = state === 'working' || (console && !endedAt && !lost)`,
+  replaces `state === 'working'` in the guards of `aiRunService`, under the same lock of the task:
+  `requestWork`, `begin`, `requireResumable`, `requireRestartable`. `requireIdle` (archiving) does
+  not change.
+- The answer is the existing `409 AI_RUN_IN_PROGRESS`, with a message that names the cause; nothing
+  is written and no `launch` is created. The way out is to end the old console (M9) or, if the
+  runner died, `--recover` (T45).
+- Until then the old run stays the current one: events and messages go through the usual CAS.
+  `STALE_AI_RUN` is possible for it only after its `endedAt` and the start of a new run.
+- Open for implementation (Q15): how `--recover` records the end of a console run whose agent
+  reported and whose runner then died without `end`, since `abandon` accepts only `working`.
+
+**M8. There is no interruption of a turn through the protocol.**
+
+- `interrupt_*` in `init.capabilities` are not used: their format is not documented and was not
+  checked (Q11).
+- The person has the two ends of M9 only.
+
+**M9. A soft end and a hard end.**
+
+- **Soft — "Finish after the current work"**: close stdin. T16 (Windows): in idle the process
+  exits 0 in < 1 s; in a turn it finishes the turn, sends `result`, exits 0; with a running
+  background subagent it waits for it and runs one more turn. The sources are `board` (the
+  button), `agent-final` (the agent reported, the phase is `idle`, every message is `completed`
+  or `cancelled`, the inbox is connected, and the server confirmed by the answer to a control
+  batch that `awaitingDelivery = 0`, all held for 5 s), `incompatible` (M5) and `signal`. After
+  the close the server refuses new messages (`409 CONSOLE_UNAVAILABLE`); a message accepted after
+  the control batch but before the close becomes `undelivered`, with no loss (plan §8.2, §9.4).
+- **Hard — "Stop now"**: `child.kill()`, shown only in the phase `closing`. On Windows it is
+  TerminateProcess, there is no `result`, an open turn and the messages in `started` become
+  `interrupted`. On POSIX: SIGTERM, then SIGKILL after 5 s (the behaviour of SIGTERM in `-p` is
+  unchecked) (plan §8.3).
+- **A signal to the runner**: the first SIGINT closes stdin and tells the terminal, the second
+  kills the child. A real Ctrl+C is unchecked on every platform: `claude` gets it itself and at
+  the same time, so "the first Ctrl+C is a soft end" is a hypothesis. Only safety is promised,
+  and the text of the terminal promises no finishing (plan §8.4; Q1). The reliable soft end is
+  the button.
+- `detached: false` everywhere. On Windows the child dies with the runner (job object, T16). On
+  POSIX the `exit` handler of the runner kills it, the last line against an orphan.
+
+**M10. References.** T16 (`test/spike/console/report.md`) for the facts; the plan §1–§10 for the
+model; tasks C2–C13 of the plan §11 for the implementation; plan §12.4 (the live checklist L)
+for what is left to check by hand.
+
+**Not confirmed.** None of these is a requirement of this amendment. The plan closes each with a
+safe decision that does not depend on the answer. The number is the one of §13 of the plan; "L-n"
+is the live check that confirms it (plan §12.4).
+
+| #   | Not confirmed                                                                                         | Held as                                             | Check       |
+| --- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------- |
+| Q1  | Linux/macOS: stdin, signals, an orphan; the reaction of `claude -p` to a real Ctrl+C on all platforms | `detached: false`, kill on `exit`; no promise (M9)  | L-1, L-7…10 |
+| Q2  | Whether the session goes on after an API error                                                        | input stays; an error of a turn is not of a session | L-5         |
+| Q3  | Reasons of `cancelled` other than an API error                                                        | a neutral text and `terminalReason`                 | L-13        |
+| Q4  | Grandchildren of the process after a kill                                                             | their stop is not promised                          | L-6         |
+| Q5  | Closing stdin with background tasks (one record)                                                      | `closing` holds until `process.exited`, no timeout  | L-3, L-4    |
+| Q6  | Why a bare `Write` rule did not allow a write                                                         | no syntax of write rules recommended (M3)           | L-12        |
+| Q7  | Resume of a console session (`--resume` with stream-json)                                             | the same path, the same compatibility check         | L-11        |
+| Q8  | Format of `system/api_retry`, of `rate_limit_event` other than `allowed`                              | a generic `notice`, no parsing of fields            | L-13        |
+| Q9  | Gluing of messages on other models                                                                    | statuses do not depend on gluing                    | L-1         |
+| Q10 | Stability of `command_lifecycle` (undocumented)                                                       | the check of M5; refusal of the mode if it vanishes | each update |
+| Q11 | `interrupt_*`, `ask_user_question_unanswered_v1`, `lifecycle_wake…` in capabilities                   | not used (M8)                                       | V2 research |
+| Q12 | Load of the task lock with frequent batches                                                           | ≤ 4 batches/s; a lock of the journal if C7 shows it | C7          |
+| Q13 | Values of `status` in `task_updated`/`task_notification` other than `"completed"`                     | `job.ended` only for `"completed"`                  | L-4         |
+| Q14 | A new run while the process of a console is alive                                                     | **closed by M7**                                    | tests of C7 |
+| Q15 | The end of a console run where the agent reported and the runner died without `end`                   | the task stays occupied (M7); decided in C7/C8      | C7/C8       |
+
+Also unconfirmed, and held the same way: the behaviour of closing stdin, of SIGTERM and of an
+orphan on Linux and macOS (plan §8.1), and that `permissions.defaultMode: "acceptEdits"` acts as
+the flag `--permission-mode acceptEdits` of T16 does (plan §7.5).
+
+Outside V1, as in the research: answers to permissions from the page, the structured
+AskUserQuestion, interruption of a turn, the Agent SDK, observing terminal sessions through
+hooks, a PTY.
+
+**What this costs.** Console mode adds a second kind of process owned by the runner, a journal on
+the server and a state model (`foldConsole`). The price of M7 is that a new run waits for
+`endedAt` of a console run, even if the agent has long reported. The price of M5 is that a Claude
+Code without `msg_lifecycle_v1` gets no input from the page: its first turn runs as a one-shot
+headless run.
