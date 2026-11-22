@@ -1,6 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, test } from './board';
+import { expect, test, taskDetails, topDialog } from './board';
 
 async function violations(page: Page): Promise<string[]> {
   const result = await new AxeBuilder({ page }).analyze();
@@ -103,6 +103,8 @@ for (const scheme of ['light', 'dark'] as const) {
       [
         'the reports',
         async () => {
+          // The question first, then the window of the task behind it.
+          await page.keyboard.press('Escape');
           await page.keyboard.press('Escape');
           await page.getByRole('button', { name: 'Reports' }).click();
           await page.getByRole('button', { name: 'Dependency audit' }).click();
@@ -122,7 +124,7 @@ for (const scheme of ['light', 'dark'] as const) {
           const topics = page.getByRole('complementary', { name: 'Topics' });
           await topics.getByRole('button', { name: 'Cancel' }).click();
           await topics.getByRole('button', { name: 'Delete P1' }).click();
-          const question = page.getByRole('dialog');
+          const question = topDialog(page);
           await question.getByRole('button', { name: 'Delete', exact: true }).click();
           await expect(question.getByRole('alert')).toContainText('not empty');
         },
@@ -175,7 +177,7 @@ for (const scheme of ['light', 'dark'] as const) {
         'the question before the status of a blocked task changes',
         async () => {
           await page.getByRole('button', { name: 'Move to done' }).click();
-          await expect(page.getByRole('dialog')).toContainText('T3 is blocked');
+          await expect(topDialog(page)).toContainText('T3 is blocked');
         },
       ],
       [
@@ -245,11 +247,8 @@ for (const scheme of ['light', 'dark'] as const) {
           await page.keyboard.press('Escape');
           await page.getByRole('button', { name: 'Block K1 actions' }).click();
           await page.getByRole('button', { name: 'Delete', exact: true }).click();
-          await page
-            .getByRole('dialog')
-            .getByRole('button', { name: 'Delete', exact: true })
-            .click();
-          await expect(page.getByRole('dialog').getByRole('alert')).toContainText('not empty');
+          await topDialog(page).getByRole('button', { name: 'Delete', exact: true }).click();
+          await expect(topDialog(page).getByRole('alert')).toContainText('not empty');
         },
       ],
     ];
@@ -304,11 +303,14 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(await violations(page), `the series panel, ${scheme} theme`).toEqual([]);
 
     await panel.getByRole('button', { name: 'Check T2' }).click();
-    await expect(page.getByRole('dialog')).toContainText('Check #1 for task T2 is still marked');
+    await expect(topDialog(page)).toContainText('Check #1 for task T2 is still marked');
     expect(await violations(page), `the question before a second check, ${scheme} theme`).toEqual(
       [],
     );
     await page.getByRole('button', { name: 'Cancel' }).click();
+    // The window of the task covers the board: close it before going to another view.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Task T1' })).toHaveCount(0);
 
     await page
       .getByRole('navigation', { name: 'View' })
@@ -327,7 +329,7 @@ test('the whole board can be used with the keyboard alone, and the focus is neve
   await page.goto(board.url);
   await expect(page.getByRole('region', { name: /^todo \(1\)/ })).toBeVisible();
   const { keyboard } = page;
-  const dialog = page.getByRole('dialog');
+  const dialog = topDialog(page);
   const focus = page.locator(':focus');
 
   // Create: the dialog opens on its first field, so typing a title with spaces in it does not
@@ -362,13 +364,17 @@ test('the whole board can be used with the keyboard alone, and the focus is neve
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'New task' })).toBeFocused();
 
-  // Submit it from the keyboard. The task's panel takes the focus, so the cards of the board
+  // Submit it from the keyboard. The task's window takes the focus, so the cards of the board
   // are not between the person and the thing they just made.
   await keyboard.press('Enter');
   await keyboard.type('Reached with a keyboard');
   await page.getByRole('button', { name: 'Create' }).focus();
   await keyboard.press('Enter');
-  await expect(page.getByRole('complementary', { name: 'Task T2' })).toBeFocused();
+  await expect(taskDetails(page, 'Task T2')).toBeFocused();
+  // Escape closes the window and returns to where the person was before it opened.
+  await keyboard.press('Escape');
+  await expect(taskDetails(page, 'Task T2')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'New task' })).toBeFocused();
 
   // A card's menu gives the focus back to its button on Escape…
   await page.getByRole('button', { name: 'Actions for T2' }).focus();
@@ -385,14 +391,17 @@ test('the whole board can be used with the keyboard alone, and the focus is neve
   await expect(page.getByRole('region', { name: /^done \(1\)/ })).toBeVisible();
   await expect(page.locator('[data-task-id="T2"] .card__title')).toBeFocused();
 
-  // Closing the panel returns to where the person was before it opened.
-  await page
-    .getByRole('complementary', { name: 'Task T2' })
-    .getByRole('button', { name: 'Close' })
-    .focus();
+  // The card opens the window on Enter; Tab stays inside it, and Close gives the focus back.
+  await page.locator('[data-task-id="T2"] .card__title').focus();
   await keyboard.press('Enter');
-  await expect(page.getByRole('complementary')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'New task' })).toBeFocused();
+  const window = page.getByRole('dialog', { name: 'Task T2' });
+  await expect(window).toBeFocused();
+  await keyboard.press('Shift+Tab');
+  await expect(window.locator(':focus')).toHaveCount(1);
+  await window.getByRole('button', { name: 'Close' }).focus();
+  await keyboard.press('Enter');
+  await expect(window).toHaveCount(0);
+  await expect(page.locator('[data-task-id="T2"] .card__title')).toBeFocused();
 
   // Delete: it asks first, with the safe answer focused; Escape backs out, Enter on the
   // danger button does it.
@@ -496,7 +505,7 @@ test('a task left with unsaved AI settings asks Save, Discard or Cancel, answere
   });
   await page.goto(board.url);
   await page.getByRole('button', { name: 'Ship it' }).click();
-  const task = page.getByRole('complementary', { name: 'Task T1' });
+  const task = taskDetails(page, 'Task T1');
   await task.getByLabel('Push').selectOption('On');
 
   const close = task.getByRole('button', { name: 'Close', exact: true });
@@ -536,9 +545,6 @@ test('a task left with unsaved AI settings asks Save, Discard or Cancel, answere
 
   // Nothing is unsaved now: no question.
   await page.getByRole('button', { name: 'Ship it' }).click();
-  await page
-    .getByRole('complementary', { name: 'Task T1' })
-    .getByRole('button', { name: 'Close', exact: true })
-    .click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await taskDetails(page, 'Task T1').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(topDialog(page)).toHaveCount(0);
 });

@@ -3,6 +3,7 @@ import type { Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, findTopDialog, queryTopDialog } from '../support/taskDetails';
 
 /** What the Kanban says of readiness, and what it does about it (T91; ADR-0032 §7–8). */
 
@@ -138,14 +139,14 @@ describe('Send to AI on a blocked card', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Send to AI: Claude Code' }));
 
     expect(rendered.board.calls).not.toContain('handoff');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe('what was there before');
   });
 
   it('is the same in the menu of the task’s own panel', async () => {
     const rendered = await renderBoard(seeded());
     await rendered.user.click(screen.getByRole('button', { name: 'Held' }));
-    const panel = await screen.findByRole('complementary', { name: 'Task T2' });
+    const panel = await findTaskDetails('Task T2');
 
     await rendered.user.click(within(panel).getByRole('button', { name: 'Send to AI' }));
 
@@ -177,7 +178,7 @@ describe('Send to AI on a blocked card', () => {
     expect(claude).toBeEnabled();
     await rendered.user.click(claude);
     // As before T91: the dialog opens and says the run is working.
-    expect(await screen.findByRole('dialog')).toHaveTextContent(/working/i);
+    expect(await findTopDialog()).toHaveTextContent(/working/i);
   });
 });
 

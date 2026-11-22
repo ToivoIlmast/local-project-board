@@ -5,6 +5,7 @@ import { parse } from 'yaml';
 import { WORKFLOW_LABELS } from '../../../src/web/features/settings/index';
 import { cleanTmpDirs, tmpDir } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { findTaskDetails, queryTaskDetails, taskDetails } from '../support/taskDetails';
 
 const SLOW_MS = 30_000;
 
@@ -19,7 +20,7 @@ afterEach(async () => {
   await cleanTmpDirs();
 });
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const ai = () => within(details()).getByRole('region', { name: 'AI' });
 const field = (label: string) => within(ai()).getByLabelText(label);
 const push = () => field(WORKFLOW_LABELS.push.label);
@@ -30,7 +31,7 @@ async function withTask(root?: string): Promise<RealBoard> {
   board = started;
   await started.server.post('/api/v1/tasks', { title: 'Ship it', status: 'todo' }).expect(201);
   await started.user.click(await screen.findByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   // The panel reads the documents of the task as it opens; let that finish before the test acts.
   await within(details()).findByText('No documents');
   return started;
@@ -335,9 +336,7 @@ describe('leaving a task with unsaved AI settings on a real board', () => {
       const question = await screen.findByRole('dialog', { name: 'Unsaved changes' });
       await user.click(within(question).getByRole('button', { name: 'Save' }));
 
-      await waitFor(() =>
-        expect(screen.queryByRole('complementary', { name: 'Task T1' })).not.toBeInTheDocument(),
-      );
+      await waitFor(() => expect(queryTaskDetails('Task T1')).not.toBeInTheDocument());
       expect((await frontmatter(root)).workflow).toEqual({ push: true });
     },
     SLOW_MS,

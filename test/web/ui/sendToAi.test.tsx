@@ -8,6 +8,7 @@ import { SendToAi, type RunTarget } from '../../../src/web/features/tasks/index'
 import { aTask } from '../support/fixtures';
 import { fakeBoard, type FakeBoardOptions } from '../support/fakeBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, taskDetails, topDialog } from '../support/taskDetails';
 
 const todo = (extra: Partial<Task> = {}): Task =>
   aTask({ id: 'T1', title: 'Ship it', status: 'todo', ...extra });
@@ -15,11 +16,11 @@ const todo = (extra: Partial<Task> = {}): Task =>
 async function openTask(options: FakeBoardOptions = {}): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [todo()], ...options });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const sendMenu = () => within(details()).getByRole('button', { name: 'Send to AI' });
 
 async function copyHandoff(rendered: RenderedBoard): Promise<void> {
@@ -275,7 +276,7 @@ describe('Send to AI → Claude Code (T27)', () => {
       tasks: [todo(), aTask({ id: 'T2', title: 'Other', status: 'todo', rank: 'a1' })],
     });
     await rendered.user.click(screen.getByRole('button', { name: 'Other' }));
-    const panel = await screen.findByRole('complementary', { name: 'Task T2' });
+    const panel = await findTaskDetails('Task T2');
 
     await rendered.user.click(within(panel).getByRole('button', { name: 'Send to AI' }));
     await rendered.user.click(claudeItem());
@@ -354,7 +355,7 @@ describe('Send to AI → Claude Code (T27)', () => {
     const release = rendered.board.hold('runTask');
 
     await sendToClaude(rendered);
-    const start = within(screen.getByRole('dialog')).getByRole('button', {
+    const start = within(topDialog()).getByRole('button', {
       name: /^(Start|Sending)/,
     });
     expect(start).toBeDisabled();

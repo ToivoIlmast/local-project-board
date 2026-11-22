@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { test as base } from '@playwright/test';
+import { test as base, type Locator, type Page } from '@playwright/test';
 
 const repository = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -236,3 +236,19 @@ export const test = base.extend<{ board: RunningBoard }>({
 });
 
 export { expect } from '@playwright/test';
+
+/**
+ * The details of a task, wherever they are shown: the window over the board (a dialog) or the
+ * panel beside it (a complementary region). Both carry the accessible name `Task T1`.
+ */
+export function taskDetails(
+  where: Pick<Page, 'getByRole'> | Pick<Locator, 'getByRole'>,
+  name: string,
+): Locator {
+  return where.getByRole('dialog', { name }).or(where.getByRole('complementary', { name }));
+}
+
+/** A form or a question on the page, not the window of a task, which is a dialog as well. */
+export function topDialog(where: Pick<Page, 'locator'>): Locator {
+  return where.locator('[role="dialog"]:not(.task-modal__dialog)');
+}

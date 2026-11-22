@@ -1,6 +1,6 @@
 import { chmod, copyFile, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { expect, test } from './board';
+import { expect, test, taskDetails, topDialog } from './board';
 import { installWindowsShim } from '../support/windowsShim.js';
 
 test('a developer opens the board and works on a task', async ({ page, board }) => {
@@ -14,15 +14,15 @@ test('a developer opens the board and works on a task', async ({ page, board }) 
   // Create.
   await page.getByRole('button', { name: 'New task' }).click();
   await page.getByLabel('Title').fill('Extract the git adapter');
-  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
+  await topDialog(page).getByLabel('Status').selectOption('todo');
   await page.getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('complementary', { name: 'Task T1' })).toBeVisible();
+  await expect(taskDetails(page, 'Task T1')).toBeVisible();
   await expect(
     page.getByRole('region', { name: /^todo/ }).getByText('Extract the git adapter'),
   ).toBeVisible();
 
   // Edit.
-  await page.getByRole('complementary').getByRole('button', { name: 'Edit' }).click();
+  await taskDetails(page, 'Task T1').getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Title').fill('Extract the git reader');
   // The draft is reviewed as a diff against the task before it is saved (T46).
   await page.getByRole('button', { name: 'Review changes' }).click();
@@ -33,7 +33,7 @@ test('a developer opens the board and works on a task', async ({ page, board }) 
   await page.getByRole('button', { name: 'New document' }).click();
   await page.getByLabel('File name').fill('plan.md');
   await page.getByLabel('Content').fill('# Plan\n\nMove the parser.');
-  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await topDialog(page).getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: 'plan.md', exact: true }).click();
   await expect(
     page
@@ -42,7 +42,7 @@ test('a developer opens the board and works on a task', async ({ page, board }) 
   ).toBeVisible();
 
   // Change the status from the panel.
-  await page.getByRole('complementary').getByLabel('Status').selectOption('done');
+  await taskDetails(page, 'Task T1').getByLabel('Status').selectOption('done');
   await expect(page.getByRole('region', { name: /^done \(1\)/ })).toBeVisible();
 
   // What the board shows is what the board stored.
@@ -51,7 +51,7 @@ test('a developer opens the board and works on a task', async ({ page, board }) 
 
   // And the page reloads into the same place, because the task is in the address.
   await page.reload();
-  await expect(page.getByRole('complementary', { name: 'Task T1' })).toBeVisible();
+  await expect(taskDetails(page, 'Task T1')).toBeVisible();
 });
 
 test('a card is dragged into another column and stays there', async ({ page, board }) => {
@@ -146,9 +146,12 @@ test('the board is stopped and started again while the page stays open', async (
   // token is what the restart below invalidates.
   await page.getByRole('button', { name: 'New task' }).click();
   await page.getByLabel('Title').fill('Written before the stop');
-  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
-  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('complementary', { name: 'Task T2' })).toBeVisible();
+  await topDialog(page).getByLabel('Status').selectOption('todo');
+  await topDialog(page).getByRole('button', { name: 'Create' }).click();
+  await expect(taskDetails(page, 'Task T2')).toBeVisible();
+  // The new task opens in its window, over the board; the rest of the test works on the board.
+  await page.keyboard.press('Escape');
+  await expect(taskDetails(page, 'Task T2')).toHaveCount(0);
 
   await board.stop();
 
@@ -161,10 +164,10 @@ test('the board is stopped and started again while the page stays open', async (
   // A change attempted now fails in the open instead of looking as though it worked.
   await page.getByRole('button', { name: 'New task' }).click();
   await page.getByLabel('Title').fill('Written while the board was down');
-  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
-  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('dialog').getByRole('alert')).toContainText(/not answering/);
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await topDialog(page).getByLabel('Status').selectOption('todo');
+  await topDialog(page).getByRole('button', { name: 'Create' }).click();
+  await expect(topDialog(page).getByRole('alert')).toContainText(/not answering/);
+  await topDialog(page).getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('region', { name: /^todo \(2\)/ })).toBeVisible();
 
   // The board comes back on the same port, and another process changes it meanwhile.
@@ -184,9 +187,9 @@ test('the board is stopped and started again while the page stays open', async (
   // the board answers 401 once, the page asks for the current token and sends it (ADR-0008).
   await page.getByRole('button', { name: 'New task' }).click();
   await page.getByLabel('Title').fill('Written after the restart');
-  await page.getByRole('dialog').getByLabel('Status').selectOption('todo');
-  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('complementary', { name: 'Task T4' })).toBeVisible();
+  await topDialog(page).getByLabel('Status').selectOption('todo');
+  await topDialog(page).getByRole('button', { name: 'Create' }).click();
+  await expect(taskDetails(page, 'Task T4')).toBeVisible();
 
   const tasks = (await board.api('/api/v1/tasks')) as { id: string; title: string }[];
   expect(tasks.map((task) => task.title)).toEqual([
@@ -305,7 +308,7 @@ test('the AI settings of a task are changed with the keyboard, and the handoff c
 
   await page.getByRole('button', { name: 'Ship it' }).focus();
   await page.keyboard.press('Enter');
-  const task = page.getByRole('complementary', { name: 'Task T1' });
+  const task = taskDetails(page, 'Task T1');
   await expect(task).toBeFocused();
   const ai = task.getByRole('region', { name: 'AI', exact: true });
 
@@ -409,7 +412,7 @@ test('the handoff is copied from the menu of a card, and is the one the board se
   expect(copied).toBe(served);
   expect(copied).toContain('Push your commits to the remote. _(source: this task)_');
   // Nothing was opened by it.
-  await expect(page.getByRole('complementary')).toHaveCount(0);
+  await expect(page.getByRole('complementary').or(topDialog(page))).toHaveCount(0);
 });
 
 test('a task in a column with “Edit code” off is handed over with the step not to change any file', async ({
@@ -496,7 +499,7 @@ test('Send to AI → Claude Code: the click starts a session of that task in the
 
   await page.goto(board.url);
   await page.getByRole('button', { name: 'Ship it' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
 
   // From the keyboard, like the other entries of the menu.
   await details.getByRole('button', { name: 'Send to AI' }).focus();

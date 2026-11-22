@@ -1,6 +1,7 @@
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { topDialog } from '../support/taskDetails';
 
 const SLOW_MS = 30_000;
 
@@ -31,11 +32,9 @@ describe('the topics panel on a real board (T90)', () => {
       );
 
       await user.click(within(panel()).getByRole('button', { name: 'Delete P1' }));
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+      await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
-      expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
-        'not empty',
-      );
+      expect(await within(topDialog()).findByRole('alert')).toHaveTextContent('not empty');
       expect(await server.storage.getTopic('P1')).not.toBeNull();
       expect(within(panel()).getByText('M1 Core')).toBeInTheDocument();
       expect(server.events.types()).not.toContain('topic.deleted');
@@ -55,7 +54,7 @@ describe('the topics panel on a real board (T90)', () => {
       );
 
       await user.click(within(panel()).getByRole('button', { name: 'Delete P1' }));
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+      await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
       await waitFor(() => expect(within(panel()).queryByText('M1 Core')).not.toBeInTheDocument());
       expect(await server.storage.getTopic('P1')).toBeNull();

@@ -6,6 +6,7 @@ import type { Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails } from '../support/taskDetails';
 
 const cardOf = (title: string): HTMLElement =>
   screen.getByRole('button', { name: title }).closest('li') as HTMLElement;
@@ -100,7 +101,7 @@ describe('"Send to AI" in the menu of a card', () => {
     const fromCard = await navigator.clipboard.readText();
 
     await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-    const panel = await screen.findByRole('complementary', { name: 'Task T1' });
+    const panel = await findTaskDetails('Task T1');
     await rendered.user.click(within(panel).getByRole('button', { name: 'Send to AI' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Copy handoff' }));
     await within(panel).findByText('Handoff copied to the clipboard.');

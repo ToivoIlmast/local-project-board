@@ -1,5 +1,5 @@
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test } from './board';
+import { expect, test, taskDetails } from './board';
 
 /**
  * The whole of T46 in a real browser, against the real board: a check is asked for from the
@@ -23,7 +23,7 @@ test('check, decide, apply, save and restore, from the page', async ({ page, boa
   await page.goto(board.url);
 
   await page.getByRole('button', { name: 'Extract the git adapter' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   await expect(details.getByLabel('Version', { exact: true })).toHaveValue('current');
 
   // 1. Check actuality, for a task in any status: the runner is handed a check.
@@ -160,7 +160,7 @@ test('research from the keyboard: ask, read the report, reject with a reason', a
   const runner = await board.waitForRun();
   await page.goto(board.url);
   await page.getByRole('button', { name: 'Extract the git adapter' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   const section = details.getByRole('region', { name: 'AI research' });
 
   await section.getByRole('button', { name: 'New research…' }).focus();
@@ -251,4 +251,64 @@ test('research from the keyboard: ask, read the report, reject with a reason', a
   );
   await page.keyboard.press('Escape');
   await expect(report).toBeHidden();
+});
+
+test('the details of a task are a window: Back and Forward, a reload, the panel, a phone', async ({
+  page,
+  board,
+}) => {
+  await board.api('/api/v1/tasks', {
+    method: 'POST',
+    body: {
+      title: 'Windowed',
+      status: 'todo',
+      body: `${'A long line of the task.\n\n'.repeat(80)}`,
+    },
+  });
+  await page.goto(board.url);
+
+  await page.getByRole('button', { name: 'Windowed' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Task T1' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  // Back closes it, Forward opens it, a reload with ?task= opens it again.
+  await page.goBack();
+  await expect(dialog).toHaveCount(0);
+  await page.goForward();
+  await expect(dialog).toBeVisible();
+  await page.reload();
+  await expect(dialog).toBeVisible();
+
+  // The window is 90vw by 90vh at most, and the long text scrolls inside it, not the page.
+  const box = await dialog.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(box?.width ?? 0).toBeLessThanOrEqual(1200);
+  expect(box?.height ?? 0).toBeLessThanOrEqual((viewport?.height ?? 0) * 0.9 + 1);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe(
+    'hidden',
+  );
+
+  // The panel beside the board: the same task, the same address, and it passes axe as well.
+  const steps = await page.evaluate(() => history.length);
+  await dialog.getByRole('button', { name: 'Open in side panel' }).click();
+  const panel = page.getByRole('complementary', { name: 'Task T1' });
+  await expect(panel).toBeVisible();
+  await expect(page).toHaveURL(/task=T1/);
+  expect(await page.evaluate(() => history.length)).toBe(steps);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await panel.getByRole('button', { name: 'Open in window' }).click();
+  await expect(dialog).toBeVisible();
+
+  // On a phone it takes the whole screen, and nothing scrolls sideways.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phone = await dialog.boundingBox();
+  expect(phone?.width).toBeCloseTo(390, 0);
+  expect(phone?.height).toBeCloseTo(844, 0);
+  // Nothing inside the window scrolls sideways; the text scrolls up and down inside it.
+  const body = dialog.locator('.task-modal__body');
+  expect(await body.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 });

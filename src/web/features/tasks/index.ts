@@ -1,5 +1,6 @@
 export { TaskCard, type TaskCardProps } from './ui/TaskCard';
 export { TaskDetails } from './ui/TaskDetails';
+export { TaskDetailsSurface, type TaskDetailsLayout } from './ui/TaskDetailsSurface';
 export { TaskDialog } from './ui/TaskDialog';
 export { TaskForm, type TaskValues } from './ui/TaskForm';
 export { SendToAi, type SendToAiProps } from './ui/SendToAi';

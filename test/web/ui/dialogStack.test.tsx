@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
 import { useDialog } from '../../../src/web/shared/hooks/useDialog';
 import { Menu, Modal } from '../../../src/web/shared/ui/index';
+import { queryTopDialog } from '../support/taskDetails';
 
 const root = document.documentElement;
 
@@ -49,7 +50,7 @@ describe('nested dialogs', () => {
     expect(screen.getByRole('button', { name: 'open inner' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
   });
 
   it('keeps Tab inside the top dialog', async () => {
@@ -109,7 +110,7 @@ describe('nested dialogs', () => {
     expect(screen.getByRole('dialog', { name: 'Outer' })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
   });
 });
 
@@ -155,5 +156,40 @@ describe('useDialog active', () => {
     expect(screen.getByRole('button', { name: 'toggle' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a dialog that holds the focus itself', () => {
+  function Window() {
+    const ref = useRef<HTMLDivElement>(null);
+    useDialog({ ref, onClose: () => undefined, initialFocus: (container) => container });
+    return (
+      <>
+        <button type="button">page</button>
+        <div role="dialog" aria-label="Window" tabIndex={-1} ref={ref}>
+          <button type="button">first</button>
+          <button type="button">last</button>
+        </div>
+      </>
+    );
+  }
+
+  it('keeps Shift+Tab inside it: from the dialog to its last stop, not to the page', async () => {
+    const user = userEvent.setup();
+    render(<Window />);
+    expect(screen.getByRole('dialog', { name: 'Window' })).toHaveFocus();
+
+    await user.tab({ shift: true });
+
+    expect(screen.getByRole('button', { name: 'last' })).toHaveFocus();
+  });
+
+  it('leads Tab from the dialog to its first stop', async () => {
+    const user = userEvent.setup();
+    render(<Window />);
+
+    await user.tab();
+
+    expect(screen.getByRole('button', { name: 'first' })).toHaveFocus();
   });
 });

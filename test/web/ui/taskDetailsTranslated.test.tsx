@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails } from '../support/taskDetails';
 
 const BODY = '## Context\n\nThe status parser still lives in the HTTP layer.';
 
@@ -22,7 +23,7 @@ describe('the details of a task in another language', () => {
     const rendered = await renderBoard({ tasks: tasks() });
     await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'de');
     await rendered.user.click(screen.getByRole('button', { name: 'Extract the git adapter' }));
-    const panel = await screen.findByRole('complementary', { name: 'Aufgabe T2' });
+    const panel = await findTaskDetails('Aufgabe T2');
     return { ...rendered, panel };
   }
 

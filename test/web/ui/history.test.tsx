@@ -3,14 +3,15 @@ import { contentHash } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aCheck, aResearch, aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, taskDetails, topDialog } from '../support/taskDetails';
 
 /**
  * The history of a task in its panel (T46, ADR-0030): the version select, the historical view,
  * restore, the diff before a save, and the checks with their reports and decisions.
  */
 
-const dialog = () => screen.getByRole('dialog');
-const panel = () => screen.getByRole('complementary', { name: /^Task T1$/ });
+const dialog = () => topDialog();
+const panel = () => taskDetails(/^Task T1$/);
 
 const content = (over: object = {}) => ({
   title: 'Extract the git adapter',
@@ -39,7 +40,7 @@ const twoVersions = {
 
 async function openTask(rendered: Awaited<ReturnType<typeof renderBoard>>) {
   await rendered.user.click(screen.getByRole('button', { name: 'Extract the git adapter' }));
-  return screen.findByRole('complementary', { name: /^Task T1$/ });
+  return findTaskDetails(/^Task T1$/);
 }
 
 describe('the version select', () => {
@@ -252,7 +253,7 @@ describe('editing a task: the diff before the save', () => {
     await user.click(within(dialog()).getByRole('button', { name: 'Review changes' }));
     await user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
     expect(board.calls).not.toContain('updateTask');
   });
 
@@ -881,7 +882,7 @@ describe('AI research (T58)', () => {
     expect(
       await within(panel()).findByText('A research of T1 was handed to Claude Code.'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('does not send an empty or blank focus, nor a model left at the default', async () => {
@@ -954,7 +955,7 @@ describe('AI research (T58)', () => {
     const opened = await screen.findByRole('dialog', { name: 'New research on T1' });
     expect(within(opened).getByLabelText('Focus (optional)')).toHaveFocus();
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
     expect(board.runs).toHaveLength(0);
   });
 

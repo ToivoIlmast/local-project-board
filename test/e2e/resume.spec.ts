@@ -1,5 +1,5 @@
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test } from './board';
+import { expect, test, taskDetails } from './board';
 
 /**
  * A run that failed, recovered from the page (T39), against the real board with a runner that
@@ -26,7 +26,7 @@ test('a failed run is resumed from the page, and the runner is asked to continue
   await page.goto(board.url);
 
   await page.getByRole('button', { name: 'Ship it' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   const block = details.getByRole('region', { name: 'AI run' });
   await expect(block.getByRole('alert')).toHaveText(
     'The session ended without a final report (code 3).',

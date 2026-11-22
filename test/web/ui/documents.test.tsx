@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog } from '../support/taskDetails';
 
 const task = aTask({ id: 'T1', title: 'Extract the git adapter' });
 
@@ -14,7 +15,7 @@ async function openTask() {
     ],
   });
   await rendered.user.click(screen.getByRole('button', { name: 'Extract the git adapter' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
@@ -59,7 +60,7 @@ describe('the documents of a task', () => {
     await user.type(within(dialog).getByLabelText('Content'), '# Notes');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'notes.md' })).toBeInTheDocument();
     expect(board.documents.get('T1/notes.md')?.content).toBe('# Notes');
   });

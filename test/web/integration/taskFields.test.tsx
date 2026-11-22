@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { findTaskDetails, findTopDialog, queryTopDialog, topDialog } from '../support/taskDetails';
 
 /**
  * The task fields, the refusals of the real server in them, and the confirmations before a
@@ -23,7 +24,7 @@ afterEach(async () => {
   await cleanTmpDirs();
 });
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 const field = (name: string) => within(dialog()).getByLabelText(name);
 
 /**
@@ -76,7 +77,7 @@ describe('creating and editing with the fields, on a real board', () => {
       await user.type(field('Depends on'), 'T1, T3');
       await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
 
-      await screen.findByRole('complementary', { name: /^Task T4$/ });
+      await findTaskDetails(/^Task T4$/);
       expect(await client.getTask('T4')).toMatchObject({
         topic: 'P1',
         block: 'K2',
@@ -99,7 +100,7 @@ describe('creating and editing with the fields, on a real board', () => {
       await user.click(within(dialog()).getByRole('button', { name: 'Review changes' }));
       await user.click(within(dialog()).getByRole('button', { name: 'Save' }));
 
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
       const saved = await client.getTask('T2');
       expect(saved).not.toHaveProperty('topic');
       expect(saved).not.toHaveProperty('block');
@@ -216,7 +217,7 @@ describe('a move between blocks, on a real board', () => {
 
       await started.user.click(within(dialog()).getByRole('button', { name: 'Save' }));
 
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
       expect(update).toHaveBeenCalledTimes(1);
       expect(update.mock.calls[0]?.[0]).toBe('T2');
       expect(update.mock.calls[0]?.[1]).toMatchObject({ block: 'K1' });
@@ -242,7 +243,7 @@ describe('a status change of a blocked task, on a real board', () => {
       const started = await withBoard();
       const move = jest.spyOn(started.client, 'moveTask');
       await choose(started);
-      expect(await screen.findByRole('dialog')).toHaveTextContent('block K1 is not done: T1');
+      expect(await findTopDialog()).toHaveTextContent('block K1 is not done: T1');
 
       await started.user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
 
@@ -260,7 +261,7 @@ describe('a status change of a blocked task, on a real board', () => {
       await choose(started);
 
       await started.user.click(
-        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Change status' }),
+        within(await findTopDialog()).getByRole('button', { name: 'Change status' }),
       );
 
       await waitFor(async () => expect((await started.client.getTask('T2')).status).toBe('done'));

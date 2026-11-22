@@ -3,6 +3,7 @@ import type { UserEvent } from '@testing-library/user-event';
 import { setLanguage, type UiLanguage } from '../../../src/web/shared/i18n/index';
 import { STATUSES, aGitStatus, aProject, aReport, aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, findTopDialog } from '../support/taskDetails';
 
 afterEach(() => setLanguage('en'));
 
@@ -192,7 +193,7 @@ describe('the AI settings of a task in another language', () => {
     });
     await choose(user, 'de');
     await user.click(screen.getByRole('button', { name: 'Ship it' }));
-    const details = await screen.findByRole('complementary', { name: 'Aufgabe T1' });
+    const details = await findTaskDetails('Aufgabe T1');
     const ai = within(details).getByRole('region', { name: 'KI' });
     // The block as a whole is translated with the AI part of a task (T6).
     await user.click(within(ai).getByRole('button', { name: 'Für diese Aufgabe anpassen' }));
@@ -371,7 +372,7 @@ describe('the question about unsaved changes, with the words of the side panels'
 
       await user.click(screen.getByRole('button', { name: settings }));
 
-      expect(await screen.findByRole('dialog')).toHaveTextContent(sentence);
+      expect(await findTopDialog()).toHaveTextContent(sentence);
     },
   );
 
@@ -385,7 +386,7 @@ describe('the question about unsaved changes, with the words of the side panels'
 
     await user.click(screen.getByRole('button', { name: 'Berichte' }));
 
-    expect(await screen.findByRole('dialog')).toHaveTextContent(
+    expect(await findTopDialog()).toHaveTextContent(
       'Es gibt nicht gespeicherte Änderungen an den KI-Workflow-Einstellungen des Boards und seiner Spalten.',
     );
   });

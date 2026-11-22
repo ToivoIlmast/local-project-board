@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, topDialog } from '../support/taskDetails';
 
 /** The fields of a task that place it and make it wait (T91; ADR-0032 §3). */
 
@@ -15,7 +16,7 @@ const alpha = aTopic({
 });
 const beta = aTopic({ id: 'P2', title: 'Beta', blocks: [{ id: 'K3', title: 'Prepare' }] });
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 const field = (name: string) => within(dialog()).getByLabelText(name);
 const optionsOf = (name: string) =>
   within(field(name))
@@ -87,7 +88,7 @@ describe('the Topic, Block and Depends on fields of the form', () => {
     await user.type(field('Depends on'), 'T1, T2');
     await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
 
-    await screen.findByRole('complementary', { name: /^Task T3$/ });
+    await findTaskDetails(/^Task T3$/);
     expect(board.tasks.find((task) => task.id === 'T3')).toMatchObject({
       topic: 'P1',
       block: 'K2',
@@ -101,7 +102,7 @@ describe('the Topic, Block and Depends on fields of the form', () => {
     await user.type(field('Title'), 'Plain');
     await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
 
-    await screen.findByRole('complementary', { name: /^Task T3$/ });
+    await findTaskDetails(/^Task T3$/);
     const created = board.tasks.find((task) => task.id === 'T3')!;
     expect(created).not.toHaveProperty('topic');
     expect(created).not.toHaveProperty('block');

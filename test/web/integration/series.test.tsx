@@ -1,6 +1,7 @@
 import { act, configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { findTaskDetails } from '../support/taskDetails';
 
 /**
  * The series of checks against the real server (T100): it comes back from the server after a
@@ -40,7 +41,7 @@ async function openSource(rendered: RealBoard) {
   // The page follows the seeding through events; open the card once it has settled.
   await screen.findByRole('region', { name: /^done \(1\)/ });
   await rendered.user.click(await screen.findByRole('button', { name: 'Source' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
 }
 
 describe('the series on a real board', () => {

@@ -3,6 +3,7 @@ import type { AiRun, Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, taskDetails } from '../support/taskDetails';
 
 /**
  * The AI run of a task as the lifecycle of a session, and the way back from a run that failed or
@@ -34,11 +35,11 @@ const todo = (aiRun: AiRun | undefined): Task =>
 async function openTask(aiRun: AiRun | undefined): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [todo(aiRun)] });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const block = () => within(details()).getByRole('region', { name: 'AI run' });
 const resumeButton = () => within(block()).queryByRole('button', { name: 'Resume' });
 const restartButton = () => within(block()).queryByRole('button', { name: 'Restart' });
@@ -207,7 +208,7 @@ describe('the buttons that recover a run (T39)', () => {
     expect(rendered.board.calls).not.toContain('runTask');
 
     await rendered.user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(rendered.board.calls).not.toContain('runTask');
   });
 
@@ -223,7 +224,7 @@ describe('the buttons that recover a run (T39)', () => {
         { taskId: 'T1', agent: 'claude-code', model: 'sonnet', mode: 'restart' },
       ]),
     );
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(await within(block()).findByText(/^Sent T1 to the runner /)).toBeVisible();
   });
 

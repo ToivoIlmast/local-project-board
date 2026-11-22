@@ -1,6 +1,7 @@
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { findTaskDetails, topDialog } from '../support/taskDetails';
 
 /**
  * The history of a task against the real server (T46): the page, the contract and the board
@@ -18,7 +19,7 @@ afterEach(async () => {
   await cleanTmpDirs();
 });
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
 
 describe('the history of a task on a real board', () => {
@@ -37,7 +38,7 @@ describe('the history of a task on a real board', () => {
         })
         .expect(201);
       await user.click(await screen.findByRole('button', { name: 'Extract the git adapter' }));
-      const panel = await screen.findByRole('complementary', { name: 'Task T1' });
+      const panel = await findTaskDetails('Task T1');
 
       // The create version is the current one.
       const select = await within(panel).findByLabelText('Version');
@@ -158,7 +159,7 @@ describe('the history of a task on a real board', () => {
         .post('/api/v1/tasks', { title: 'Original', status: 'todo', body: 'Text.\n' })
         .expect(201);
       await user.click(await screen.findByRole('button', { name: 'Original' }));
-      const panel = await screen.findByRole('complementary', { name: 'Task T1' });
+      const panel = await findTaskDetails('Task T1');
 
       await user.click(within(panel).getByRole('button', { name: 'Edit' }));
       const title = within(dialog()).getByLabelText('Title');

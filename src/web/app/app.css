@@ -948,3 +948,69 @@
   color: var(--ink-muted);
   font-size: 13px;
 }
+
+/* The details of a task: a window over the board by default, or the panel beside it. One
+   structure in both, so that switching does not remount what is inside (TaskDetailsSurface). */
+.task-modal {
+  position: fixed;
+  inset: 0;
+  /* Below `.modal` (10): a dialog opened from inside the window is above it. */
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 35%);
+}
+
+.task-modal--inline {
+  /* No look of its own: the panel inside is a column of the page, as it always was. */
+  display: contents;
+}
+
+.task-modal__dialog {
+  display: flex;
+  flex-direction: column;
+  width: 90vw;
+  max-width: 1200px;
+  height: 90vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 20%);
+  overflow: hidden;
+}
+
+.task-modal__dialog:focus-visible {
+  outline-offset: -2px;
+}
+
+.task-modal__dialog > .panel__head {
+  flex: 0 0 auto;
+  align-items: center;
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-modal__dialog > .task-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 900px) {
+  .task-modal__dialog {
+    width: 100dvw;
+    max-width: none;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+.panel__head-actions {
+  display: flex;
+  gap: 8px;
+}

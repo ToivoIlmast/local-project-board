@@ -2,8 +2,9 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask } from '../support/fixtures';
 import { cardsIn, renderBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, topDialog } from '../support/taskDetails';
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 
 describe('creating a task', () => {
   it('puts it on the board and opens it', async () => {
@@ -14,7 +15,7 @@ describe('creating a task', () => {
     await user.type(within(dialog()).getByLabelText('Labels'), 'refactor, git');
     await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
 
-    expect(await screen.findByRole('complementary', { name: /^Task T1$/ })).toBeInTheDocument();
+    expect(await findTaskDetails(/^Task T1$/)).toBeInTheDocument();
     expect(cardsIn('backlog')).toEqual(['T1']);
     expect(board.tasks[0]).toMatchObject({
       title: 'Extract the git adapter',
@@ -64,7 +65,7 @@ describe('creating a task', () => {
 
     expect(await within(dialog()).findByRole('button', { name: 'Saving…' })).toBeDisabled();
     release();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
   });
 });
 
@@ -76,7 +77,7 @@ describe('a task that is already there', () => {
 
     await user.click(screen.getByRole('button', { name: 'Extract the git adapter' }));
 
-    const panel = await screen.findByRole('complementary', { name: 'Task T1' });
+    const panel = await findTaskDetails('Task T1');
     expect(within(panel).getByRole('heading', { name: 'Extract the git adapter' })).toBeVisible();
     expect(within(panel).getByRole('heading', { name: 'Context' })).toBeInTheDocument();
     expect(new URLSearchParams(window.location.search).get('task')).toBe('T1');
@@ -123,7 +124,7 @@ describe('a task that is already there', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Move me' }));
-    const panel = await screen.findByRole('complementary', { name: 'Task T1' });
+    const panel = await findTaskDetails('Task T1');
     await user.selectOptions(within(panel).getByLabelText('Status'), 'done');
 
     await waitFor(() => expect(cardsIn('done')).toEqual(['T1']));

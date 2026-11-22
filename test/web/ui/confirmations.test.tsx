@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { jest } from '@jest/globals';
 import { aTask, aTopic } from '../support/fixtures';
 import { cardsIn, renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, findTopDialog, queryTopDialog, topDialog } from '../support/taskDetails';
 
 /**
  * What the owner is asked before a manual change (T91; ADR-0032 §8): a status change of a
@@ -39,7 +40,7 @@ const seeded = () => ({
 });
 
 const HELD = 'block K1 is not done: T1';
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 const writes = (rendered: RenderedBoard) =>
   rendered.board.calls.filter((call) => call === 'moveTask' || call === 'updateTask');
 
@@ -54,7 +55,7 @@ describe('a status change of a blocked task, from the menu of a card', () => {
 
     await chooseMoveTo(rendered, 'T2', 'done');
 
-    expect(await screen.findByRole('dialog')).toBeVisible();
+    expect(await findTopDialog()).toBeVisible();
     expect(dialog()).toHaveTextContent('T2');
     expect(dialog()).toHaveTextContent('todo');
     expect(dialog()).toHaveTextContent('done');
@@ -68,7 +69,7 @@ describe('a status change of a blocked task, from the menu of a card', () => {
 
     await rendered.user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual([]);
     expect(cardsIn('todo')).toContain('T2');
     expect(cardsIn('done')).toEqual([]);
@@ -83,7 +84,7 @@ describe('a status change of a blocked task, from the menu of a card', () => {
 
     await waitFor(() => expect(cardsIn('done')).toEqual(['T2']));
     expect(writes(rendered)).toEqual(['moveTask']);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('does not move the card before the board has answered: no optimistic update', async () => {
@@ -105,7 +106,7 @@ describe('a status change of a blocked task, from the menu of a card', () => {
     await chooseMoveTo(rendered, 'T3', 'done');
 
     await waitFor(() => expect(cardsIn('done')).toEqual(['T3']));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual(['moveTask']);
   });
 
@@ -116,7 +117,7 @@ describe('a status change of a blocked task, from the menu of a card', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Move down' }));
 
     await waitFor(() => expect(cardsIn('todo')).toEqual(['T1', 'T3', 'T2', 'T4']));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual(['moveTask']);
   });
 });
@@ -128,10 +129,10 @@ describe('a status change of a blocked task, from the keyboard', () => {
     screen.getByRole('button', { name: 'Move to done' }).focus();
 
     await rendered.user.keyboard('{Enter}');
-    expect(await screen.findByRole('dialog')).toHaveTextContent(HELD);
+    expect(await findTopDialog()).toHaveTextContent(HELD);
     await rendered.user.keyboard('{Escape}');
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual([]);
     expect(screen.getByRole('button', { name: 'Actions for T2' })).toHaveFocus();
   });
@@ -141,7 +142,7 @@ describe('a status change of a blocked task, from the keyboard', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Actions for T2' }));
     screen.getByRole('button', { name: 'Move to done' }).focus();
     await rendered.user.keyboard('{Enter}');
-    await screen.findByRole('dialog');
+    await findTopDialog();
 
     within(dialog()).getByRole('button', { name: 'Change status' }).focus();
     await rendered.user.keyboard('{Enter}');
@@ -156,11 +157,11 @@ describe('a status change of a blocked task, from the keyboard', () => {
   it('asks the same of the status select of the task’s panel', async () => {
     const rendered = await renderBoard(seeded());
     await rendered.user.click(screen.getByRole('button', { name: 'Held' }));
-    const panel = await screen.findByRole('complementary', { name: 'Task T2' });
+    const panel = await findTaskDetails('Task T2');
 
     await rendered.user.selectOptions(within(panel).getByLabelText('Status'), 'in-progress');
 
-    expect(await screen.findByRole('dialog')).toHaveTextContent(HELD);
+    expect(await findTopDialog()).toHaveTextContent(HELD);
     expect(writes(rendered)).toEqual([]);
     expect(within(panel).getByLabelText('Status')).toHaveValue('todo');
 
@@ -169,7 +170,7 @@ describe('a status change of a blocked task, from the keyboard', () => {
 
     await rendered.user.selectOptions(within(panel).getByLabelText('Status'), 'in-progress');
     await rendered.user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Change status' }),
+      within(await findTopDialog()).getByRole('button', { name: 'Change status' }),
     );
     await waitFor(() => expect(cardsIn('in-progress')).toEqual(['T2']));
     expect(writes(rendered)).toEqual(['updateTask']);
@@ -233,7 +234,7 @@ describe('a status change of a blocked task, by dragging', () => {
 
     drag('T2', 3 * COLUMN_WIDTH + 10, 20);
 
-    expect(await screen.findByRole('dialog')).toHaveTextContent(HELD);
+    expect(await findTopDialog()).toHaveTextContent(HELD);
     expect(writes(rendered)).toEqual([]);
     expect(cardsIn('done')).toEqual([]);
     await rendered.user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
@@ -247,7 +248,7 @@ describe('a status change of a blocked task, by dragging', () => {
 
     drag('T2', 3 * COLUMN_WIDTH + 10, 20);
     await rendered.user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Change status' }),
+      within(await findTopDialog()).getByRole('button', { name: 'Change status' }),
     );
 
     await waitFor(() => expect(cardsIn('done')).toEqual(['T2']));
@@ -262,7 +263,7 @@ describe('a status change of a blocked task, by dragging', () => {
     drag('T2', COLUMN_WIDTH + 10, 400);
 
     await waitFor(() => expect(cardsIn('todo')).toEqual(['T1', 'T3', 'T4', 'T2']));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual(['moveTask']);
   });
 
@@ -273,7 +274,7 @@ describe('a status change of a blocked task, by dragging', () => {
     drag('T3', 3 * COLUMN_WIDTH + 10, 20);
 
     await waitFor(() => expect(cardsIn('done')).toEqual(['T3']));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual(['moveTask']);
   });
 });
@@ -370,7 +371,7 @@ describe('a move between topics or blocks', () => {
 
     await rendered.user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(writes(rendered)).toEqual([]);
     expect(rendered.board.tasks.find((task) => task.id === 'T2')).toMatchObject({
       topic: 'P1',
@@ -384,7 +385,7 @@ describe('a move between topics or blocks', () => {
 
     await rendered.user.click(within(dialog()).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
     expect(writes(rendered)).toEqual(['updateTask']);
     expect(rendered.board.patches).toEqual([
       { id: 'T2', patch: expect.objectContaining({ topic: 'P2', block: 'K3' }) },

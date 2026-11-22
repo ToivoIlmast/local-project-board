@@ -5,6 +5,7 @@ import { lookup } from '../../../src/web/shared/i18n/catalog';
 import { taskCatalogs } from '../../../src/web/features/tasks/i18n/details';
 import { aResearch, aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, taskDetails } from '../support/taskDetails';
 
 /**
  * The AI part of a task in another language (German here): the menu, the dialog that starts
@@ -31,11 +32,11 @@ async function openGerman(extra: Partial<Task> = {}, options = {}): Promise<Rend
   const rendered = await renderBoard({ tasks: [todo(extra)], ...options });
   await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'de');
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Aufgabe T1' });
+  await findTaskDetails('Aufgabe T1');
   return rendered;
 }
 
-const details = () => screen.getByRole('complementary', { name: 'Aufgabe T1' });
+const details = () => taskDetails('Aufgabe T1');
 const dialog = () => screen.getByRole('dialog', { name: 'Claude Code für T1 starten' });
 
 describe('Send to AI in another language', () => {

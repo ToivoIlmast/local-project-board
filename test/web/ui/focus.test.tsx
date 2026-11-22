@@ -1,8 +1,9 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { aTask } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { queryTaskDetails, queryTopDialog, taskDetails, topDialog } from '../support/taskDetails';
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 
 describe('a dialog and the keyboard', () => {
   it('starts on the first field, so typing a title with spaces in it presses nothing', async () => {
@@ -55,7 +56,7 @@ describe('a dialog and the keyboard', () => {
     await user.click(opener);
     await user.keyboard('{Escape}');
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
 
@@ -124,19 +125,31 @@ describe('the panel beside the board and the keyboard', () => {
     const card = screen.getByRole('button', { name: 'Open me' });
 
     await user.click(card);
-    const panel = screen.getByRole('complementary', { name: 'Task T1' });
+    const panel = taskDetails('Task T1');
     await waitFor(() => expect(panel).toHaveFocus());
 
     await user.click(within(panel).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    expect(queryTaskDetails('Task T1')).not.toBeInTheDocument();
     expect(card).toHaveFocus();
   });
 
-  it('does not take the focus from a page that was loaded on it', async () => {
+  it('gives the focus to the window of a page that was loaded on it: it is modal', async () => {
     window.history.replaceState({}, '', '/?task=T1');
     await renderBoard({ tasks: [aTask({ id: 'T1', title: 'Deep link' })] });
 
+    await waitFor(() => expect(taskDetails('Task T1')).toHaveFocus());
+  });
+
+  it('does not take the focus from a page that was loaded on it, as a panel', async () => {
+    window.history.replaceState({}, '', '/?task=T1');
+    const { user } = await renderBoard({ tasks: [aTask({ id: 'T1', title: 'Deep link' })] });
+    await waitFor(() => expect(taskDetails('Task T1')).toHaveFocus());
+
+    // Moving to the panel leaves the focus on the button the person pressed.
+    await user.click(
+      within(taskDetails('Task T1')).getByRole('button', { name: 'Open in side panel' }),
+    );
     expect(screen.getByRole('complementary', { name: 'Task T1' })).not.toHaveFocus();
-    expect(document.body).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Open in window' })).toHaveFocus();
   });
 });
