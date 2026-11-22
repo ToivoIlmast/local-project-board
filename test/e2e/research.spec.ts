@@ -2,7 +2,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fakeClaude } from '../support/fakeClaude.js';
 import { cleanTmpDirs } from '../support/tmp.js';
-import { expect, test, type RunningBoard } from './board';
+import { expect, test, type RunningBoard, taskDetails } from './board';
 
 /**
  * The AI Research Workflow end to end (T60, §9.1 items 25–26 of the research): the real board,
@@ -104,7 +104,7 @@ test('two researches, decided and applied from the page, a restart, then the wor
   await expect.poll(() => waits(runner.printed()), { timeout: 15_000 }).toBe(1);
   await page.goto(board.url);
   await page.getByRole('button', { name: 'Extract the git adapter' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   const section = details.getByRole('region', { name: 'AI research' });
   const items = section.getByRole('listitem');
 

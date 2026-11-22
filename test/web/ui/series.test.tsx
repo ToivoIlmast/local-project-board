@@ -4,6 +4,7 @@ import { formatDate } from '../../../src/web/shared/lib/format';
 import { ApiError } from '../../../src/web/api/index';
 import { aCheck, aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails, findTopDialog, queryTopDialog } from '../support/taskDetails';
 
 /**
  * The series panel of a completed task and the indicator in the Blocks View (T100): what a
@@ -61,7 +62,7 @@ const made = (
 async function openSource(options: Parameters<typeof renderBoard>[0] = {}) {
   const rendered = await renderBoard({ topics: [topic], tasks: tasks(), ...options });
   await rendered.user.click(screen.getByRole('button', { name: 'Source' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
@@ -90,7 +91,7 @@ describe('the series panel', () => {
     const rendered = await renderBoard({ topics: [topic], tasks: tasks() });
     const release = rendered.board.hold('checks');
     await rendered.user.click(screen.getByRole('button', { name: 'Source' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
     expect(await within(panel()).findByText('Loading checks…')).toBeVisible();
     expect(within(panel()).queryByText(/0 of/)).toBeNull();
     release();
@@ -100,7 +101,7 @@ describe('the series panel', () => {
   it('is not there for a task that is not done, or has an empty scope', async () => {
     const open = await renderBoard({ topics: [topic], tasks: tasks({ status: 'todo' }) });
     await open.user.click(screen.getByRole('button', { name: 'Source' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
     expect(screen.queryByRole('region', { name: 'Series of checks' })).toBeNull();
     open.unmount();
 
@@ -108,7 +109,7 @@ describe('the series panel', () => {
       tasks: [aTask({ id: 'T1', title: 'Source', status: 'done', doneAt: DONE_AT })],
     });
     await lone.user.click(screen.getByRole('button', { name: 'Source' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
     expect(screen.queryByRole('region', { name: 'Series of checks' })).toBeNull();
   });
 
@@ -125,7 +126,7 @@ describe('the series panel', () => {
     // A checked task can be checked again: there is no limit.
     await rendered.user.click(within(item('T2')).getByRole('button', { name: 'Check T2' }));
     await waitFor(() => expect(rendered.board.runs).toHaveLength(1));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
     expect(rendered.board.runs[0]).toEqual({
       taskId: 'T2',
       agent: 'claude-code',
@@ -185,7 +186,7 @@ describe('Q9c: a check that is still working', () => {
     const button = label === 'Check next' ? panel() : item('T2');
     await rendered.user.click(within(button).getByRole('button', { name: label }));
 
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await findTopDialog();
     expect(dialog).toHaveTextContent(
       `Check #3 for task T2 is still marked as working since ${formatDate('2026-11-10T12:30:00.000Z')}. ` +
         'If its session is still running, the new check will run in parallel and repeat the cost. Start anyway?',
@@ -201,7 +202,7 @@ describe('Q9c: a check that is still working', () => {
     // The last check decides: working. Retry belongs to a last result that failed.
     expect(within(item('T2')).queryByRole('button', { name: 'Retry T2' })).toBeNull();
     await rendered.user.click(within(item('T2')).getByRole('button', { name: 'Check T2' }));
-    expect(await screen.findByRole('dialog')).toBeVisible();
+    expect(await findTopDialog()).toBeVisible();
   });
 
   it('Retry asks when the working check is of another task of the series', async () => {
@@ -210,7 +211,7 @@ describe('Q9c: a check that is still working', () => {
     });
     await within(item('T3')).findByText('Failed');
     await rendered.user.click(within(item('T3')).getByRole('button', { name: 'Retry T3' }));
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await findTopDialog();
     expect(dialog).toHaveTextContent('Check #1 for task T2');
     expect(rendered.board.runs).toEqual([]);
   });
@@ -220,9 +221,9 @@ describe('Q9c: a check that is still working', () => {
     await within(item('T2')).findByText('Working');
     await rendered.user.click(within(item('T2')).getByRole('button', { name: 'Check T2' }));
     await rendered.user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }),
+      within(await findTopDialog()).getByRole('button', { name: 'Cancel' }),
     );
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
     expect(rendered.board.runs).toEqual([]);
   });
 
@@ -231,7 +232,7 @@ describe('Q9c: a check that is still working', () => {
     await within(item('T2')).findByText('Working');
     await rendered.user.click(within(item('T2')).getByRole('button', { name: 'Check T2' }));
     await rendered.user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Start anyway' }),
+      within(await findTopDialog()).getByRole('button', { name: 'Start anyway' }),
     );
     await waitFor(() => expect(rendered.board.runs).toHaveLength(1));
     expect(rendered.board.runs[0]).toEqual({
@@ -253,7 +254,7 @@ describe('Q9c: a check that is still working', () => {
     await within(panel()).findByText('0 of 2 checked');
     await rendered.user.click(within(item('T2')).getByRole('button', { name: 'Check T2' }));
     await waitFor(() => expect(rendered.board.runs).toHaveLength(1));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
   });
 });
 

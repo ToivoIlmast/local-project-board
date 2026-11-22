@@ -7,6 +7,7 @@ import { aTask } from '../support/fixtures';
 import { nodeFetch } from '../support/nodeTransport';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, taskDetails } from '../support/taskDetails';
 
 /**
  * What the page says about a request of Claude Code (ADR-0029 T94, K12): it reads `task.launch`
@@ -35,7 +36,7 @@ const aRun = (extra: Partial<AiRun> = {}): AiRun => ({
 const todo = (extra: Partial<Task> = {}): Task =>
   aTask({ id: 'T1', title: 'Ship it', status: 'todo', ...extra });
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 
 const STARTING = /is starting/i;
 const SENT = /^Sent to a runner at /;
@@ -46,7 +47,7 @@ const DID_NOT_START = 'Claude Code did not start';
 async function openDetails(task: Task): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [task] });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
@@ -56,7 +57,7 @@ async function startFromDetails(rendered: { user: RenderedBoard['user'] }): Prom
   await rendered.user.click(screen.getByRole('button', { name: 'Claude Code' }));
   const dialog = await screen.findByRole('dialog', { name: 'Start Claude Code on T1' });
   await rendered.user.click(within(dialog).getByRole('button', { name: 'Start' }));
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await waitFor(() => expect(queryTopDialog()).not.toBeInTheDocument());
 }
 
 describe('a request that was sent, and nothing more (K12)', () => {
@@ -213,7 +214,7 @@ describe('against the real board: the request, its report, a reload and the begi
       (data) => data,
     );
     await board.user.click(await screen.findByRole('button', { name: 'Ship it' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
 
     await startFromDetails(board);
 
@@ -245,7 +246,7 @@ describe('against the real board: the request, its report, a reload and the begi
     board = await renderAgainstRealBoard({ root: server.root });
     await server.close();
     await board.user.click(await screen.findByRole('button', { name: 'Ship it' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
     expect(within(details()).getByText(DID_NOT_START)).toBeVisible();
 
     // A begin of any caller: the run is shown, and the failure is gone.

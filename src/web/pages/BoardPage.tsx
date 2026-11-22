@@ -18,13 +18,18 @@ import { GitPanel } from '../features/git/index';
 import { InstructionsPanel } from '../features/instructions';
 import { ReportsPanel } from '../features/reports/index';
 import { SettingsPanel } from '../features/settings/index';
-import { TaskDetails, TaskDialog } from '../features/tasks/index';
+import {
+  TaskDetails,
+  TaskDetailsSurface,
+  TaskDialog,
+  type TaskDetailsLayout,
+} from '../features/tasks/index';
 import { TopicsPanel } from '../features/topics/index';
 import { useAsyncAction } from '../shared/hooks/useAsyncAction';
 import { useT } from '../shared/i18n/index';
 import { UnsavedChangesProvider, useLeaveGuard } from '../shared/hooks/unsavedChanges';
 import { replaceSearchParams, useSearchParam } from '../shared/hooks/useSearchParam';
-import { Button, ConfirmDialog, ErrorState, Panel, Spinner } from '../shared/ui/index';
+import { Button, ConfirmDialog, ErrorState, Spinner } from '../shared/ui/index';
 
 type Panel = 'reports' | 'topics' | 'git' | 'instructions' | 'settings';
 
@@ -58,6 +63,10 @@ function BoardScreen() {
       : viewParam === 'blocks' || legacyBlocks
         ? 'blocks'
         : 'board';
+  // How the open task is shown. Not in the address: a link, a reload and Back all open the
+  // window; the panel is a choice made while working beside the board, and ends with the task.
+  const [layout, setLayout] = useState<TaskDetailsLayout>('modal');
+  if (openTaskId === null && layout !== 'modal') setLayout('modal');
   const [creating, setCreating] = useState<{ status?: string | undefined } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -196,19 +205,25 @@ function BoardScreen() {
             key={task.id}
             task={task}
             statuses={project.statuses}
+            layout={layout}
+            onLayoutChange={setLayout}
             onEdit={() => setEditingId(task.id)}
             onDelete={() => setDeletingId(task.id)}
             onClose={() => leave(() => setOpenTaskId(null))}
           />
         ) : openTaskId !== null ? (
-          <Panel label={t('page.task')}>
+          <TaskDetailsSurface
+            layout={layout}
+            label={t('page.task')}
+            onClose={() => leave(() => setOpenTaskId(null))}
+          >
             <ErrorState
               title={t('page.taskMissing.title')}
               message={t('page.taskMissing.message')}
               onRetry={() => setOpenTaskId(null)}
               retryLabel={common('ui.close')}
             />
-          </Panel>
+          </TaskDetailsSurface>
         ) : panel === 'reports' ? (
           <ReportsPanel onClose={closePanel} />
         ) : panel === 'topics' ? (

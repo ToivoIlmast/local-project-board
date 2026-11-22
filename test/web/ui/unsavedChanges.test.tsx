@@ -8,6 +8,7 @@ import {
   useUnsavedChanges,
   type UnsavedChanges,
 } from '../../../src/web/shared/hooks/unsavedChanges';
+import { queryTopDialog } from '../support/taskDetails';
 
 /** A stand-in for any form: it says what it holds and what saving and discarding do. */
 function Form({ changes }: { changes: UnsavedChanges }) {
@@ -52,7 +53,7 @@ describe('leaving a form that has unsaved changes', () => {
     await user.click(screen.getByRole('button', { name: 'Leave' }));
 
     expect(onLeave).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('goes straight on when there is no form at all', async () => {
@@ -90,7 +91,7 @@ describe('leaving a form that has unsaved changes', () => {
       await waitFor(() => expect(onLeave).toHaveBeenCalledTimes(1));
       expect(form.save).toHaveBeenCalledTimes(1);
       expect(form.discard).not.toHaveBeenCalled();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
     });
 
     it('waits for the answer: nothing moves, and the buttons are off while it is on its way', async () => {
@@ -142,7 +143,7 @@ describe('leaving a form that has unsaved changes', () => {
 
       await user.click(choice('Cancel'));
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       expect(onLeave).not.toHaveBeenCalled();
       expect(form.discard).not.toHaveBeenCalled();
       expect(screen.getByText('a form')).toBeInTheDocument();
@@ -193,7 +194,7 @@ describe('leaving a form that has unsaved changes', () => {
       expect(form.discard).toHaveBeenCalledTimes(1);
       expect(form.save).not.toHaveBeenCalled();
       expect(onLeave).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
     });
   });
 
@@ -206,7 +207,7 @@ describe('leaving a form that has unsaved changes', () => {
 
       await user.click(choice('Cancel'));
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       expect(form.save).not.toHaveBeenCalled();
       expect(form.discard).not.toHaveBeenCalled();
       expect(onLeave).not.toHaveBeenCalled();
@@ -219,11 +220,11 @@ describe('leaving a form that has unsaved changes', () => {
 
       await user.click(leave);
       await user.keyboard('{Escape}');
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
 
       await user.click(leave);
       await user.click(within(dialog()).getByRole('button', { name: 'Close' }));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       expect(onLeave).not.toHaveBeenCalled();
     });
 
@@ -271,7 +272,7 @@ describe('leaving a form that has unsaved changes', () => {
     await user.click(screen.getByRole('button', { name: 'Leave' }));
 
     expect(onLeave).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('follows what the form says now, not what it said when it was drawn first', async () => {

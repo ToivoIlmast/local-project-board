@@ -3,6 +3,7 @@ import type { AiRun, Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { aResearch, aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, taskDetails } from '../support/taskDetails';
 
 /**
  * Send to AI → Claude Code asks for the parameters of the run first (T38): the model, the
@@ -21,7 +22,7 @@ const aRun = (extra: Partial<AiRun> = {}): AiRun => ({
   ...extra,
 });
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const dialog = () => screen.getByRole('dialog', { name: 'Start Claude Code on T1' });
 const start = () => within(dialog()).getByRole('button', { name: 'Start' });
 const STARTING = /^Sent T1 to the runner in the terminal where/;
@@ -29,7 +30,7 @@ const STARTING = /^Sent T1 to the runner in the terminal where/;
 async function openLaunch(extra: Partial<Task> = {}, options = {}): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [todo(extra)], ...options });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   await rendered.user.click(within(details()).getByRole('button', { name: 'Send to AI' }));
   await rendered.user.click(screen.getByRole('button', { name: 'Claude Code' }));
   await screen.findByRole('dialog', { name: 'Start Claude Code on T1' });
@@ -63,7 +64,7 @@ describe('the dialog of Send to AI → Claude Code (T38)', () => {
     expect(Object.keys(rendered.board.runs[0] ?? {})).not.toContain('model');
     // No setting was written on the way.
     expect(rendered.board.calls).not.toContain('updateTask');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('sends a chosen alias as the model, one string', async () => {
@@ -272,7 +273,7 @@ describe('the dialog of Send to AI → Claude Code (T38)', () => {
 
     await rendered.user.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(rendered.board.calls).not.toContain('runTask');
     expect(within(details()).getByRole('button', { name: 'Send to AI' })).toHaveFocus();
   });

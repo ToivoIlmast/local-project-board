@@ -3,6 +3,7 @@ import type { Check } from '../../../src/contract/v1/index';
 import { setLanguage } from '../../../src/web/shared/i18n/index';
 import { aCheck, aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTopDialog, topDialog } from '../support/taskDetails';
 
 /**
  * The research, the report and the series of checks in languages with other plural forms and
@@ -21,7 +22,7 @@ describe('a research and its report in Russian', () => {
     const rendered = await renderBoard({ tasks: [task], checks: { T1: [aCheck()] } });
     await choose(rendered.user, 'ru');
     await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-    const details = await screen.findByRole('complementary');
+    const details = await findTopDialog();
     const checks = await within(details).findByRole('region', { name: 'Исследование ИИ' });
     await rendered.user.click(await within(checks).findByRole('button', { name: 'Открыть T1-C1' }));
     return { ...rendered, details };
@@ -30,7 +31,7 @@ describe('a research and its report in Russian', () => {
   it('translates the sections and the decisions, and keeps the report as the agent wrote it', async () => {
     await openReport();
 
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await findTopDialog();
     const report = within(dialog);
     for (const heading of ['Резюме', 'Рекомендации', 'Находки']) {
       expect(await report.findByRole('heading', { name: heading })).toBeInTheDocument();
@@ -46,9 +47,7 @@ describe('a research and its report in Russian', () => {
 
   it('asks for a new research in Russian and sends the same request', async () => {
     const { user, board, details } = await openReport();
-    await user.click(
-      within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Закрыть' })[0]!,
-    );
+    await user.click(within(topDialog()).getAllByRole('button', { name: 'Закрыть' })[0]!);
 
     await user.click(within(details).getByRole('button', { name: 'Новое исследование…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Новое исследование задачи T1' });

@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import type { GitCommit, Task } from '../../../src/contract/v1/index';
 import { aTask } from '../support/fixtures';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, taskDetails } from '../support/taskDetails';
 
 /**
  * What an agent reported about its run on a task: in the details of that task (T27) and as a
@@ -34,12 +35,12 @@ async function openTask(task: Partial<Task>, commits?: GitCommit[]): Promise<Ren
     ...(commits !== undefined ? { commits } : {}),
   });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
 const card = () => screen.getByRole('button', { name: 'Ship it' }).closest('li') as HTMLElement;
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const run = () => within(details()).queryByRole('region', { name: 'AI run' });
 const value = (term: string): string | null | undefined =>
   within(run() as HTMLElement).getByText(term).nextElementSibling?.textContent;

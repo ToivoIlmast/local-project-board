@@ -13,6 +13,7 @@ import { WORKFLOW_LABELS } from '../../../src/web/features/settings/index';
 import { aTask } from '../support/fixtures';
 import { fakeBoard, type FakeBoardOptions } from '../support/fakeBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, queryTopDialog, taskDetails, topDialog } from '../support/taskDetails';
 
 const one = (extra: Partial<Task> = {}): Task =>
   aTask({ id: 'T1', title: 'Ship it', status: 'todo', rank: 'a0', ...extra });
@@ -21,15 +22,15 @@ const two = (): Task => aTask({ id: 'T2', title: 'Other task', status: 'todo', r
 async function openTask(options: FakeBoardOptions = {}): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [one(), two()], ...options });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   // Opened, so that there is something to change; a task without settings shows one line.
-  const block = within(screen.getByRole('complementary', { name: 'Task T1' }));
+  const block = within(taskDetails('Task T1'));
   const customize = block.queryByRole('button', { name: 'Customize for this task' });
   if (customize !== null) await rendered.user.click(customize);
   return rendered;
 }
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const ai = () => within(details()).getByRole('region', { name: 'AI' });
 const push = () => within(ai()).getByLabelText(WORKFLOW_LABELS.push.label);
 const dialog = () => screen.getByRole('dialog', { name: 'Unsaved changes' });
@@ -67,7 +68,48 @@ const WAYS_OUT: [string, (rendered: RenderedBoard) => Promise<void>, () => boole
     ({ user }) => user.click(screen.getByRole('button', { name: 'Settings' })),
     () => openedTask() === null && openedPanel() === 'settings',
   ],
+  [
+    'Escape in the window',
+    ({ user }) => user.keyboard('{Escape}'),
+    () => openedTask() === null && openedPanel() === null,
+  ],
+  [
+    'a press on the backdrop of the window',
+    ({ user }) => {
+      const backdrop = details().parentElement;
+      if (backdrop === null) throw new Error('the window has no backdrop');
+      return user.pointer({ keys: '[MouseLeft]', target: backdrop });
+    },
+    () => openedTask() === null && openedPanel() === null,
+  ],
 ];
+
+describe('the window of a task and its question about unsaved changes', () => {
+  it('Escape in the question closes only the question, and the window stays', async () => {
+    const rendered = await openTask();
+    await rendered.user.selectOptions(push(), 'On');
+    await rendered.user.keyboard('{Escape}');
+    expect(dialog()).toBeInTheDocument();
+
+    await rendered.user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    expect(details()).toBeInTheDocument();
+    expect(openedTask()).toBe('T1');
+  });
+
+  it('moving to the panel is not a way out: nothing is asked', async () => {
+    const rendered = await openTask();
+    await rendered.user.selectOptions(push(), 'On');
+
+    await rendered.user.click(
+      within(details()).getByRole('button', { name: 'Open in side panel' }),
+    );
+
+    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Task T1' })).toBeInTheDocument();
+  });
+});
 
 describe('leaving a task whose AI settings have unsaved changes', () => {
   describe.each(WAYS_OUT)('by %s', (_name, leave, arrived) => {
@@ -93,7 +135,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
       await waitFor(() => expect(arrived()).toBe(true));
       expect(patch).toHaveBeenCalledWith('T1', { workflow: { push: true } });
       expect(rendered.board.tasks[0]?.workflow).toEqual({ push: true });
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
     });
 
     it('Save that fails: nothing closes and nothing is lost (INVARIANT)', async () => {
@@ -146,7 +188,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
 
       await rendered.user.click(choice('Cancel'));
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       expect(arrived()).toBe(false);
       expect(push()).toHaveDisplayValue('On');
       expect(within(ai()).getByRole('button', { name: 'Save' })).toBeEnabled();
@@ -158,7 +200,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
 
       await leave(rendered);
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       await waitFor(() => expect(arrived()).toBe(true));
     });
 
@@ -168,7 +210,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
       await rendered.user.selectOptions(push(), 'inherit');
       await leave(rendered);
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       await waitFor(() => expect(arrived()).toBe(true));
     });
   });
@@ -181,7 +223,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
 
     await rendered.user.click(within(details()).getByRole('button', { name: 'Close' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(openedTask()).toBeNull();
   });
 
@@ -191,7 +233,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(push()).toHaveDisplayValue('On');
   });
 
@@ -200,12 +242,10 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
     await rendered.user.selectOptions(push(), 'On');
 
     await rendered.user.click(within(details()).getByRole('button', { name: 'Delete' }));
-    await rendered.user.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }),
-    );
+    await rendered.user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(openedTask()).toBeNull());
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('Discard drops the change for good: the task comes back as it is on the board', async () => {
@@ -254,7 +294,7 @@ describe('leaving a task whose AI settings have unsaved changes', () => {
 
     await rendered.user.keyboard('{Escape}');
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(close).toHaveFocus();
     expect(push()).toHaveDisplayValue('On');
   });
@@ -349,7 +389,7 @@ describe('leaving the Settings panel with unsaved changes', () => {
 
       await leave(rendered);
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(queryTopDialog()).not.toBeInTheDocument();
       await waitFor(() => expect(arrived()).toBe(true));
     });
   });
@@ -362,7 +402,7 @@ describe('leaving the Settings panel with unsaved changes', () => {
 
     await rendered.user.click(within(settings()).getByRole('button', { name: 'Close' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('asks the same three questions in the same words as a task does (INVARIANT)', async () => {
@@ -376,10 +416,9 @@ describe('leaving the Settings panel with unsaved changes', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
     await rendered.user.click(
-      await within(await screen.findByRole('complementary', { name: 'Task T1' })).findByRole(
-        'button',
-        { name: 'Customize for this task' },
-      ),
+      await within(await findTaskDetails('Task T1')).findByRole('button', {
+        name: 'Customize for this task',
+      }),
     );
     await rendered.user.selectOptions(push(), 'On');
     await rendered.user.click(within(details()).getByRole('button', { name: 'Close' }));
@@ -435,7 +474,7 @@ describe('Discard in a form that stays on the page', () => {
     expect(within(settingsBlock()).getByRole('button', { name: 'Save' })).toBeDisabled();
     // Nothing is unsaved now, so leaving again does not ask.
     await user.click(screen.getByRole('button', { name: 'Leave' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('takes what the board says now when it was changed elsewhere meanwhile, not the older version', async () => {

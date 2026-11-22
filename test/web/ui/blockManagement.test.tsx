@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { queryTopDialog, topDialog } from '../support/taskDetails';
 
 /** Renaming, adding, moving and deleting the blocks of a topic from the Blocks View (T92). */
 
@@ -81,13 +82,13 @@ describe('Rename', () => {
 
     await user.click(trigger('K2'));
     await user.click(screen.getByRole('button', { name: 'Rename' }));
-    const title = within(screen.getByRole('dialog')).getByLabelText('Title');
+    const title = within(topDialog()).getByLabelText('Title');
     expect(title).toHaveValue('Build');
     await user.clear(title);
     await user.type(title, 'Make');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(queryTopDialog()).toBeNull());
     expect(mutations(board.calls)).toEqual(['updateBlock']);
     expect(order()).toEqual(['K1 · Design', 'K2 · Make', 'K3 · Review', 'K4 · Release']);
     expect(trigger('K2')).toHaveFocus();
@@ -100,10 +101,10 @@ describe('Add block', () => {
 
     await user.click(trigger('K1'));
     await user.click(screen.getByRole('button', { name: 'Add block' }));
-    await user.type(within(screen.getByRole('dialog')).getByLabelText('Title'), 'Ship');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' }));
+    await user.type(within(topDialog()).getByLabelText('Title'), 'Ship');
+    await user.click(within(topDialog()).getByRole('button', { name: 'Add' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(queryTopDialog()).toBeNull());
     expect(mutations(board.calls)).toEqual(['createBlock']);
     expect(order()).toEqual([
       'K1 · Design',
@@ -121,7 +122,7 @@ describe('Add block', () => {
     await user.click(trigger('K1'));
     await user.click(screen.getByRole('button', { name: 'Add block' }));
 
-    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add' })).toBeDisabled();
+    expect(within(topDialog()).getByRole('button', { name: 'Add' })).toBeDisabled();
     expect(mutations(board.calls)).toEqual([]);
   });
 });
@@ -132,12 +133,12 @@ describe('Move to position', () => {
 
     await user.click(trigger('K1'));
     await user.click(screen.getByRole('button', { name: 'Move to position' }));
-    const position = within(screen.getByRole('dialog')).getByLabelText('Position');
+    const position = within(topDialog()).getByLabelText('Position');
     expect(position).toHaveValue('1');
     await user.selectOptions(position, '3');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Move' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Move' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(queryTopDialog()).toBeNull());
     expect(mutations(board.calls)).toEqual(['reorderBlocks']);
     expect(board.topics[0]?.blocks.map((b) => b.id)).toEqual(['K2', 'K3', 'K1', 'K4']);
     expect(order()).toEqual(['K2 · Build', 'K3 · Review', 'K1 · Design', 'K4 · Release']);
@@ -150,7 +151,7 @@ describe('Move to position', () => {
     await user.click(trigger('K2'));
     await user.click(screen.getByRole('button', { name: 'Move to position' }));
 
-    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Move' })).toBeDisabled();
+    expect(within(topDialog()).getByRole('button', { name: 'Move' })).toBeDisabled();
     expect(mutations(board.calls)).toEqual([]);
   });
 });
@@ -170,9 +171,9 @@ describe('Delete', () => {
 
     await user.click(trigger('K4'));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Delete$/ }));
+    await user.click(within(topDialog()).getByRole('button', { name: /^Delete$/ }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(queryTopDialog()).toBeNull());
     expect(mutations(board.calls)).toEqual(['deleteBlock']);
     expect(order()).toEqual(['K1 · Design', 'K2 · Build', 'K3 · Review']);
     // The block with the button is gone: the focus is somewhere on the page, not lost.
@@ -184,15 +185,13 @@ describe('Delete', () => {
 
     await user.click(trigger('K1'));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Delete$/ }));
+    await user.click(within(topDialog()).getByRole('button', { name: /^Delete$/ }));
 
-    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
-      /not empty/,
-    );
+    expect(await within(topDialog()).findByRole('alert')).toHaveTextContent(/not empty/);
     expect(order()).toContain('K1 · Design');
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(queryTopDialog()).toBeNull();
     expect(trigger('K1')).toHaveFocus();
   });
 });

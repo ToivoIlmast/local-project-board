@@ -9,6 +9,7 @@ import { defaultWorkflow } from '../../../src/core/rules/workflow';
 import { STATUSES, aTask } from '../support/fixtures';
 import type { FakeBoardOptions } from '../support/fakeBoard';
 import { renderBoard, type RenderedBoard } from '../support/render';
+import { findTaskDetails, taskDetails } from '../support/taskDetails';
 
 const todo = (extra: Partial<Task> = {}): Task =>
   aTask({ id: 'T1', title: 'Ship it', status: 'todo', ...extra });
@@ -17,11 +18,11 @@ const todo = (extra: Partial<Task> = {}): Task =>
 async function openTask(options: FakeBoardOptions = {}): Promise<RenderedBoard> {
   const rendered = await renderBoard({ tasks: [todo()], ...options });
   await rendered.user.click(screen.getByRole('button', { name: 'Ship it' }));
-  await screen.findByRole('complementary', { name: 'Task T1' });
+  await findTaskDetails('Task T1');
   return rendered;
 }
 
-const details = () => screen.getByRole('complementary', { name: 'Task T1' });
+const details = () => taskDetails('Task T1');
 const ai = () => within(details()).getByRole('region', { name: 'AI' });
 const field = (key: WorkflowFlag) => within(ai()).getByLabelText(WORKFLOW_LABELS[key].label);
 const save = () => within(ai()).getByRole('button', { name: 'Save' });

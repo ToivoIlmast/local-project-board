@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { aReport } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { topDialog } from '../support/taskDetails';
 
 async function openReports(reports = [aReport({ id: 'R1', title: 'Dependency audit' })]) {
   const rendered = await renderBoard({ reports });
@@ -48,7 +49,7 @@ describe('the reports an agent left on the board', () => {
     const { user, board } = await openReports();
 
     await user.click(screen.getByRole('button', { name: 'Delete R1' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.getByText('No reports')).toBeInTheDocument());
     expect(board.reports).toEqual([]);

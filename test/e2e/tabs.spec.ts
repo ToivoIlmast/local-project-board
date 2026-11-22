@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test, type RunningBoard } from './board';
+import { expect, test, type RunningBoard, taskDetails } from './board';
 
 /**
  * Many tabs of one board in one browser (T62). A browser keeps six HTTP/1.1 connections to a
@@ -55,7 +55,7 @@ test(`${TABS} tabs of one board: every tab loads the board, the documents and th
 
   for (const tab of tabs) {
     await tab.getByRole('button', { name: 'Survive many tabs' }).click();
-    const details = tab.getByRole('complementary', { name: 'Task T1' });
+    const details = taskDetails(tab, 'Task T1');
     await expect(
       details.getByRole('region', { name: 'Documents' }).getByText('plan.md'),
     ).toBeVisible();

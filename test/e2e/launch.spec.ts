@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { fakeClaude } from '../support/fakeClaude.js';
 import { cleanTmpDirs } from '../support/tmp.js';
-import { expect, test } from './board';
+import { expect, test, taskDetails } from './board';
 
 /**
  * Send to AI → Claude Code in a real browser, against the real board, with a runner that waits
@@ -20,7 +20,7 @@ test('the dialog of a start of Claude Code is used from the keyboard, and the ru
   await page.goto(board.url);
 
   await page.getByRole('button', { name: 'Ship it' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   await details.getByRole('button', { name: 'Send to AI' }).focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab');
@@ -78,7 +78,7 @@ test('the comment of the dialog reaches begin and the handoff of the run, and th
   await page.goto(board.url);
 
   await page.getByRole('button', { name: 'Ship it' }).click();
-  const details = page.getByRole('complementary', { name: 'Task T1' });
+  const details = taskDetails(page, 'Task T1');
   await details.getByRole('button', { name: 'Send to AI' }).click();
   await page.getByRole('button', { name: 'Claude Code' }).click();
   const dialog = page.getByRole('dialog', { name: 'Start Claude Code on T1' });

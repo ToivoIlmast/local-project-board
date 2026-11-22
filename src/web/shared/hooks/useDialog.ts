@@ -38,7 +38,10 @@ function onKeyDown(event: KeyboardEvent): void {
   const last = stops[stops.length - 1];
   if (!first || !last) return;
   const inside = container.contains(document.activeElement);
-  if (event.shiftKey && (document.activeElement === first || !inside)) {
+  // The dialog itself holds the focus when it starts there (the window of a task): Shift+Tab
+  // from it would leave for the page behind, so it counts as the start, like the first stop.
+  const atStart = document.activeElement === first || document.activeElement === container;
+  if (event.shiftKey && (atStart || !inside)) {
     event.preventDefault();
     last.focus();
   } else if (!event.shiftKey && (document.activeElement === last || !inside)) {

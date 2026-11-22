@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { aTask, aTopic } from '../support/fixtures';
 import { renderBoard } from '../support/render';
+import { findTaskDetails } from '../support/taskDetails';
 
 /** The Blocks View: every topic, its blocks in their order, and the tasks in them (T91). */
 
@@ -141,7 +142,7 @@ describe('the Blocks View is a view of the main area', () => {
   it('opens the task of the address beside the Blocks', async () => {
     await openBlocks('/?view=blocks&task=T1');
 
-    expect(await screen.findByRole('complementary', { name: 'Task T1' })).toBeVisible();
+    expect(await findTaskDetails('Task T1')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Blocks' })).toBeVisible();
   });
 
@@ -171,7 +172,7 @@ describe('the Blocks View is a view of the main area', () => {
 
     await user.click(within(row('T5')).getByRole('button', { name: 'Inspect' }));
 
-    expect(await screen.findByRole('complementary', { name: 'Task T5' })).toBeVisible();
+    expect(await findTaskDetails('Task T5')).toBeVisible();
     expect(search().has('panel')).toBe(false);
     expect(search().get('task')).toBe('T5');
     expect(search().get('view')).toBe('blocks');
@@ -371,7 +372,7 @@ describe('the row of a task', () => {
 
     await user.click(within(row('T5')).getByRole('button', { name: 'Inspect' }));
 
-    expect(await screen.findByRole('complementary', { name: 'Task T5' })).toBeVisible();
+    expect(await findTaskDetails('Task T5')).toBeVisible();
   });
 
   it('shows the tasks of a topic that are in no block apart, outside the order', async () => {

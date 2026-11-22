@@ -2,6 +2,7 @@ import { configure, screen, waitFor, within } from '@testing-library/react';
 import { cleanTmpDirs } from '../../support/tmp';
 import { cardsIn } from '../support/render';
 import { renderAgainstRealBoard, type RealBoard } from '../support/realBoard';
+import { findTaskDetails, taskDetails, topDialog } from '../support/taskDetails';
 
 /**
  * These tests drive a real server and a real page, keystroke by keystroke. That is well
@@ -23,7 +24,7 @@ afterEach(async () => {
   await cleanTmpDirs();
 });
 
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => topDialog();
 
 describe('a developer’s session on a real board', () => {
   it(
@@ -43,13 +44,13 @@ describe('a developer’s session on a real board', () => {
       await user.type(within(dialog()).getByLabelText('Labels'), 'refactor');
       await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
 
-      await screen.findByRole('complementary', { name: 'Task T1' });
+      await findTaskDetails('Task T1');
       expect(await client.listTasks()).toMatchObject([
         { id: 'T1', title: 'Extract the git adapter', status: 'todo', labels: ['refactor'] },
       ]);
 
       // 3. It is changed through the UI, and the change is on the server.
-      const panel = screen.getByRole('complementary', { name: 'Task T1' });
+      const panel = taskDetails('Task T1');
       await user.click(within(panel).getByRole('button', { name: 'Edit' }));
       const title = within(dialog()).getByLabelText('Title');
       await user.clear(title);
@@ -136,7 +137,7 @@ describe('a developer’s session on a real board', () => {
     await user.click(screen.getByRole('button', { name: 'New task' }));
     await user.type(within(dialog()).getByLabelText('Title'), 'Something');
     await user.click(within(dialog()).getByRole('button', { name: 'Create' }));
-    await screen.findByRole('complementary', { name: 'Task T1' });
+    await findTaskDetails('Task T1');
 
     expect(document.body.innerHTML).not.toContain(server.token);
     expect(window.location.href).not.toContain(server.token);

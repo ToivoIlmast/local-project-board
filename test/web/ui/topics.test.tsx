@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../../../src/web/api/index';
 import { aTask, aTopic } from '../support/fixtures';
 import { cardsIn, renderBoard } from '../support/render';
+import { queryTopDialog, topDialog } from '../support/taskDetails';
 
 const search = () => new URLSearchParams(window.location.search);
 
@@ -236,18 +237,18 @@ describe('the topics panel (T90)', () => {
 
     await user.click(within(panel()).getByRole('button', { name: 'Close' }));
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
   });
 
   it('deletes an empty topic after the question, and it is gone from the list and the filter', async () => {
     const { user, board } = await openTopics({ topics: [m1, m2], tasks: [inM1] });
 
     await user.click(within(panel()).getByRole('button', { name: 'Delete P2' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(within(panel()).queryByText('M2 Rollout')).not.toBeInTheDocument());
     expect(board.topics.map((topic) => topic.id)).toEqual(['P1']);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryTopDialog()).not.toBeInTheDocument();
     expect(within(filter()).queryByRole('option', { name: /P2/ })).not.toBeInTheDocument();
   });
 
@@ -255,9 +256,9 @@ describe('the topics panel (T90)', () => {
     const { user, board } = await openTopics({ topics: [m1], tasks: [inM1] });
 
     await user.click(within(panel()).getByRole('button', { name: 'Delete P1' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
-    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
+    expect(await within(topDialog()).findByRole('alert')).toHaveTextContent(
       'Topic "P1" is not empty',
     );
     expect(board.topics.map((topic) => topic.id)).toEqual(['P1']);
@@ -270,7 +271,7 @@ describe('the topics panel (T90)', () => {
     expect(cardsIn('todo')).toEqual([]);
 
     await user.click(within(panel()).getByRole('button', { name: 'Delete P2' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(topDialog()).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(search().get('topic')).toBeNull());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
