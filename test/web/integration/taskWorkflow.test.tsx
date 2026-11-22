@@ -314,7 +314,8 @@ describe('an edit and the world outside the page', () => {
       await server.close();
       await user.click(within(ai()).getByRole('button', { name: 'Save' }));
 
-      expect(await within(ai()).findByRole('alert')).toBeInTheDocument();
+      // The failure may be shown twice (a notice and the form error), so do not demand exactly one.
+      expect((await within(ai()).findAllByRole('alert')).length).toBeGreaterThan(0);
       expect(field(WORKFLOW_LABELS.report.label)).toHaveDisplayValue('Off');
       expect(within(ai()).getByRole('button', { name: 'Save' })).toBeEnabled();
       expect(await frontmatter(root)).not.toHaveProperty('workflow');
