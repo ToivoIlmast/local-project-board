@@ -1,0 +1,1837 @@
+{
+  "experiments": {
+    "multi-message": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "5dedb9dd-1ec8-425c-9ca3-11bf01afd21b"
+      ],
+      "sessionId": "5dedb9dd-1ec8-425c-9ca3-11bf01afd21b",
+      "exitCode": 0,
+      "signal": null,
+      "t": 10150,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 43,
+          "uuid": "e8e9fcdf-7b5a-483a-97c5-2e2556a2317e"
+        },
+        {
+          "t": 44,
+          "uuid": "922464e3-235a-4621-af68-a48b2daa341a"
+        },
+        {
+          "t": 44,
+          "uuid": "48d6c1e8-a640-4499-8f06-ebaf2898b928"
+        },
+        {
+          "t": 9251,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 4673,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4701,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4738,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4741,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 6424,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 8208,
+          "type": "user",
+          "replayUuid": "e8e9fcdf-7b5a-483a-97c5-2e2556a2317e"
+        },
+        {
+          "t": 8222,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 8244,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 8290,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 8314,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 8318,
+          "type": "user",
+          "replayUuid": "922464e3-235a-4621-af68-a48b2daa341a"
+        },
+        {
+          "t": 8320,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 8321,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 8359,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 9165,
+          "type": "user",
+          "replayUuid": "48d6c1e8-a640-4499-8f06-ebaf2898b928"
+        },
+        {
+          "t": 9167,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 9251,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 9257,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 9261,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "result/success"
+      ],
+      "costUsd": 0.0021733200000000003,
+      "turns": 2
+    },
+    "uuid-edge-cases": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "697f9e56-5d38-49a0-a672-4824cb10c47b"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 8719,
+      "replays": [
+        {
+          "uuid": "582f1010-5785-4d21-82ee-8de0412b6992",
+          "text": "Reply with exactly TWO."
+        },
+        {
+          "uuid": "582f1010-5785-4d21-82ee-8de0412b6992",
+          "text": "Reply with exactly ONE."
+        },
+        {
+          "uuid": "not-a-uuid",
+          "text": "Reply with exactly THREE.\nReply with exactly FOUR."
+        }
+      ],
+      "sentUuids": [
+        "582f1010-5785-4d21-82ee-8de0412b6992",
+        "582f1010-5785-4d21-82ee-8de0412b6992",
+        null,
+        "not-a-uuid"
+      ],
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 25,
+          "uuid": "582f1010-5785-4d21-82ee-8de0412b6992"
+        },
+        {
+          "t": 26,
+          "uuid": "582f1010-5785-4d21-82ee-8de0412b6992"
+        },
+        {
+          "t": 26,
+          "uuid": null
+        },
+        {
+          "t": 26,
+          "uuid": "not-a-uuid"
+        },
+        {
+          "t": 8079,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2417,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2428,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2450,
+          "type": "user",
+          "replayUuid": "582f1010-5785-4d21-82ee-8de0412b6992"
+        },
+        {
+          "t": 2506,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3171,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4528,
+          "type": "user",
+          "replayUuid": "582f1010-5785-4d21-82ee-8de0412b6992"
+        },
+        {
+          "t": 4544,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 4562,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 4592,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 4603,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4607,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4636,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 5446,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 6054,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 6060,
+          "type": "user",
+          "replayUuid": "not-a-uuid"
+        },
+        {
+          "t": 6065,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 6075,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 6101,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 6105,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "user",
+        "system/init",
+        "assistant",
+        "rate_limit_event",
+        "result/success",
+        "system/thinking_tokens"
+      ],
+      "costUsd": 0.00225512
+    },
+    "bad-input": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "55652463-a8a1-4fc1-b398-d7a5ce47a980"
+      ],
+      "exitCode": 1,
+      "signal": null,
+      "t": 4971,
+      "answeredAfterBadLines": false,
+      "stderrTail": "Error parsing streaming input line (type=unknown, 16 chars): SyntaxError\n",
+      "model": null,
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 32,
+          "raw": true
+        },
+        {
+          "t": 32,
+          "raw": true
+        },
+        {
+          "t": 32,
+          "uuid": "97e1a29d-f269-4d4a-b2d8-602cbf5fe741"
+        },
+        {
+          "t": 4971,
+          "closed": true
+        }
+      ],
+      "timeline": [],
+      "types": [],
+      "costUsd": 0
+    },
+    "api-error": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "claude-t16-no-such-model",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "a8a2836d-28cb-42ec-80eb-e29db89fe600"
+      ],
+      "exitCode": 1,
+      "signal": null,
+      "t": 6593,
+      "stderrTail": "[claude-code:unrecognized_model] {\"model\":\"claude-t16-no-such-model\",\"query_source\":\"sdk\"}\n",
+      "model": "claude-t16-no-such-model",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 33,
+          "uuid": "8969fe8a-c57b-4f67-b2d8-25254309b0a4"
+        },
+        {
+          "t": 5766,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2999,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3028,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4005,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4739,
+          "type": "user",
+          "replayUuid": "8969fe8a-c57b-4f67-b2d8-25254309b0a4"
+        },
+        {
+          "t": 4743,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 4761,
+          "type": "result",
+          "subtype": "success",
+          "is_error": true,
+          "stop_reason": "stop_sequence"
+        },
+        {
+          "t": 4766,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": ["command_lifecycle", "system/init", "user", "assistant", "result/success"],
+      "costUsd": 0
+    },
+    "permissions": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--permission-prompts",
+        "none",
+        "--session-id",
+        "9ba56548-6dd7-496f-b63e-eba4995ae442"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 11871,
+      "toolResults": [
+        {
+          "command": "echo allowed-ok",
+          "isError": false,
+          "text": "allowed-ok\nShell cwd was reset to <WORK>\\perm"
+        },
+        {
+          "command": "mkdir denied-dir",
+          "isError": true,
+          "text": "Permission for this tool use was denied. It requires approval, and this session has no approval surface — nobody can answer a permission prompt here — so it was denied automatically. The action was NO"
+        }
+      ],
+      "allowedCommandRan": true,
+      "deniedDirCreated": false,
+      "firstResult": {
+        "is_error": false,
+        "subtype": "success",
+        "permission_denials": [
+          {
+            "tool_name": "Bash",
+            "tool_use_id": "toolu_01TNkBvEHn2G55yu95H8B469",
+            "tool_input": {
+              "command": "mkdir denied-dir",
+              "description": "Create denied-dir directory"
+            }
+          }
+        ]
+      },
+      "continuedAfterDenial": true,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 43,
+          "uuid": "13391608-8b90-4ffa-976d-f891c0881f26"
+        },
+        {
+          "t": 10262,
+          "uuid": "ebdc48a8-ab78-4394-b21a-74609d599971"
+        },
+        {
+          "t": 11167,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2225,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2245,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3033,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4029,
+          "type": "user",
+          "replayUuid": "13391608-8b90-4ffa-976d-f891c0881f26"
+        },
+        {
+          "t": 4051,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 4167,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 6842,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 8099,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 8301,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 8493,
+          "type": "system",
+          "subtype": "permission_denied"
+        },
+        {
+          "t": 8503,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 9341,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 9691,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 9696,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 10210,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 10261,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 10272,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 10280,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 10285,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 10319,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 11125,
+          "type": "user",
+          "replayUuid": "ebdc48a8-ab78-4394-b21a-74609d599971"
+        },
+        {
+          "t": 11129,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 11167,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 11173,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "system/permission_denied",
+        "system/thinking_tokens",
+        "result/success"
+      ],
+      "costUsd": 0.0041252400000000005
+    },
+    "mid-turn-message": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "814e93c0-9d0e-484d-84eb-e72e5d0409b5"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 18760,
+      "toolUseAt": 4567,
+      "midSentAt": 4568,
+      "replayAt": 14925,
+      "toolResultAt": 14885,
+      "replayAfterToolResult": true,
+      "midMessageAnswered": true,
+      "resultsBeforeMidReplay": 0,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 33,
+          "uuid": "902cc4c5-7807-42fa-94b3-0319fc61f1fd"
+        },
+        {
+          "t": 4568,
+          "uuid": "e7d134f5-211e-4711-80e8-6fc2db86404a"
+        },
+        {
+          "t": 18272,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2726,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2739,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3465,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4533,
+          "type": "user",
+          "replayUuid": "902cc4c5-7807-42fa-94b3-0319fc61f1fd"
+        },
+        {
+          "t": 4567,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 4651,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 4701,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 9536,
+          "type": "system",
+          "subtype": "task_started"
+        },
+        {
+          "t": 14861,
+          "type": "system",
+          "subtype": "task_notification"
+        },
+        {
+          "t": 14885,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 14925,
+          "type": "user",
+          "replayUuid": "e7d134f5-211e-4711-80e8-6fc2db86404a"
+        },
+        {
+          "t": 14932,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 15848,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 16688,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 16696,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 16710,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 16755,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 16764,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 16768,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "system/task_started",
+        "system/task_notification",
+        "system/thinking_tokens",
+        "result/success"
+      ],
+      "costUsd": 0.0017402799999999999
+    },
+    "stdin-close-mid-turn": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "94372c42-ff0b-4d68-8b62-175c4e6631ca"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 16153,
+      "toolUseAt": 4333,
+      "closedAt": 4334,
+      "exitedAfterCloseMs": 11819,
+      "resultEmitted": true,
+      "toolResultAfterClose": true,
+      "turnCompleted": true,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 27,
+          "uuid": "58553551-34ca-4e21-ae2a-33c389f30ca4"
+        },
+        {
+          "t": 4334,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 1933,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 1944,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3198,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4316,
+          "type": "user",
+          "replayUuid": "58553551-34ca-4e21-ae2a-33c389f30ca4"
+        },
+        {
+          "t": 4333,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 4443,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 9472,
+          "type": "system",
+          "subtype": "task_started"
+        },
+        {
+          "t": 14781,
+          "type": "system",
+          "subtype": "task_notification"
+        },
+        {
+          "t": 14801,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 15466,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 15494,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 15499,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "system/task_started",
+        "system/task_notification",
+        "result/success"
+      ],
+      "costUsd": 0.00158648
+    },
+    "sigint": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "01eefc49-3765-46f0-b0b4-6bcff821b3a2"
+      ],
+      "exitCode": null,
+      "signal": "SIGINT",
+      "t": 5317,
+      "killDelivered": true,
+      "toolUseAt": 5250,
+      "exitedAfterKillMs": 67,
+      "resultEmitted": false,
+      "linesAfterKill": 1,
+      "note": "On Windows, Node implements child.kill(SIGINT|SIGTERM) as TerminateProcess: no signal reaches the child.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 27,
+          "uuid": "7fc78d34-8fc1-4d33-be5c-0275d290c9df"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2937,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2957,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 4166,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 5219,
+          "type": "user",
+          "replayUuid": "7fc78d34-8fc1-4d33-be5c-0275d290c9df"
+        },
+        {
+          "t": 5250,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        }
+      ],
+      "types": ["command_lifecycle", "system/init", "user", "assistant"],
+      "costUsd": 0
+    },
+    "sigterm": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "117e6a5a-cb06-4bde-acde-bf1f24200c8b"
+      ],
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "t": 4194,
+      "killDelivered": true,
+      "toolUseAt": 4134,
+      "exitedAfterKillMs": 60,
+      "resultEmitted": false,
+      "linesAfterKill": 1,
+      "note": "On Windows, Node implements child.kill(SIGINT|SIGTERM) as TerminateProcess: no signal reaches the child.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 34,
+          "uuid": "e6964fed-7f06-4e95-9e61-6a3d38d53692"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 1865,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 1924,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3082,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4105,
+          "type": "user",
+          "replayUuid": "e6964fed-7f06-4e95-9e61-6a3d38d53692"
+        },
+        {
+          "t": 4134,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        }
+      ],
+      "types": ["command_lifecycle", "system/init", "user", "assistant"],
+      "costUsd": 0
+    },
+    "parent-death": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "77fd641c-15f8-44a6-b08c-dd1ef575b1da"
+      ],
+      "exitCode": null,
+      "signal": null,
+      "claudePid": 12448,
+      "killedAt": 3918,
+      "claudeExitedWithinMs": 4,
+      "claudeAliveAfterParentDeath": false,
+      "note": "exit code of the orphaned claude cannot be observed: its parent is gone.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 254,
+          "uuid": "5b8cacfb-db7e-41c2-9bba-3ee523fe22af"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2231,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2248,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2877,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 3882,
+          "type": "user",
+          "replayUuid": "5b8cacfb-db7e-41c2-9bba-3ee523fe22af"
+        },
+        {
+          "t": 3917,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        }
+      ],
+      "types": ["command_lifecycle", "system/init", "user", "assistant"],
+      "costUsd": 0,
+      "detached": false
+    },
+    "parent-death-idle": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "5b54c056-8fd6-4eaa-ae69-e868d2d0ae9c"
+      ],
+      "exitCode": null,
+      "signal": null,
+      "claudePid": 15932,
+      "killedAt": 4101,
+      "claudeExitedWithinMs": 1,
+      "claudeAliveAfterParentDeath": false,
+      "note": "exit code of the orphaned claude cannot be observed: its parent is gone.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 387,
+          "uuid": "617d8b3c-2c1e-47f4-93ef-60f2db01c46a"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2165,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2181,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2703,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 4000,
+          "type": "user",
+          "replayUuid": "617d8b3c-2c1e-47f4-93ef-60f2db01c46a"
+        },
+        {
+          "t": 4017,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 4048,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 4101,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "result/success"
+      ],
+      "costUsd": 0.00065249,
+      "detached": false
+    },
+    "parent-death-detached": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash",
+        "--session-id",
+        "0866b314-2fe2-49be-8cb6-bf18953b7740"
+      ],
+      "exitCode": null,
+      "signal": null,
+      "claudePid": 12780,
+      "killedAt": 12510,
+      "claudeExitedWithinMs": 21558,
+      "claudeAliveAfterParentDeath": false,
+      "detached": true,
+      "note": "exit code of the orphaned claude cannot be observed: its parent is gone.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 363,
+          "uuid": "0467534e-5c31-48d4-a7d8-1e8a38df1f64"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 8676,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 8726,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 10848,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 12421,
+          "type": "user",
+          "replayUuid": "0467534e-5c31-48d4-a7d8-1e8a38df1f64"
+        },
+        {
+          "t": 12509,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        }
+      ],
+      "types": ["command_lifecycle", "system/init", "user", "assistant"],
+      "costUsd": 0
+    },
+    "parent-death-detached-idle": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "",
+        "--session-id",
+        "b429f186-8719-4738-b8e0-519e279c1488"
+      ],
+      "exitCode": null,
+      "signal": null,
+      "claudePid": 13188,
+      "killedAt": 11663,
+      "claudeExitedWithinMs": 773,
+      "claudeAliveAfterParentDeath": false,
+      "detached": true,
+      "note": "exit code of the orphaned claude cannot be observed: its parent is gone.",
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 838,
+          "uuid": "2c5cff41-5993-4558-88da-6ea044951045"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 8628,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 8673,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 10455,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 11566,
+          "type": "user",
+          "replayUuid": "2c5cff41-5993-4558-88da-6ea044951045"
+        },
+        {
+          "t": 11577,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 11620,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 11661,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "result/success"
+      ],
+      "costUsd": 0.0006536900000000001
+    },
+    "tools": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash,Read,Write,Edit",
+        "--permission-mode",
+        "acceptEdits",
+        "--session-id",
+        "be7a71ed-4db2-466f-8da5-56d6d5953248"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 15668,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 24,
+          "uuid": "384e361b-e546-4e90-86a4-ed044bdb7c29"
+        },
+        {
+          "t": 14997,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 4750,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 5675,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 6047,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 7103,
+          "type": "user",
+          "replayUuid": "384e361b-e546-4e90-86a4-ed044bdb7c29"
+        },
+        {
+          "t": 7129,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 7271,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 9387,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 10707,
+          "type": "assistant",
+          "blocks": ["tool_use:Write"]
+        },
+        {
+          "t": 10909,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 12032,
+          "type": "assistant",
+          "blocks": ["tool_use:Edit"]
+        },
+        {
+          "t": 12133,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 13132,
+          "type": "assistant",
+          "blocks": ["tool_use:Read"]
+        },
+        {
+          "t": 13233,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 14205,
+          "type": "assistant",
+          "blocks": ["tool_use:Read"]
+        },
+        {
+          "t": 14288,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 14955,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 14997,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 15005,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "result/success"
+      ],
+      "costUsd": 0.00329627
+    },
+    "subagent": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Agent,Read",
+        "--session-id",
+        "7a64f276-bd61-40ea-93d0-8cab120c8a43"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 9176,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 57,
+          "uuid": "d06646c0-4dba-497f-b038-b842be838645"
+        },
+        {
+          "t": 7078,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 3047,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3071,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 3904,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 5130,
+          "type": "user",
+          "replayUuid": "d06646c0-4dba-497f-b038-b842be838645"
+        },
+        {
+          "t": 5143,
+          "type": "assistant",
+          "blocks": ["tool_use:Agent"]
+        },
+        {
+          "t": 5255,
+          "type": "system",
+          "subtype": "background_tasks_changed"
+        },
+        {
+          "t": 5263,
+          "type": "system",
+          "subtype": "task_started"
+        },
+        {
+          "t": 5310,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 5365,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 6281,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 6350,
+          "type": "assistant",
+          "blocks": ["tool_use:Read"],
+          "parent": true
+        },
+        {
+          "t": 6359,
+          "type": "system",
+          "subtype": "task_progress"
+        },
+        {
+          "t": 6539,
+          "type": "user",
+          "blocks": ["tool_result"],
+          "parent": true
+        },
+        {
+          "t": 6832,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 6840,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 7028,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 7043,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 7078,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 7084,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 7172,
+          "type": "assistant",
+          "blocks": ["text"],
+          "parent": true
+        },
+        {
+          "t": 7325,
+          "type": "system",
+          "subtype": "task_updated"
+        },
+        {
+          "t": 7326,
+          "type": "system",
+          "subtype": "task_notification"
+        },
+        {
+          "t": 7337,
+          "type": "system",
+          "subtype": "background_tasks_changed"
+        },
+        {
+          "t": 7388,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 8301,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 8427,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 8429,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 8463,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 8497,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 8512,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "system/background_tasks_changed",
+        "system/task_started",
+        "rate_limit_event",
+        "system/thinking_tokens",
+        "system/task_progress",
+        "result/success",
+        "system/task_updated",
+        "system/task_notification"
+      ],
+      "costUsd": 0.006012835000000001
+    },
+    "tools-write-denied": {
+      "args": [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--replay-user-messages",
+        "--model",
+        "haiku",
+        "--setting-sources",
+        "project",
+        "--no-session-persistence",
+        "--max-budget-usd",
+        "0.25",
+        "--tools",
+        "Bash,Read,Write,Edit",
+        "--session-id",
+        "873eb650-4607-41ec-abc8-2fab5476d968"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "t": 10141,
+      "model": "claude-haiku-5-5",
+      "platform": "win32 x64",
+      "stdinEvents": [
+        {
+          "t": 36,
+          "uuid": "4c3b2f8b-374e-465b-87e3-d1575181e15a"
+        },
+        {
+          "t": 9486,
+          "closed": true
+        }
+      ],
+      "timeline": [
+        {
+          "t": 2176,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2193,
+          "type": "command_lifecycle"
+        },
+        {
+          "t": 2894,
+          "type": "system",
+          "subtype": "init"
+        },
+        {
+          "t": 3931,
+          "type": "user",
+          "replayUuid": "4c3b2f8b-374e-465b-87e3-d1575181e15a"
+        },
+        {
+          "t": 3961,
+          "type": "assistant",
+          "blocks": ["tool_use:Bash"]
+        },
+        {
+          "t": 4057,
+          "type": "rate_limit_event"
+        },
+        {
+          "t": 6008,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 7093,
+          "type": "assistant",
+          "blocks": ["tool_use:Write"]
+        },
+        {
+          "t": 7188,
+          "type": "system",
+          "subtype": "permission_denied"
+        },
+        {
+          "t": 7198,
+          "type": "user",
+          "blocks": ["tool_result"]
+        },
+        {
+          "t": 7978,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 8561,
+          "type": "system",
+          "subtype": "thinking_tokens"
+        },
+        {
+          "t": 8563,
+          "type": "assistant",
+          "blocks": ["thinking"]
+        },
+        {
+          "t": 9454,
+          "type": "assistant",
+          "blocks": ["text"]
+        },
+        {
+          "t": 9486,
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "stop_reason": "end_turn"
+        },
+        {
+          "t": 9494,
+          "type": "command_lifecycle"
+        }
+      ],
+      "types": [
+        "command_lifecycle",
+        "system/init",
+        "user",
+        "assistant",
+        "rate_limit_event",
+        "system/permission_denied",
+        "system/thinking_tokens",
+        "result/success"
+      ],
+      "costUsd": 0.00277162,
+      "note": "tools run with the default --permission-prompts host and no SDK host: Write is denied automatically (system/permission_denied without decision_reason). Project allow rules: Bash(echo *), Read, Write, Edit."
+    }
+  },
+  "claudeVersion": "2.1.330",
+  "node": "v22.14.0",
+  "recordedAt": "2026-11-22",
+  "baseArgs": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--replay-user-messages",
+    "--model",
+    "haiku",
+    "--setting-sources",
+    "project",
+    "--no-session-persistence",
+    "--max-budget-usd",
+    "0.25"
+  ]
+}

@@ -1,0 +1,1 @@
+{"type":"user","message":{"role":"user","content":"Use the Agent tool exactly once (subagent_type \"general-purpose\") with the prompt: \"Read the file note.txt in the current directory and reply with its content only.\" Then reply with exactly: AGENT-SAID <what it returned>."},"uuid":"d06646c0-4dba-497f-b038-b842be838645"}
