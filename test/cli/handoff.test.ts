@@ -114,6 +114,20 @@ describe('local-project-board handoff <id>', () => {
       expect(run.out.join('\n')).toContain(`Base URL: http://127.0.0.1:${state.port}/api/v1`);
     });
 
+    it('gives the same Related tasks section as the board (T14)', async () => {
+      const { root, state } = await boardWithTask();
+      await api(state, 'POST', '/tasks', { title: 'Dependent', dependsOn: ['T1'], status: 'todo' });
+      await api(state, 'PUT', '/tasks/T1/documents/report.md', { content: '# R\n' });
+      await api(state, 'PATCH', '/tasks/T1', { status: 'done' });
+      const served = await (await api(state, 'GET', '/tasks/T2/handoff')).text();
+
+      const run = await cli(['handoff', 'T2'], { cwd: root });
+
+      expect(served).toContain('## Related tasks');
+      expect(served).toContain('GET /api/v1/tasks/T1/documents/report.md');
+      expect(run.out.join('\n').trim()).toBe(served.trim());
+    });
+
     it('follows a change of the settings made after the last handoff', async () => {
       const { root, state } = await boardWithTask();
       expect((await cli(['handoff', 'T1'], { cwd: root })).text).toContain('Push your commits');

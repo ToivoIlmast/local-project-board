@@ -640,6 +640,76 @@ describe('report route in handoff (T32)', () => {
     expect(text).not.toContain('/ai-run/<runId>/report');
   });
 
+  describe('Related tasks (T14)', () => {
+    const SHA = '9f1c1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b';
+
+    async function archivedDoneWithReport(): Promise<string> {
+      const dep = await createTask({ title: 'History modal', status: 'done' });
+      await board
+        .post(`${API}/tasks/${dep}/ai-run`, {
+          sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+          mode: 'new',
+        })
+        .expect(200);
+      await board
+        .patch(`${API}/tasks/${dep}/ai-run/1/report`, {
+          agent: 'claude-code',
+          state: 'finished',
+          checks: 'passed',
+          commit: SHA,
+          finishedAt: '2026-09-26T11:00:00.000Z',
+        })
+        .expect(200);
+      await board.put(`${API}/tasks/${dep}/documents/report.md`, { content: 'SECRET BODY' });
+      await board.post(`${API}/tasks/${dep}/archive`).expect(200);
+      return dep;
+    }
+
+    it('lists an archived done dependency with report link and commit, no content', async () => {
+      const dep = await archivedDoneWithReport();
+      const id = await createTask({ title: 'Current', dependsOn: [dep] });
+      const text = await handoff(id);
+
+      const line = text.split('\n').find((row) => row.includes(`\`${dep}\``)) ?? '';
+      expect(text).toContain('## Related tasks');
+      expect(line).toContain('`done`, archived');
+      expect(line).toContain('`dependsOn`');
+      expect(line).toContain(`GET /api/v1/tasks/${dep}/documents/report.md`);
+      expect(line).toContain(`\`${SHA}\``);
+      expect(text).not.toContain('SECRET BODY');
+    });
+
+    it('has no section and no change for a task without links', async () => {
+      await createTask({ title: 'Other', body: 'mentions T1' });
+      const id = await createTask({ title: 'Other', labels: ['x'] });
+      expect(await handoff(id)).not.toContain('Related tasks');
+    });
+
+    it('does not break on a related task without report or with an unreadable file', async () => {
+      const ok = await createTask({ title: 'No report', status: 'done' });
+      const broken = await createTask({ title: 'Broken', status: 'done' });
+      const id = await createTask({ title: 'Current', dependsOn: [ok, broken] });
+      // A working run keeps its handoff even when a dependency cannot be read (ADR-0032 §8).
+      await board
+        .post(`${API}/tasks/${id}/ai-run`, {
+          sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+          mode: 'new',
+        })
+        .expect(200);
+      await writeFile(
+        join(board.root, '.board', 'tasks', broken, 'task.md'),
+        '---\n: : not yaml [\n---\n',
+        'utf8',
+      );
+
+      const text = await handoff(id);
+
+      const line = text.split('\n').find((row) => row.includes(`\`${ok}\``)) ?? '';
+      expect(line).not.toContain('report.md');
+      expect(text).not.toContain(`\`${broken}\``);
+    });
+  });
+
   it('has exactly one mention of the ai-run report route URL (INVARIANT)', async () => {
     const id = await createTask();
     const text = await handoff(id);

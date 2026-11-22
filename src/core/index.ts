@@ -17,6 +17,7 @@ export * from './rules/documentName.js';
 export * from './rules/history.js';
 export * from './rules/ids.js';
 export * from './rules/rank.js';
+export * from './rules/related.js';
 export * from './rules/readiness.js';
 export * from './rules/status.js';
 export * from './rules/topicWrites.js';

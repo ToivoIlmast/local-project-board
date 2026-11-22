@@ -9,6 +9,7 @@ import type {
   WorkflowSource,
 } from '../../core/model/workflow.js';
 import { taskBranchName } from '../../core/rules/branch.js';
+import type { RelatedReason } from '../../core/rules/related.js';
 import { fenceFor } from './checkHandoff.js';
 import { API_BASE_PATH } from './routes.js';
 import { TEXT_RULE } from './textRule.js';
@@ -305,6 +306,38 @@ export function renderWorkflowSteps(effective: EffectiveWorkflow, facts: Workflo
     .join('\n')}\n`;
 }
 
+/** One related task, as `composeHandoff` collected it; the handoff only prints it (T14). */
+export interface HandoffRelatedTask {
+  id: string;
+  title: string;
+  status: string;
+  archived: boolean;
+  reason: RelatedReason;
+  /** The task has a `report.md`: its address is given, never its content. */
+  hasReport: boolean;
+  /** Commit SHAs of its runs, without duplicates, in the order of the runs. */
+  commits: readonly string[];
+}
+
+const RELATED_REASONS: Record<RelatedReason, string> = {
+  dependency: 'the current task depends on it (`dependsOn`)',
+  block: 'the same block',
+  topic: 'the same topic',
+  dependent: 'it depends on the current task',
+};
+
+function relatedLine(entry: HandoffRelatedTask): string {
+  const state = entry.archived ? `\`${entry.status}\`, archived` : `\`${entry.status}\``;
+  const parts = [`- \`${entry.id}\` ${entry.title} — ${state}; ${RELATED_REASONS[entry.reason]}`];
+  if (entry.hasReport) {
+    parts.push(`report: \`GET ${API_BASE_PATH}/tasks/${entry.id}/documents/report.md\``);
+  }
+  if (entry.commits.length > 0) {
+    parts.push(`commits: ${entry.commits.map((sha) => `\`${sha}\``).join(', ')}`);
+  }
+  return parts.join('; ');
+}
+
 export interface HandoffOptions {
   task: Task;
   documents: readonly DocumentMeta[];
@@ -312,6 +345,10 @@ export interface HandoffOptions {
   effective: EffectiveWorkflow;
   /** The general instructions for the API, as `generateInstructions` made them — without a token. */
   instructions: string;
+  /** Tasks related to this one, in the order to print; none or empty: no section (T14). */
+  related?: readonly HandoffRelatedTask[] | undefined;
+  /** How many more related tasks there are than `related` holds. */
+  relatedOmitted?: number | undefined;
 }
 
 /**
@@ -325,6 +362,8 @@ export function generateHandoff({
   documents,
   effective,
   instructions,
+  related = [],
+  relatedOmitted = 0,
 }: HandoffOptions): string {
   const facts: WorkflowFacts = {
     taskId: task.id,
@@ -368,6 +407,19 @@ export function generateHandoff({
       comment.trimEnd(),
       fence,
     );
+  }
+
+  if (related.length > 0) {
+    lines.push(
+      '',
+      '## Related tasks',
+      '',
+      'Tasks linked to this one by the board (dependencies, block, topic). Read what matters of ' +
+        'them in their report or commits; their content is not copied here.',
+      '',
+      ...related.map(relatedLine),
+    );
+    if (relatedOmitted > 0) lines.push(`- … and ${relatedOmitted} more tasks`);
   }
 
   lines.push('', '## Documents', '');

@@ -4,9 +4,12 @@ import {
   generateHandoff,
   generateInstructions,
   type BoardFacts,
+  type HandoffRelatedTask,
 } from '../../../contract/v1/index.js';
 import {
   assertNotArchived,
+  selectRelatedTasks,
+  type Task,
   taskBlocked,
   type DocumentService,
   type HistoryService,
@@ -16,7 +19,7 @@ import {
 
 /** The reads a handoff is made of; nothing here can change the board. */
 export interface HandoffServices {
-  tasks: Pick<TaskService, 'getWithReadiness'>;
+  tasks: Pick<TaskService, 'getWithReadiness' | 'list'>;
   documents: Pick<DocumentService, 'list'>;
   workflow: Pick<WorkflowService, 'forTask'>;
 }
@@ -50,13 +53,65 @@ export async function composeHandoff(
   if (readiness.reasons.length > 0 && task.aiRun?.state !== 'working') {
     throw taskBlocked(id, readiness.reasons);
   }
-  const [attached, effective] = await Promise.all([documents.list(id), workflow.forTask(id)]);
+  const [attached, effective, related] = await Promise.all([
+    documents.list(id),
+    workflow.forTask(id),
+    relatedOf(tasks, documents, task),
+  ]);
   return generateHandoff({
+    ...related,
     task,
     documents: attached,
     effective,
     instructions: generateInstructions({ baseUrl, board, projectRules }),
   });
+}
+
+const REPORT = 'report.md';
+
+/**
+ * The related tasks of one task (T14), read now: who they are from `selectRelatedTasks`, whether
+ * each has a `report.md` and which commits its runs recorded — from the task itself, never from
+ * git. Whatever cannot be read leaves the task out or its report unlinked; it never fails a handoff.
+ */
+async function relatedOf(
+  tasks: HandoffServices['tasks'],
+  documents: HandoffServices['documents'],
+  task: Task,
+): Promise<{ related?: HandoffRelatedTask[]; relatedOmitted?: number }> {
+  let all: Task[];
+  try {
+    all = await tasks.list();
+  } catch {
+    return {};
+  }
+  const { related, omitted } = selectRelatedTasks(task, all);
+  if (related.length === 0) return {};
+  const entries = await Promise.all(
+    related.map(async ({ task: other, reason }): Promise<HandoffRelatedTask> => {
+      const hasReport = await documents
+        .list(other.id)
+        .then((list) => list.some((document) => document.name === REPORT))
+        .catch(() => false);
+      return {
+        id: other.id,
+        title: other.title,
+        status: other.status,
+        archived: other.archived !== undefined,
+        reason,
+        hasReport,
+        commits: commitsOf(other),
+      };
+    }),
+  );
+  return { related: entries, relatedOmitted: omitted };
+}
+
+/** The SHAs of the runs in the order of the runs, the current one last, each once. */
+function commitsOf(task: Task): string[] {
+  const runs = [...(task.aiRunHistory ?? []), ...(task.aiRun === undefined ? [] : [task.aiRun])];
+  const shas = runs.flatMap((run) => (run.commit === undefined ? [] : [run.commit]));
+  return [...new Set(shas)];
 }
 
 export interface CheckHandoffServices {
