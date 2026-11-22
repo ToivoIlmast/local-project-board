@@ -1,0 +1,3 @@
+{"__raw":"this is not json\n"}
+{"__raw":"{\"type\":\"nonsense\"}\n"}
+{"type":"user","message":{"role":"user","content":"Reply with exactly OKAY."},"uuid":"97e1a29d-f269-4d4a-b2d8-602cbf5fe741"}
