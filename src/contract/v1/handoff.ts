@@ -91,6 +91,23 @@ const patch = (facts: WorkflowFacts, body: Record<string, unknown>): string =>
  * and what not to do when it is off; while `editCode` is off, the ones that depend on it say
  * that they do not apply, whatever their value is.
  */
+/**
+ * What `report.md` must say about the consequences of the task (T15): the section is what the
+ * Related tasks of a later handoff point to. The heading is fixed text, found in any report.
+ */
+const REPORT_SECTION =
+  'The report must contain the section `## Deviations and impact on related tasks`: keep this ' +
+  'heading exactly as written, in English, whatever the report is written in; write the ' +
+  'content of the section in the language of the report. The section describes: (1) deviations ' +
+  'from the original description of the task or its acceptance criteria — what exactly and why; ' +
+  '(2) the technical decisions made and their reasons; (3) the remaining limitations and ' +
+  'unfinished points; (4) the affected tasks (by ID) and components (modules, files, APIs, ' +
+  'contracts); (5) what the next agents must take into account. Be concrete: name files, ' +
+  'functions, routes, task IDs and changed contracts, not general phrases like "everything ' +
+  'works" or "the impact is minimal". If there are no significant deviations and no impact, say ' +
+  'so in the section directly (for example: "No deviations from the description; no impact on ' +
+  'other tasks or components.") instead of leaving the section out.';
+
 const STEPS: Renderers = {
   startStatus: ({ value, facts }) =>
     value === null
@@ -198,7 +215,7 @@ const STEPS: Renderers = {
     // A restart keeps the report of the earlier attempt beside the new one (T37).
     const write =
       'what you did, what you checked and what is left into the document `report.md` ' +
-      `of this task: \`PUT ${tasks(facts)}/documents/report.md\`.${langNote}`;
+      `of this task: \`PUT ${tasks(facts)}/documents/report.md\`. ${REPORT_SECTION}${langNote}`;
     if (facts.restart === undefined) return `Write ${write}`;
     return (
       'First keep the report of the earlier attempt: if ' +

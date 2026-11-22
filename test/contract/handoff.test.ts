@@ -22,6 +22,7 @@ import {
   type WorkflowFlagOverrides,
   type WorkflowFlag,
 } from '../../src/core/index.js';
+import { REPORT_SECTION, REPORT_SECTION_PARTS } from '../support/reportSection.js';
 import { TEXT_RULE, TEXT_RULE_PARTS } from '../support/textRule.js';
 import { TOKEN_RULE, TOKEN_RULE_PARTS } from '../support/tokenRule.js';
 
@@ -287,7 +288,7 @@ describe('renderWorkflowSteps', () => {
     });
 
     it('reportLanguage: null writes no language instruction; a language code names the language', () => {
-      expect(stepFor({}, 'report')).not.toContain('language');
+      expect(stepFor({}, 'report')).not.toContain('Write in');
       expect(stepFor({ board: { reportLanguage: 'fi' } }, 'report')).toContain('Finnish');
       expect(stepFor({ board: { reportLanguage: 'sv' } }, 'report')).toContain('Swedish');
     });
@@ -302,6 +303,29 @@ describe('renderWorkflowSteps', () => {
       expect(step).toContain('reportLanguage: this task');
       expect(stepFor({ board: { reportLanguage: 'sv' } }, 'report')).toContain(
         'reportLanguage: board',
+      );
+    });
+
+    it('report: on asks for the section about deviations and impact, with its five points (T15)', () => {
+      const step = stepFor({}, 'report');
+      for (const part of REPORT_SECTION_PARTS) expect(step).toContain(part);
+      expect(step).toContain(REPORT_SECTION);
+      expect(step).toContain('say so in the section directly');
+      expect(step).not.toContain('\n');
+    });
+
+    it('report: the section heading stays fixed under a language, and the language note stays (T15)', () => {
+      const step = stepFor({ task: { reportLanguage: 'ru' } }, 'report');
+      expect(step).toContain(' Write in Russian.');
+      expect(step).toContain('`## Deviations and impact on related tasks`');
+      expect(step).toContain('exactly as written, in English');
+      expect(step).toContain('reportLanguage: this task');
+      expect(step.indexOf('## Deviations')).toBeLessThan(step.indexOf('Write in Russian.'));
+    });
+
+    it('report: off does not mention the section (T15)', () => {
+      expect(stepFor({ task: { report: false } }, 'report')).toBe(
+        'Do not write a `report.md` for this task. _(source: this task)_',
       );
     });
 
@@ -448,7 +472,9 @@ describe('renderWorkflowSteps', () => {
           '4. Before you finish, run the checks of the project — its full pipeline, as its README or CLAUDE.md describes it — and fix what fails. _(source: default; checkCommand: default)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default; commitLanguage: default)_',
           '6. Do not push: nothing leaves this machine. _(source: default)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. ' +
+            REPORT_SECTION +
+            ' _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
@@ -473,7 +499,9 @@ describe('renderWorkflowSteps', () => {
           '4. Do not run the checks of the project: without changes to the code there is nothing to check. _(source: default; inactive: editCode is off)_',
           '5. Do not commit: there are no changes to commit. _(source: default; inactive: editCode is off)_',
           '6. Do not push: there is nothing to push. _(source: board; inactive: editCode is off)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. ' +
+            REPORT_SECTION +
+            ' _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: default)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
@@ -505,7 +533,9 @@ describe('renderWorkflowSteps', () => {
           '4. Before you finish, run the checks of the project with `npm test` and fix what fails. _(source: default; checkCommand: board)_',
           '5. Commit your work; start the message with the task id, like `T13: what changed`. _(source: default; commitLanguage: default)_',
           '6. Push your commits to the remote. _(source: board)_',
-          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. _(source: default; reportLanguage: default)_',
+          '7. Write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. ' +
+            REPORT_SECTION +
+            ' _(source: default; reportLanguage: default)_',
           '8. When you are done, move the task to `done`: `PATCH /api/v1/tasks/T13` with `{"status":"done"}`. _(source: board)_',
           "9. When you finish, report your run to the board: send `PATCH /api/v1/tasks/T13/ai-run/<runId>/report` with `agent` (your name), `state` (`finished`, `failed` or `needs-review`), `checks` (`passed`, `failed` or `skipped`), `commit` (the SHA of your last commit, if you made one), and `finishedAt`. On `failed`, also send `message` describing what went wrong. The runner writes `startedAt` and the runner fields; do not send them here. If there is no current run (no `runId` in the task's `aiRun`), start one first: `POST /api/v1/tasks/T13/ai-run` with your `sessionId`, `mode` and `model`. The server assigns the `runId`; use it in the report URL. Times are ISO 8601, like `2026-09-28T10:00:00Z`.",
           '10. Never merge a branch, into any branch.',
@@ -1199,9 +1229,16 @@ describe('mode: restart (T37)', () => {
     expect(text.indexOf('report-attempt-3.md')).toBeLessThan(
       text.indexOf('`PUT /api/v1/tasks/T13/documents/report.md`'),
     );
-    expect(text).toMatchInlineSnapshot(
-      `"First keep the report of the earlier attempt: if \`GET /api/v1/tasks/T13/documents/report.md\` answers with one, put the same content into \`PUT /api/v1/tasks/T13/documents/report-attempt-3.md\`. Then write what you did, what you checked and what is left into the document \`report.md\` of this task: \`PUT /api/v1/tasks/T13/documents/report.md\`. _(source: default; reportLanguage: default)_"`,
+    expect(text).toBe(
+      'First keep the report of the earlier attempt: if `GET /api/v1/tasks/T13/documents/report.md` answers with one, put the same content into `PUT /api/v1/tasks/T13/documents/report-attempt-3.md`. Then write what you did, what you checked and what is left into the document `report.md` of this task: `PUT /api/v1/tasks/T13/documents/report.md`. ' +
+        REPORT_SECTION +
+        ' _(source: default; reportLanguage: default)_',
     );
+  });
+
+  it('report on: the new report carries the section after the kept copy (T15)', () => {
+    const text = stepOf('report', {}, RESTART);
+    expect(text.indexOf('report-attempt-3.md')).toBeLessThan(text.indexOf(REPORT_SECTION));
   });
 
   it('report on: the language is still asked for', () => {
