@@ -9,7 +9,7 @@ import { expect, test, taskDetails } from './board';
  */
 const SESSION = 'a1b2c3d4-e5f6-4890-abcd-ef0123456789';
 
-test('check, decide, apply, save and restore, from the page', async ({ page, board }) => {
+test('check, decide, apply, save and restore, from the page', async ({ page, board }, testInfo) => {
   await board.api('/api/v1/tasks', {
     method: 'POST',
     body: {
@@ -129,7 +129,57 @@ test('check, decide, apply, save and restore, from the page', async ({ page, boa
   await new AxeBuilder({ page })
     .include('[role="dialog"]')
     .analyze()
-    .then((result) => expect(result.violations.map((violation) => violation.id)).toEqual([]));
+    .then(async (result) => {
+      // TEMPORARY (flaky color-contrast on macOS CI after T13): on a failure, record what axe
+      // saw and the state of the page, in the job log and in the HTML report. Remove once the
+      // cause is known. The check itself is unchanged.
+      if (result.violations.length > 0) {
+        const diagnostics = {
+          violations: result.violations.map((violation) => ({
+            id: violation.id,
+            impact: violation.impact,
+            nodes: violation.nodes.map((node) => ({
+              target: node.target,
+              html: node.html,
+              failureSummary: node.failureSummary,
+              data: [...node.any, ...node.all, ...node.none].map((check) => check.data),
+            })),
+          })),
+          page: await page.evaluate(`(() => {
+            const describe = (el) => el && el.tagName + (el.className ? '.' + String(el.className).trim().split(/\\s+/).join('.') : '') + (el.textContent ? ' "' + el.textContent.trim().slice(0, 40) + '"' : '');
+            const root = getComputedStyle(document.documentElement);
+            return {
+              dialogs: [...document.querySelectorAll('[role="dialog"]')].map((d) => ({
+                name: d.getAttribute('aria-label') || document.getElementById(d.getAttribute('aria-labelledby') || '')?.textContent,
+                className: d.className,
+                rect: d.getBoundingClientRect().toJSON(),
+              })),
+              dark: matchMedia('(prefers-color-scheme: dark)').matches,
+              reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+              tokens: Object.fromEntries(['--ink', '--ink-muted', '--surface', '--surface-2', '--accent', '--accent-ink', '--danger', '--warning-bg', '--font'].map((t) => [t, root.getPropertyValue(t).trim()])),
+              hover: [...document.querySelectorAll(':hover')].map(describe),
+              focus: describe(document.activeElement),
+              focusVisible: document.activeElement?.matches(':focus-visible') ?? false,
+              disabled: [...document.querySelectorAll('[role="dialog"] :disabled')].map(describe),
+              running: document.getAnimations().map((a) => ({ name: a.animationName ?? a.transitionProperty ?? '', target: describe(a.effect?.target) })),
+              viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+              userAgent: navigator.userAgent,
+            };
+          })()`),
+        };
+        const text = JSON.stringify(diagnostics, null, 2);
+        console.log(`axe violations at "Restore v1?":\n${text}`);
+        await testInfo.attach('axe-restore-v1.json', {
+          body: text,
+          contentType: 'application/json',
+        });
+        await testInfo.attach('restore-v1.png', {
+          body: await page.screenshot(),
+          contentType: 'image/png',
+        });
+      }
+      expect(result.violations.map((violation) => violation.id)).toEqual([]);
+    });
   await confirm.getByRole('button', { name: 'Restore' }).click();
   await expect(details.getByText('Restored v1 as a new version.')).toBeVisible();
 
