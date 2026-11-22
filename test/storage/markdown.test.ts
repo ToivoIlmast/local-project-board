@@ -430,6 +430,7 @@ describe('markdown storage on disk', () => {
     expect(isRuntimeFile('runtime.json')).toBe(true);
     expect(isRuntimeFile('.0123456789ab.tmp')).toBe(true);
     expect(isRuntimeFile('runner/T1.json')).toBe(true);
+    expect(isRuntimeFile('console/T1-1.ndjson')).toBe(true);
     expect(isRuntimeFile('tasks/T1/task.md')).toBe(false);
     expect(isRuntimeFile('tasks/T1/runtime.json')).toBe(false);
     expect(isRuntimeFile('workflow.yaml')).toBe(false);

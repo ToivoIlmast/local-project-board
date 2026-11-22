@@ -113,6 +113,9 @@ const calls: Record<RouteId, Call | NotCalled> = {
   // Runner lifecycle routes (T31/T32); begin needs a real task to set up state.
   'ai-run.begin': 'needs a runner',
   'ai-run.end': 'needs a runner',
+  // Console mode (plan C7); test/api/console.test.ts sets up the console run they need.
+  'ai-run.console.events': 'needs a runner',
+  'ai-run.console.read': 'needs a runner',
   // Recovery of a lost run (T45); test/api/aiRunRecovery.test.ts sets up the run it needs.
   'ai-run.abandon': 'needs a runner',
   'ai-run.report': 'needs a runner',
@@ -185,6 +188,8 @@ describe('every route in the contract', () => {
       'tasks.runFailure',
       'ai-run.begin',
       'ai-run.end',
+      'ai-run.console.events',
+      'ai-run.console.read',
       'ai-run.abandon',
       'ai-run.report',
     ]);

@@ -511,6 +511,8 @@ export const aiRunBeginRequestSchema = z.strictObject({
   model: z.string().min(1).max(200).optional(),
   /** The comment of the request of this run, as received: same rule as a research focus. */
   comment: researchCommentSchema.optional(),
+  /** The run is a Console mode run, with a journal of the console (plan C7); only `true`. */
+  console: z.literal(true).optional(),
 });
 
 /** Runner → end: what the process did (T31). */

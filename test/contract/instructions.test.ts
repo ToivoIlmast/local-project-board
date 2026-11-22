@@ -58,6 +58,8 @@ describe('generated AI instructions', () => {
       // Runner lifecycle routes: not for agents, only for the runner process (T31).
       'ai-run.abandon',
       'ai-run.begin',
+      'ai-run.console.events',
+      'ai-run.console.read',
       'ai-run.end',
       'ai-run.report',
       'checks.begin',

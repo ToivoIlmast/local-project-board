@@ -36,6 +36,7 @@ import {
 } from '../../../core/rules/placement.js';
 import { findWorkflowIssues } from '../../../core/rules/workflow.js';
 import { writeFileAtomic } from './atomic.js';
+import { consoleFiles } from './consoleLog.js';
 import { historyFiles } from './history.js';
 import { parseTask, serializeTask } from './taskFile.js';
 import { parseTopic, serializeTopic } from './topicFile.js';
@@ -114,6 +115,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
   let watcher: AbortController | undefined;
 
   const history = historyFiles({ taskDir: (id) => join(tasksDir, id), now });
+  const consoleLog = consoleFiles({ dir: join(boardDir, 'console') });
 
   const taskDir = (id: string): string => join(tasksDir, requireTaskId(id));
 
@@ -519,6 +521,7 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
       return exclusive(async () => {
         await requireTask(id);
         await rm(taskDir(id), { recursive: true, force: true });
+        await consoleLog.removeTask(id);
       });
     },
 
@@ -564,6 +567,20 @@ export function markdownStorage(options: MarkdownStorageOptions): Storage {
           });
         }
       });
+    },
+
+    // The console journal of a run: append and read (plan C7). A write waits for the queue of the
+    // storage like every write, and needs the task to exist.
+    appendConsole(run, entries) {
+      return exclusive(async () => {
+        await requireTask(run.taskId);
+        await consoleLog.append(run, entries);
+      });
+    },
+
+    async readConsole(taskId, runId) {
+      await requireTask(taskId);
+      return consoleLog.read(taskId, runId);
     },
 
     // The history of a task: add and read, nothing else (ADR-0030). A write waits for the queue

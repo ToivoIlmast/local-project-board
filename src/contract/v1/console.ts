@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COMMENT_MAX_LENGTH } from '../../core/model/aiRun.js';
+import { CONSOLE_PHASES } from '../../core/rules/console.js';
 
 /**
  * The contract of Console mode (plan C3, §3.3, §3.4, §4.2, §9.3): the events Board writes to the
@@ -210,6 +211,102 @@ export const consoleEventsResponse = z.strictObject({
   awaitingDelivery: count,
 });
 export type ConsoleEventsResponse = z.infer<typeof consoleEventsResponse>;
+
+/** The session the batch is for; the runner sends it with every batch (plan C7, CAS). */
+export const consoleEventsQuery = z.strictObject({ sessionId: z.uuid() });
+
+/** How many entries one read answers, by default and at most. */
+export const CONSOLE_READ_DEFAULT_LIMIT = 200;
+export const CONSOLE_READ_MAX_LIMIT = 1000;
+
+/**
+ * `after`: the entries with a greater `seq`, the first `limit` of them. `before` alone: the last
+ * `limit` entries with a smaller `seq`, the way back through a long journal. Both: between.
+ */
+export const consoleReadQuery = z.strictObject({
+  after: z.coerce.number().int().min(0).optional(),
+  before: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(CONSOLE_READ_MAX_LIMIT)
+    .default(CONSOLE_READ_DEFAULT_LIMIT),
+});
+export type ConsoleReadQuery = z.infer<typeof consoleReadQuery>;
+
+const messageStatus = z.enum([
+  'accepted',
+  'queued',
+  'started',
+  'completed',
+  'cancelled',
+  'undelivered',
+  'interrupted',
+]);
+
+/** The state `foldConsole` computes (C5), as the read route sends it (plan §5). */
+export const consoleStateSchema = z.strictObject({
+  process: z.strictObject({
+    status: z.enum(['starting', 'running', 'closing', 'exited', 'lost']),
+    exitCode: z.number().int().nullable().optional(),
+    signal: z.string().nullable().optional(),
+    killRequested: z.boolean(),
+  }),
+  compat: z.strictObject({
+    status: z.enum(['probing', 'compatible', 'incompatible', 'unknown']),
+    reason: z.string().optional(),
+  }),
+  turn: z.discriminatedUnion('status', [
+    z.strictObject({
+      status: z.literal('none'),
+      lastTurn: z
+        .strictObject({
+          turn: z.number().int(),
+          isError: z.boolean(),
+          terminalReason: z.string().optional(),
+        })
+        .optional(),
+    }),
+    z.strictObject({
+      status: z.literal('active'),
+      turn: z.number().int(),
+      origin: z.enum(['user', 'internal']),
+    }),
+    z.strictObject({ status: z.literal('interrupted'), turn: z.number().int() }),
+  ]),
+  jobs: z.array(z.string()),
+  messages: z.array(
+    z.strictObject({
+      messageId: z.string(),
+      origin: z.enum(['board', 'prompt']),
+      text: z.string(),
+      acceptedSeq: z.number().int(),
+      status: messageStatus,
+      join: z
+        .strictObject({
+          how: z.enum(['new-turn', 'joined-turn']),
+          turn: z.number().int(),
+          together: z.array(z.string()),
+        })
+        .optional(),
+      replayed: z.boolean(),
+    }),
+  ),
+  counters: z.strictObject({
+    awaitingDelivery: count,
+    pendingProcessing: count,
+    inProgress: count,
+  }),
+  phase: z.enum(CONSOLE_PHASES),
+});
+
+/** The answer of the read: a page of the journal, and the state of the whole of it. */
+export const consoleReadResponse = z.strictObject({
+  entries: z.array(consoleEntrySchema),
+  state: consoleStateSchema,
+});
+export type ConsoleReadResponse = z.infer<typeof consoleReadResponse>;
 
 export const consoleMessageBody = z.strictObject({
   sessionId: z.uuid(),
