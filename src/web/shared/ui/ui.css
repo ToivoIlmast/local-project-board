@@ -85,6 +85,8 @@ body {
 }
 
 .button--primary:hover:not(:disabled) {
+  /* Same specificity as `.button:hover`, later: keep the accent, or the ink is white on grey. */
+  background: var(--accent);
   filter: brightness(1.08);
 }
 
