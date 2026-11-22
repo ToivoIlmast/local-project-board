@@ -55,8 +55,11 @@ describe('the event stream serializer', () => {
     const { request, response, written } = exchange();
     createEventStreamHandler(bus, { heartbeatMs: 10 })(request, response, () => undefined);
 
-    await tick(60);
-    expect(written.filter((chunk) => chunk.startsWith(':')).length).toBeGreaterThan(1);
+    // Wait for the beats rather than a fixed time: a loaded machine delays timers.
+    const beats = (): number => written.filter((chunk) => chunk.startsWith(':')).length;
+    const deadline = Date.now() + 5_000;
+    while (beats() < 2 && Date.now() < deadline) await tick(10);
+    expect(beats()).toBeGreaterThan(1);
 
     request.emit('close');
     const after = written.length;
