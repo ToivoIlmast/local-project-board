@@ -477,3 +477,275 @@ describe('sanitizeStderr', () => {
     expect(sanitizeStderr('x'.repeat(10_000)).length).toBe(4096);
   });
 });
+
+describe('sanitizeStderr: unfinished and unusual control strings (D1)', () => {
+  const ESC = '\u001b';
+
+  it('an unfinished OSC ends at the line break; the next lines stay', () => {
+    expect(sanitizeStderr(`${ESC}]0;title\nnext line\nthird`)).toBe('\nnext line\nthird');
+  });
+
+  it('APC, DCS, PM and SOS ended by BEL do not swallow the text after them', () => {
+    expect(sanitizeStderr(`a${ESC}_payload\u0007b`)).toBe('ab');
+    expect(sanitizeStderr(`a${ESC}Pq data\u0007b`)).toBe('ab');
+    expect(sanitizeStderr(`a${ESC}^pm\u0007b${ESC}Xsos\u0007c`)).toBe('abc');
+  });
+
+  it('an unfinished APC or DCS ends at the line break', () => {
+    expect(sanitizeStderr(`${ESC}_open\nkept`)).toBe('\nkept');
+    expect(sanitizeStderr(`${ESC}Pq open\nkept`)).toBe('\nkept');
+  });
+
+  it.each([
+    ['DCS', '\u0090'],
+    ['SOS', '\u0098'],
+    ['PM', '\u009e'],
+    ['APC', '\u009f'],
+  ])('8-bit %s ended by ST, by BEL or by a line break', (_name, intro) => {
+    expect(sanitizeStderr(`a${intro}payload\u009cb`)).toBe('ab');
+    expect(sanitizeStderr(`a${intro}payload\u0007b`)).toBe('ab');
+    expect(sanitizeStderr(`a${intro}payload\nb`)).toBe('a\nb');
+  });
+
+  it('an unfinished 8-bit OSC ends at the line break', () => {
+    expect(sanitizeStderr('a\u009d0;title\nb')).toBe('a\nb');
+  });
+
+  it('plain text after a damaged sequence is kept', () => {
+    expect(sanitizeStderr(`${ESC}]8;;http://x${ESC}[31mred`)).toBe('red');
+    expect(sanitizeStderr(`error: ${ESC}[`)).toBe('error: ');
+  });
+});
+
+describe('jobs.background with malformed entries (D2)', () => {
+  const bg = (tasks: unknown) => ({ type: 'system', subtype: 'background_tasks_changed', tasks });
+
+  it.each([
+    ['an empty task_id', [{ task_id: 'a' }, { task_id: '' }]],
+    ['a missing task_id', [{ task_id: 'a' }, {}]],
+    ['a non-object entry', [{ task_id: 'a' }, 'b', null, 5]],
+    ['a non-string task_id', [{ task_id: 'a' }, { task_id: 7 }]],
+    ['only bad entries', [{}]],
+  ])('%s: no jobs.background (no false idle), one protocol_malformed', (_name, tasks) => {
+    const out = normalize(initialNormalizerState(), bg(tasks));
+    expect(out.events).toEqual([
+      {
+        kind: 'notice',
+        level: 'warning',
+        code: 'protocol_malformed',
+        type: 'system/background_tasks_changed',
+        field: 'task_id',
+      },
+    ]);
+    expect(consoleEventSchema.safeParse(out.events[0]).success).toBe(true);
+  });
+
+  it('a repeated malformed entry is reported once, and still gives no jobs.background', () => {
+    const first = normalize(initialNormalizerState(), bg([{}]));
+    const second = normalize(first.state, bg([{ task_id: '' }]));
+    expect(second.events).toEqual([]);
+    expect(second.dropped).toEqual(expect.any(String));
+  });
+
+  it('valid entries still give jobs.background, an empty list is idle', () => {
+    const state = initialNormalizerState();
+    expect(normalize(state, bg([{ task_id: 'a' }, { task_id: 'b' }])).events).toEqual([
+      { kind: 'jobs.background', jobIds: ['a', 'b'] },
+    ]);
+    expect(normalize(state, bg([])).events).toEqual([{ kind: 'jobs.background', jobIds: [] }]);
+  });
+});
+
+describe('summary and preview hygiene (D3)', () => {
+  const ESC = '\u001b';
+
+  it('summary is one line: line breaks, tabs and controls become single spaces', () => {
+    expect(summarizeToolInput('Bash', { command: 'echo a\n\nb\r\nc\td' })).toBe('echo a b c d');
+    expect(summarizeToolInput('Bash', { command: `ls${ESC}[31m -la\u0007\u0000` })).toBe('ls -la');
+    expect(summarizeToolInput('Bash', { command: 'a\u0085b c' })).toBe('a b c');
+  });
+
+  it('summary is trimmed and capped at 300 after cleaning', () => {
+    const out = summarizeToolInput('Bash', { command: `\n  ${'x'.repeat(400)}\n` });
+    expect(out).toBe('x'.repeat(300));
+  });
+
+  it('summary keeps its cap without splitting a surrogate pair', () => {
+    const out = summarizeToolInput('Bash', { command: `${'x'.repeat(299)}😀` });
+    expect(out.length).toBe(299);
+  });
+
+  const result = (content: unknown) => ({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', tool_use_id: 't1', content }] },
+  });
+  const previewOf = (content: unknown) => {
+    const e = normalize(initialNormalizerState(), result(content)).events[0];
+    return e?.kind === 'tool.result' ? e.preview : undefined;
+  };
+
+  it('preview drops ANSI and control characters, and keeps line breaks and tabs', () => {
+    expect(previewOf(`${ESC}[31mred${ESC}[0m\u0007\u0000 ok\nnext\tcol`)).toBe('red ok\nnext\tcol');
+  });
+
+  it('preview turns CRLF and lone CR into LF and caps runs of empty lines', () => {
+    expect(previewOf('a\r\nb\rc\n\n\n\n\nd')).toBe('a\nb\nc\n\nd');
+  });
+
+  it('preview of text parts is cleaned the same way', () => {
+    expect(
+      previewOf([
+        { type: 'text', text: `a${ESC}[1mb` },
+        { type: 'text', text: 'c\u0007' },
+      ]),
+    ).toBe('ab\nc');
+  });
+
+  it('preview keeps the 2 KB cap', () => {
+    expect(previewOf('y'.repeat(5000))?.length).toBe(2048);
+  });
+
+  it('tool.call from an assistant message has a one-line summary', () => {
+    const out = normalize(initialNormalizerState(), {
+      type: 'assistant',
+      message: {
+        id: 'm1',
+        content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'a\nb' } }],
+      },
+    });
+    expect(out.events).toMatchObject([{ kind: 'tool.call', summary: 'a b' }]);
+    expect(consoleEventSchema.safeParse(out.events[0]).success).toBe(true);
+  });
+});
+
+describe('fixtures: texts, jobs and turn ends', () => {
+  type Block = { type: string; text?: string };
+  const textBlocks = (name: string) =>
+    readMessages(name).flatMap((m) => {
+      if (m.type !== 'assistant') return [];
+      const inner = m.message as { id?: string; content?: Block[] };
+      return (inner.content ?? []).flatMap((b) =>
+        b.type === 'text' && typeof b.text === 'string' && b.text !== ''
+          ? [{ apiMessageId: inner.id, text: b.text }]
+          : [],
+      );
+    });
+
+  it.each(FIXTURES)('%s: every non-empty assistant text block becomes assistant.text', (name) => {
+    const expected = textBlocks(name);
+    const actual = ofKind(fixture(name).events, 'assistant.text');
+    expect(actual.map((a) => a.apiMessageId)).toEqual(expected.map((a) => a.apiMessageId));
+    expect(actual.map((a) => a.text)).toEqual(expected.map((a) => a.text.slice(0, 32 * 1024)));
+  });
+
+  it('multi-message: assistant.text events carry the ids of their API messages', () => {
+    const expected = textBlocks('multi-message');
+    expect(new Set(expected.map((e) => e.apiMessageId)).size).toBeGreaterThanOrEqual(2);
+    const texts = ofKind(fixture('multi-message').events, 'assistant.text');
+    expect(texts).toHaveLength(expected.length);
+    expect(texts.map((t) => t.apiMessageId)).toEqual(expected.map((e) => e.apiMessageId));
+  });
+
+  it.each(['subagent', 'mid-turn-message'])(
+    '%s: every job.started with a toolUseId follows the tool.call that spawned it',
+    (name) => {
+      const { events } = fixture(name);
+      const started = ofKind(events, 'job.started');
+      expect(started.length).toBeGreaterThan(0);
+      for (const job of started) {
+        expect(job.toolUseId).toEqual(expect.any(String));
+        const call = events.findIndex(
+          (e) => e.kind === 'tool.call' && e.toolUseId === job.toolUseId,
+        );
+        expect(call).toBeGreaterThanOrEqual(0);
+        expect(call).toBeLessThan(events.indexOf(job));
+      }
+    },
+  );
+
+  const resultMsg = (extra: Record<string, unknown>) => ({
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    terminal_reason: 'completed',
+    ...extra,
+  });
+  const ended = (extra: Record<string, unknown>) =>
+    normalize(initialNormalizerState(), resultMsg(extra)).events[0];
+
+  it('turn.ended carries denials, stopReason, durationMs and costUsd', () => {
+    expect(
+      ended({
+        permission_denials: [{}, {}],
+        stop_reason: 'end_turn',
+        duration_ms: 1234,
+        total_cost_usd: 0.05,
+      }),
+    ).toEqual({
+      kind: 'turn.ended',
+      turn: 1,
+      isError: false,
+      terminalReason: 'completed',
+      stopReason: 'end_turn',
+      subtype: 'success',
+      durationMs: 1234,
+      costUsd: 0.05,
+      denials: 2,
+    });
+  });
+
+  it('turn.ended: null stop_reason is kept as null, bad values are left out', () => {
+    expect(ended({ stop_reason: null })).toMatchObject({ stopReason: null });
+    const bad = ended({
+      stop_reason: 5,
+      duration_ms: -1,
+      total_cost_usd: 'x',
+      permission_denials: 'no',
+    });
+    expect(bad).not.toHaveProperty('stopReason');
+    expect(bad).not.toHaveProperty('durationMs');
+    expect(bad).not.toHaveProperty('costUsd');
+    expect(bad).toMatchObject({ denials: 0 });
+    expect(consoleEventSchema.safeParse(bad).success).toBe(true);
+  });
+});
+
+describe('normalize does not mutate the state it was given', () => {
+  const snapshot = (s: NormalizerState) => ({
+    turn: s.turn,
+    turnOpen: s.turnOpen,
+    model: s.model,
+    unknownSeen: [...s.unknownSeen],
+    malformedSeen: [...s.malformedSeen],
+    endedJobs: [...s.endedJobs],
+    lastProgress: [...s.lastProgress],
+  });
+
+  it.each([
+    ['unknown type', { type: 'mystery' }],
+    ['unknown system subtype', { type: 'system', subtype: 'mystery' }],
+    ['malformed field', { type: 'system', subtype: 'task_started' }],
+    [
+      'job end',
+      { type: 'system', subtype: 'task_updated', task_id: 'j', patch: { status: 'completed' } },
+    ],
+    ['job progress', { type: 'system', subtype: 'task_progress', task_id: 'j', description: 'd' }],
+    ['init', { type: 'system', subtype: 'init', model: 'm' }],
+  ])('%s', (_name, message) => {
+    const before = initialNormalizerState();
+    const frozen = snapshot(before);
+    const out = normalize(before, message);
+    expect(snapshot(before)).toEqual(frozen);
+    expect(out.state).not.toBe(before);
+  });
+
+  it('a whole fixture leaves every earlier state as it was', () => {
+    let state = initialNormalizerState();
+    for (const message of readMessages('subagent')) {
+      const frozen = snapshot(state);
+      const next = normalize(state, message).state;
+      expect(snapshot(state)).toEqual(frozen);
+      state = next;
+    }
+  });
+});

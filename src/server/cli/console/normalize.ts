@@ -1,6 +1,6 @@
 import type { ConsoleEvent } from '../../../contract/v1/console.js';
 import { parseLine } from './streamJson.js';
-import { summarizeToolInput, truncateText } from './sanitize.js';
+import { sanitizePreview, summarizeToolInput, truncateText } from './sanitize.js';
 
 /**
  * Normalizer of Claude Code's stream-json output into Board's console events (plan C4, §4).
@@ -214,12 +214,12 @@ function assistant(run: Run, message: Json): void {
 }
 
 function toolResultPreview(content: unknown): string {
-  if (typeof content === 'string') return limited(content, 2 * KB);
+  if (typeof content === 'string') return truncateText(sanitizePreview(content), 2 * KB);
   if (!Array.isArray(content)) return '';
   const parts = content.flatMap((part) =>
     isObject(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [],
   );
-  return limited(parts.join('\n'), 2 * KB);
+  return truncateText(sanitizePreview(parts.join('\n')), 2 * KB);
 }
 
 function user(run: Run, message: Json): void {
@@ -321,6 +321,11 @@ function backgroundTasks(run: Run, message: Json): void {
   const jobIds = message.tasks.flatMap((task) =>
     isObject(task) ? (idOf(task.task_id) ?? []) : [],
   );
+  // A list with a bad entry is not trusted: a shorter list would read as fewer (or no) active
+  // jobs, a false idle. The last good list stays; the notice says what was wrong.
+  if (jobIds.length !== message.tasks.length) {
+    return run.malformed('system/background_tasks_changed', 'task_id');
+  }
   run.emit({ kind: 'jobs.background', jobIds });
 }
 

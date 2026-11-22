@@ -23,30 +23,34 @@ function fixSurrogates(text: string): string {
   );
 }
 
-// Strings (OSC, DCS, APC, PM, SOS) end with BEL or ST; an unfinished one ends at the next ESC.
-const OSC = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g;
-const OSC_C1 = /\u009d[^\u0007\u009c]*(?:\u0007|\u009c)?/g;
-const STRINGS = /\u001b[P_^X][^\u001b]*(?:\u001b\\)?/g;
+// Control strings: OSC (`ESC ]`, 0x9d), DCS (`ESC P`, 0x90), SOS (`ESC X`, 0x98), PM (`ESC ^`,
+// 0x9e), APC (`ESC _`, 0x9f). A string ends with BEL or ST (`ESC \` or 0x9c). An unfinished one
+// ends at the next ESC or at the line break, so the text after it is not lost.
+const STRING_BODY = '[^\\u0007\\u001b\\u009c\\n]*';
+const STRING_END = '(?:\\u0007|\\u009c|\\u001b\\\\)?';
+const STRINGS = new RegExp(
+  `(?:\\u001b[\\]P_^X]|[\\u009d\\u0090\\u0098\\u009e\\u009f])${STRING_BODY}${STRING_END}`,
+  'g',
+);
 const CSI = /(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]/g;
 const ESC_OTHER = /\u001b[ -/]*[0-~]/g;
 // C0 except \n and \t, DEL, C1.
 const CONTROLS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
 
+const stripEscapes = (input: string) =>
+  input.replace(STRINGS, '').replace(CSI, '').replace(ESC_OTHER, '');
+
 /** Default limit of one `runner.stderr` event (contract: 4 KB). */
 export const STDERR_MAX = 4096;
 
 /**
- * Makes a piece of stderr safe to store and to show: removes ANSI CSI and OSC (hyperlinks keep
- * their text, window titles go), BEL, C0 except `\n` and `\t`, and C1; keeps the last state of a
- * `\r` redraw of each line; replaces lone surrogates; truncates at a character boundary.
+ * Makes a piece of stderr safe to store and to show: removes ANSI CSI and control strings (OSC,
+ * DCS, APC, PM, SOS, in 7-bit and 8-bit forms; hyperlinks keep their text, window titles go), BEL,
+ * C0 except `\n` and `\t`, and C1; keeps the last state of a `\r` redraw of each line; replaces
+ * lone surrogates; truncates at a character boundary.
  */
 export function sanitizeStderr(input: string, max: number = STDERR_MAX): string {
-  const stripped = input
-    .replace(OSC, '')
-    .replace(OSC_C1, '')
-    .replace(STRINGS, '')
-    .replace(CSI, '')
-    .replace(ESC_OTHER, '');
+  const stripped = stripEscapes(input);
   const lines = stripped.replace(/\r\n/g, '\n').split('\n');
   const redrawn = lines.map((line) => {
     if (!line.includes('\r')) return line;
@@ -81,8 +85,32 @@ export function summarizeToolInput(_tool: string, input: unknown): string {
   for (const key of SUMMARY_KEYS) {
     const value = record[key];
     if (typeof value === 'string' && value.trim() !== '') {
-      return truncateText(fixSurrogates(value.replace(/\0/g, '')), SUMMARY_MAX);
+      return truncateText(oneLine(value), SUMMARY_MAX);
     }
   }
   return '';
+}
+
+/** Escapes removed, every control, line break and run of spaces is one space, trimmed. */
+function oneLine(text: string): string {
+  return fixSurrogates(
+    stripEscapes(text)
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+}
+
+/**
+ * Text of a tool result for display: escapes and controls removed (`\n` and `\t` stay), `\r\n`
+ * and `\r` are `\n`, runs of empty lines shrink to one, lone surrogates are replaced. Not cut:
+ * the caller applies its limit.
+ */
+export function sanitizePreview(text: string): string {
+  return fixSurrogates(
+    stripEscapes(text)
+      .replace(/\r\n?/g, '\n')
+      .replace(CONTROLS, '')
+      .replace(/\n{3,}/g, '\n\n'),
+  );
 }
