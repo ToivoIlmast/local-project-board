@@ -295,11 +295,13 @@ describe('foldConsole', () => {
       const base = [...BOOT, jobStarted('j1'), jobStarted('j2')];
       expect(fold(...base, { kind: 'jobs.background', jobIds: ['j3'] }).jobs).toEqual(['j3']);
       expect(
-        fold(
-          ...base,
-          { kind: 'job.ended', jobId: 'j1', status: 'completed' },
-          { kind: 'jobs.background', jobIds: ['j1', 'j2'] },
-        ).jobs.sort(),
+        [
+          ...fold(
+            ...base,
+            { kind: 'job.ended', jobId: 'j1', status: 'completed' },
+            { kind: 'jobs.background', jobIds: ['j1', 'j2'] },
+          ).jobs,
+        ].sort(),
       ).toEqual(['j1', 'j2']);
       expect(fold(...base, { kind: 'jobs.background', jobIds: [] }).jobs).toEqual([]);
     });
