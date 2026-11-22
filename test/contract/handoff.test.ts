@@ -1257,3 +1257,84 @@ describe('mode: restart (T37)', () => {
     }
   });
 });
+
+describe('generateHandoff: Related tasks (T14)', () => {
+  const INSTRUCTIONS = generateInstructions({
+    baseUrl: 'http://127.0.0.1:7432',
+    board: { name: 'demo', statuses: STATUSES, idPrefix: 'T' },
+  });
+  const task: Task = {
+    id: 'T14',
+    title: 'Related',
+    status: 'todo',
+    rank: 'a0',
+    body: 'Body\n',
+    labels: [],
+    createdAt: '2026-09-25T06:35:49.365Z',
+    updatedAt: '2026-09-26T12:17:45.921Z',
+  };
+  const related = [
+    {
+      id: 'T12',
+      title: 'History',
+      status: 'done',
+      archived: true,
+      reason: 'dependency' as const,
+      hasReport: true,
+      commits: ['abc1234', 'def5678'],
+    },
+    {
+      id: 'T20',
+      title: 'Same block',
+      status: 'todo',
+      archived: false,
+      reason: 'block' as const,
+      hasReport: false,
+      commits: [],
+    },
+  ];
+  const make = (extra: Partial<Parameters<typeof generateHandoff>[0]> = {}): string =>
+    generateHandoff({
+      task,
+      documents: [],
+      effective: resolveWorkflow(defaultWorkflow(STATUSES), {}, undefined, undefined),
+      instructions: INSTRUCTIONS,
+      ...extra,
+    });
+
+  it('is byte-identical to the text without the field when there are no related tasks', () => {
+    expect(make({ related: [] })).toBe(make());
+    expect(make({ related: [] })).not.toContain('Related tasks');
+  });
+
+  it('lists each task with status, archived mark, reason, report link and commits', () => {
+    const text = make({ related });
+    expect(text).toContain('## Related tasks');
+    expect(text).toContain('`T12`');
+    expect(text).toContain('History');
+    expect(text).toContain('archived');
+    expect(text).toContain('`dependsOn`');
+    expect(text).toContain('GET /api/v1/tasks/T12/documents/report.md');
+    expect(text).toContain('`abc1234`');
+    expect(text).toContain('`def5678`');
+    const t20 = text.split('\n').find((line) => line.includes('`T20`')) ?? '';
+    expect(t20).not.toContain('report.md');
+    expect(t20).not.toContain('archived');
+    expect(t20).toContain('block');
+  });
+
+  it('sits after Description and before Documents', () => {
+    const text = make({ related });
+    const at = (heading: string): number => text.indexOf(heading);
+    expect(at('## Description')).toBeLessThan(at('## Related tasks'));
+    expect(at('## Related tasks')).toBeLessThan(at('## Documents'));
+  });
+
+  it('says how many more tasks there are', () => {
+    expect(make({ related, relatedOmitted: 4 })).toContain('and 4 more');
+  });
+
+  it('is deterministic', () => {
+    expect(make({ related })).toBe(make({ related }));
+  });
+});
