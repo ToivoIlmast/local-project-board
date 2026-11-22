@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Run exactly this bash command: `sleep 8 && echo SLEPT`. After it finishes reply with exactly DONE1."},"uuid":"902cc4c5-7807-42fa-94b3-0319fc61f1fd"}
+{"type":"user","message":{"role":"user","content":"Reply with exactly the word MIDWAY."},"uuid":"e7d134f5-211e-4711-80e8-6fc2db86404a"}

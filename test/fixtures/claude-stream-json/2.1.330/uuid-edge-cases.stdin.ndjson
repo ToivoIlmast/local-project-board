@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Reply with exactly ONE."},"uuid":"582f1010-5785-4d21-82ee-8de0412b6992"}
+{"type":"user","message":{"role":"user","content":"Reply with exactly TWO."},"uuid":"582f1010-5785-4d21-82ee-8de0412b6992"}
+{"type":"user","message":{"role":"user","content":"Reply with exactly THREE."}}
+{"type":"user","message":{"role":"user","content":"Reply with exactly FOUR."},"uuid":"not-a-uuid"}

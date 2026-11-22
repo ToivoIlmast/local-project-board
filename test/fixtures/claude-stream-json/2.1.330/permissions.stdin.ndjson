@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Run these two bash commands as two separate tool calls, one after the other: `echo allowed-ok` and then `mkdir denied-dir`. Do not retry anything. Then reply with exactly DONE."},"uuid":"13391608-8b90-4ffa-976d-f891c0881f26"}
+{"type":"user","message":{"role":"user","content":"Reply with exactly the word CONTINUED."},"uuid":"ebdc48a8-ab78-4394-b21a-74609d599971"}
