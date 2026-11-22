@@ -45,6 +45,15 @@ function exp(name: string): Experiment {
   if (!e) throw new Error(`experiment ${name} was not recorded`);
   return e;
 }
+function nth<T>(arr: readonly T[], i: number): T {
+  const v = arr.at(i);
+  if (v === undefined) throw new Error(`no element at index ${i}`);
+  return v;
+}
+function uuidOf(s: { uuid?: string }): string {
+  if (s.uuid === undefined) throw new Error('message was sent without a uuid');
+  return s.uuid;
+}
 const ofType = (out: Msg[], type: string, subtype?: string) =>
   out.filter((m) => m.type === type && (subtype === undefined || m.subtype === subtype));
 const stdoutFixtures = readdirSync(fixtures)
@@ -114,7 +123,7 @@ describe('stdin protocol: several messages, one session, uuid replay', () => {
     const sent = sentOf(name);
     const report = checkCompatibility(stdout(name), {
       sessionId: exp(name).sessionId,
-      sentUuids: sent.map((s) => s.uuid),
+      sentUuids: sent.map(uuidOf),
     });
     expect(report).toEqual({ ok: true, problems: [], unknownTypes: [] });
   });
@@ -130,8 +139,8 @@ describe('stdin protocol: several messages, one session, uuid replay', () => {
 
   it('acknowledges receipt at once with command_lifecycle queued, keyed by the input uuid', () => {
     const states = lifecycle(stdout(name));
-    for (const { uuid } of sentOf(name)) {
-      expect(states.get(uuid)).toEqual(['queued', 'started', 'completed']);
+    for (const s of sentOf(name)) {
+      expect(states.get(uuidOf(s))).toEqual(['queued', 'started', 'completed']);
     }
     // queued arrives before the first system/init: receipt, not consumption.
     const out = stdout(name);
@@ -156,14 +165,13 @@ describe('stdin protocol: several messages, one session, uuid replay', () => {
     const out = stdout(name);
     expect(ofType(out, 'result')).toHaveLength(2); // 3 messages, 2 turns
     const merged = replayedUserMessages(out).at(-1);
-    expect(contentText(merged.message.content)).toBe(
-      `${sentOf(name)[1].text}\n${sentOf(name)[2].text}`,
-    );
-    expect(merged.uuid).toBe(sentOf(name)[2].uuid); // the merged replay carries the LAST uuid
+    const sent = sentOf(name);
+    expect(contentText(merged.message.content)).toBe(`${nth(sent, 1).text}\n${nth(sent, 2).text}`);
+    expect(merged.uuid).toBe(nth(sent, 2).uuid); // the merged replay carries the LAST uuid
     // init of the merged turn lists every uuid it consumed
     expect(out.filter(isInit).map((m) => m.user_message_uuids)).toEqual([
-      [sentOf(name)[0].uuid],
-      [sentOf(name)[1].uuid, sentOf(name)[2].uuid],
+      [nth(sent, 0).uuid],
+      [nth(sent, 1).uuid, nth(sent, 2).uuid],
     ]);
   });
 
@@ -181,7 +189,7 @@ describe('uuid edge cases', () => {
     const texts = ofType(out(), 'assistant').map((m) => contentText(m.message.content));
     expect(texts).toContain('ONE');
     expect(texts).not.toContain('TWO');
-    const dup = sentOf('uuid-edge-cases')[0].uuid;
+    const dup = uuidOf(nth(sentOf('uuid-edge-cases'), 0));
     expect(lifecycle(out()).get(dup)).toEqual(['queued', 'started', 'completed']);
   });
 
@@ -232,7 +240,7 @@ describe('stream-json content', () => {
     const pairs = toolPairs(stdout('tools'));
     expect(pairs.map((p: Msg) => p.name)).toEqual(['Bash', 'Write', 'Edit', 'Read', 'Read']);
     for (const p of pairs) expect(p.result).toBeDefined();
-    expect(pairs.at(-1).result.isError).toBe(true);
+    expect(nth(pairs, -1).result.isError).toBe(true);
   });
 
   it('splits one assistant message into one stdout line per content block, sharing message.id', () => {
@@ -251,7 +259,7 @@ describe('stream-json content', () => {
     expect(agentCalls).toHaveLength(1);
     const children = out.filter((m) => m.parent_tool_use_id != null);
     expect(children.length).toBeGreaterThanOrEqual(3);
-    for (const c of children) expect(c.parent_tool_use_id).toBe(agentCalls[0].id);
+    for (const c of children) expect(c.parent_tool_use_id).toBe(nth(agentCalls, 0).id);
   });
 
   it('a background subagent starts a new turn WITHOUT any user message', () => {
