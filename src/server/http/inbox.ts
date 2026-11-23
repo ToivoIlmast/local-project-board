@@ -1,5 +1,6 @@
 import type { RequestHandler, Response } from 'express';
 import { parseParams, parseQuery, routes, type InboxFrame } from '../../contract/v1/index.js';
+import type { BoardEvent } from '../../core/events.js';
 import { BoardError, type TaskService } from '../../core/index.js';
 import type { AiRunService } from '../../core/services/aiRunService.js';
 import { invalidRequest, HttpError } from './errors.js';
@@ -63,8 +64,7 @@ export function createInbox({ tasks, aiRun, events }: InboxDeps): Inbox {
     if (connection.closed) return;
     connection.closed = true;
     connection.stop();
-    const key = keyOf(connection.taskId, connection.runId);
-    if (connections.get(key) === connection) connections.delete(key);
+    forget(connection);
     connection.response.end();
   };
 
@@ -92,7 +92,26 @@ export function createInbox({ tasks, aiRun, events }: InboxDeps): Inbox {
       if (state.process.status === 'exited' || state.process.status === 'lost') close(connection);
     });
 
-  events.subscribe((event) => {
+  /**
+   * The inbox listens to the bus only while a runner is connected: the bus counts the clients of
+   * the stream, and a board with no runner must not hold a listener there.
+   */
+  let unsubscribe: (() => void) | undefined;
+
+  function forget(connection: Connection): void {
+    const key = keyOf(connection.taskId, connection.runId);
+    if (connections.get(key) === connection) connections.delete(key);
+    if (connections.size === 0 && unsubscribe !== undefined) {
+      unsubscribe();
+      unsubscribe = undefined;
+    }
+  }
+
+  const listen = (): void => {
+    unsubscribe ??= events.subscribe(onEvent);
+  };
+
+  function onEvent(event: BoardEvent): void {
     if (event.type === 'console.appended') {
       const connection = connections.get(keyOf(event.taskId, event.runId));
       if (connection !== undefined) flush(connection);
@@ -119,7 +138,7 @@ export function createInbox({ tasks, aiRun, events }: InboxDeps): Inbox {
           enqueue(connection, () => write(connection, { type: 'agent-final', state }));
       }
     }
-  });
+  }
 
   return {
     notify(taskId, runId) {
@@ -188,10 +207,11 @@ export function createInbox({ tasks, aiRun, events }: InboxDeps): Inbox {
         const old = connections.get(key);
         if (old !== undefined) close(old);
         connections.set(key, connection);
+        listen();
         const gone = (): void => {
           connection.closed = true;
           connection.stop();
-          if (connections.get(key) === connection) connections.delete(key);
+          forget(connection);
         };
         request.on('close', gone);
         response.on('close', gone);
