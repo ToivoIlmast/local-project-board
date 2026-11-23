@@ -40,6 +40,11 @@ export const runJournalSchema = z.strictObject({
   runner: processSchema,
   /** Set once `claude` was spawned; absent while it is being started. */
   child: processSchema.optional(),
+  /**
+   * Console mode (plan C8, §9.2): how far the board has confirmed the runner's console events,
+   * `lastRunnerSeq` of its last answer. The events after it are in the spool, on this disk.
+   */
+  console: z.strictObject({ ackedRunnerSeq: z.int().nonnegative() }).optional(),
   /** Set when `claude` ended, before the board is told. */
   outcome: z
     .strictObject({

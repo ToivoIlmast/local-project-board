@@ -13,6 +13,7 @@ import { deliverEnd, deliverPendingEnds } from './runEnd.js';
 import { NotBegun, notBegun } from './runFailure.js';
 import { boardMessage, findRunningBoard, get, post } from './running.js';
 import type { RuntimeState } from './runtime.js';
+import { consoleArgv, runConsoleSession } from './console/session.js';
 import { spawnSession } from './spawnSession.js';
 import { writeJournal, type RunJournal } from './runJournal.js';
 import { logRunner } from './runnerLog.js';
@@ -90,6 +91,9 @@ export async function launchClaude(
  * as two arguments, and recorded in `aiRun.model`; when not, neither happens and Claude Code
  * uses the user's own settings. It was checked against the closed form by the contract; the
  * CLI of `claude <ID>` has none.
+ *
+ * With `consoleMode` (plan C8, `claude --wait --console`) the run is begun as a console run and
+ * `claude -p` is started with pipes, not with the terminal: see `runConsoleSession`.
  */
 export async function startSession(
   program: string,
@@ -100,6 +104,7 @@ export async function startSession(
   model?: string,
   mode: 'new' | 'resume' | 'restart' = 'new',
   comment?: string,
+  consoleMode = false,
 ): Promise<number> {
   const boardUrl = board.url.replace(/\/+$/, '');
   // Resume continues the session the board recorded for the last run, never a new one (T36);
@@ -113,9 +118,19 @@ export async function startSession(
   let runId: number;
   try {
     sessionId = resuming ? await sessionToResume(board, id) : randomUUID();
-    runId = await beginRun(board, id, sessionId, model, mode, comment);
+    runId = await beginRun(board, id, sessionId, model, mode, comment, consoleMode);
   } catch (error) {
     throw notBegun(error);
+  }
+
+  if (consoleMode) {
+    const consoleArgs = consoleArgv(sessionId, {
+      resume: resuming,
+      ...(model === undefined ? {} : { model }),
+    });
+    const journal = await startJournal(root, id, runId, sessionId);
+    await logRunner(root, { event: 'start', taskId: id, runId, mode, program, argv: consoleArgs });
+    return runConsole(program, consoleArgs, root, env, journal, prompt);
   }
 
   // The prompt stays the last argument.
@@ -225,6 +240,7 @@ async function beginRun(
   model: string | undefined,
   mode: 'new' | 'resume' | 'restart',
   comment: string | undefined,
+  consoleMode: boolean,
 ): Promise<number> {
   const response = await post(board, `/tasks/${taskId}/ai-run`, {
     sessionId,
@@ -232,6 +248,8 @@ async function beginRun(
     ...(model === undefined ? {} : { model }),
     // Only the begin carries it: never argv, the runner log or the run journal (T8).
     ...(comment === undefined ? {} : { comment }),
+    // A run with a journal of the console (plan C7).
+    ...(consoleMode ? { console: true } : {}),
   });
   if (response === undefined) {
     throw new Error(
@@ -334,4 +352,50 @@ function run(
       ),
     onEnd: (input) => endRun(journal, input),
   });
+}
+
+/**
+ * Runs the session of a task in Console mode and records it in the journal of its run, as `run`
+ * does for the terminal: the processes, the end, and besides them how far the board has taken the
+ * console events (`console.ackedRunnerSeq`, plan §9.2). The writes of the journal go one after
+ * another, so that a slow one can never overwrite a newer.
+ */
+function runConsole(
+  program: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  journal: { root: string; record: RunJournal; kept: boolean },
+  prompt: string,
+): Promise<number> {
+  let writes: Promise<void> = Promise.resolve();
+  const write = (change: (record: RunJournal) => RunJournal): Promise<void> => {
+    writes = writes.then(() => keep(journal, change(journal.record)));
+    return writes;
+  };
+  return runConsoleSession(
+    program,
+    args,
+    cwd,
+    env,
+    {
+      root: journal.root,
+      taskId: journal.record.taskId,
+      runId: journal.record.runId,
+      sessionId: journal.record.sessionId,
+      prompt,
+      ackedRunnerSeq: journal.record.console?.ackedRunnerSeq ?? 0,
+    },
+    {
+      onSpawn: (pid) =>
+        identify(procProbe(), pid).then((identity) =>
+          write((record) => ({ ...record, child: identity })),
+        ),
+      onAcked: (ackedRunnerSeq) => write((record) => ({ ...record, console: { ackedRunnerSeq } })),
+      onEnd: async (input) => {
+        await writes;
+        await endRun(journal, input);
+      },
+    },
+  );
 }

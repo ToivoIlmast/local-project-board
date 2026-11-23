@@ -17,6 +17,8 @@ export interface ParsedArgs {
   id?: string;
   /** Only for claude, instead of an id: wait for Send to AI in the board (T27). */
   wait?: boolean;
+  /** Only for claude --wait: run each task in Console mode, `claude -p` with pipes (plan C8). */
+  console?: boolean;
   /** Only for claude, with an id: look at a run whose runner died and recover it (T45). */
   recover?: boolean;
   /** Only for claude, with an id: check whether the task is still current (ADR-0030). */
@@ -44,6 +46,8 @@ export const USAGE = [
   '      --comment <text>   with --research: what to focus on; it goes to the board, not to claude',
   '  claude --wait          start Claude Code in this terminal on each task sent from the',
   '                         board with Send to AI → Claude Code, one after another',
+  '      --console          with --wait: run each task in Console mode, so that the board shows',
+  '                         what Claude Code does (the session has no terminal of its own)',
   '  claude --recover <id>  check whether the AI run of a task is still alive on this machine,',
   '                         and mark it lost on the board when it certainly is not',
   '      --confirm-stopped  with --recover: you know the session has stopped, though this',
@@ -82,6 +86,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
         'no-open': { type: 'boolean' },
         out: { type: 'string' },
         wait: { type: 'boolean' },
+        console: { type: 'boolean' },
         recover: { type: 'boolean' },
         check: { type: 'boolean' },
         research: { type: 'boolean' },
@@ -104,6 +109,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const [name, ...rest] = positionals;
   const command: Command = name === undefined ? 'serve' : asCommand(name);
   const wait = values.wait === true;
+  const consoleMode = values.console === true;
   const recover = values.recover === true;
   const check = values.check === true;
   const research = values.research === true;
@@ -111,6 +117,9 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
   const confirmStopped = values['confirm-stopped'] === true;
   if (wait && command !== 'claude') {
     throw new UsageError('The --wait flag belongs to the claude command.');
+  }
+  if (consoleMode && !(command === 'claude' && wait)) {
+    throw new UsageError('The --console flag belongs to claude --wait.');
   }
   if (recover && command !== 'claude') {
     throw new UsageError('The --recover flag belongs to the claude command.');
@@ -176,6 +185,7 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     ...(values.out === undefined ? {} : { out: values.out }),
     ...(id === undefined ? {} : { id }),
     ...(wait ? { wait } : {}),
+    ...(consoleMode ? { console: true } : {}),
     ...(recover ? { recover } : {}),
     ...(confirmStopped ? { confirmStopped } : {}),
     ...(check ? { check } : {}),

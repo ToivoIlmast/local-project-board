@@ -47,7 +47,7 @@ export type Handed = 'handed' | 'nobody' | 'outdated';
 type RunKind = NonNullable<RunRequest['kind']> | 'work';
 
 /** What a runner may declare: the kinds it starts, and `trigger` (ADR-0029 T95, V1). */
-type Accepted = RunKind | 'trigger' | 'comment';
+type Accepted = RunKind | 'trigger' | 'comment' | 'console';
 
 interface Waiting {
   response: Response;
