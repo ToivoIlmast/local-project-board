@@ -648,7 +648,7 @@ export const routes = {
     method: 'POST',
     path: '/tasks/:id/ai-run/:runId/console/messages',
     summary:
-      'Page: send a message to the console of the run; 201 when written, 200 for a repeat of the same messageId',
+      'Page: send a message to the run console; 201 when written, 200 for a repeat of the same messageId',
     params: consoleParams,
     request: c.consoleMessageBody,
     response: json(c.consoleMessageResponse),

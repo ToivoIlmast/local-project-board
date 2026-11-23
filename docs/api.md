@@ -1920,7 +1920,7 @@ Response — 200, application/json:
 
 ### POST /api/v1/tasks/:id/ai-run/:runId/console/messages
 
-Page: send a message to the console of the run; 201 when written, 200 for a repeat of the same messageId
+Page: send a message to the run console; 201 when written, 200 for a repeat of the same messageId
 
 Not given to AI agents in the generated instructions.
 
