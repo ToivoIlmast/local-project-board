@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import type { ConsoleEvent, Task } from '../../../src/contract/v1/index';
 import { ApiError } from '../../../src/web/api/index';
 import { CONSOLE_PHASES } from '../../../src/core/rules/console';
