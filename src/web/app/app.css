@@ -903,6 +903,119 @@
   font-size: 13px;
 }
 
+/* The console of a Console mode run: a status bar and a feed; each item names its role in words. */
+.console__status {
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border-left: 4px solid var(--border-control);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.console__status--busy {
+  border-left-color: var(--accent);
+}
+
+.console__status--failed {
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+.console__feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 480px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.console__feed--nested {
+  max-height: none;
+  margin: 4px 0 4px 8px;
+  overflow-y: visible;
+}
+
+.console__item {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.console__item--user {
+  border-left-color: var(--accent);
+}
+
+.console__item--subagent {
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.console__item--notice.console__item--error,
+.console__item--denied {
+  border-left-color: var(--danger);
+}
+
+.console__item--turn,
+.console__item--series {
+  border-color: transparent;
+  color: var(--ink-muted);
+}
+
+.console__role {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* What was written is shown as it was: no markdown, no HTML, the line breaks kept. */
+.console__text,
+.console__preview {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+}
+
+.console__preview {
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.console__summary {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.console__result {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+
+.console__result.is-error {
+  border-left-color: var(--danger);
+}
+
+.console__note {
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
 /* The Archive page: archived tasks, the last archived first. */
 .archive__list {
   margin: 0;

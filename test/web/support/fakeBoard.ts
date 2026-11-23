@@ -1,6 +1,9 @@
 import type {
   BoardEvent,
   Check,
+  ConsoleEntry,
+  ConsoleEvent,
+  ConsoleReadResponse,
   Decision,
   DocumentMeta,
   EffectiveWorkflow,
@@ -27,6 +30,7 @@ import {
   sameContent,
   summarizeCheck,
 } from '../../../src/contract/v1/index';
+import { foldConsole } from '../../../src/core/rules/console';
 import { rankForPosition } from '../../../src/core/rules/rank';
 import { defaultWorkflow, resolveWorkflow } from '../../../src/core/rules/workflow';
 import { ApiError, type BoardClient } from '../../../src/web/api/index';
@@ -50,6 +54,8 @@ export interface FakeBoardOptions {
   checks?: Record<string, Check[]>;
   /** The markdown of each research report, by `<task>/<number>`. */
   researchMarkdown?: Record<string, string>;
+  /** The console journals that exist, by `<task>/<run>`, as the events the runner sent. */
+  consoles?: Record<string, ConsoleEvent[]>;
 }
 
 export interface FakeBoard {
@@ -77,6 +83,10 @@ export interface FakeBoard {
   fail(method: keyof BoardClient, error: ApiError): void;
   /** Hold the next call to one method open, to see what the page shows meanwhile. */
   hold(method: keyof BoardClient): () => void;
+  /** The console journals, by `<task>/<run>`. */
+  consoles: Map<string, ConsoleEntry[]>;
+  /** What the runner sends: the events are written, and `console.appended` is published. */
+  appendConsole(taskId: string, runId: number, events: ConsoleEvent[]): void;
 }
 
 const NOW = '2026-09-22T10:00:00.000Z';
@@ -107,6 +117,7 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     Object.entries(options.checks ?? {}).map(([id, list]) => [id, structuredClone(list)]),
   );
   const patches: { id: string; patch: Record<string, unknown> }[] = [];
+  const consoles = new Map<string, ConsoleEntry[]>();
   const failures = new Map<string, ApiError>();
   const gates = new Map<string, Promise<void>>();
   let sequence = tasks.length;
@@ -156,6 +167,25 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
   };
 
   const key = (taskId: string, name: string): string => `${taskId}/${name}`;
+
+  const writeConsole = (taskId: string, runId: number, events: ConsoleEvent[]): void => {
+    const journal = consoles.get(key(taskId, String(runId))) ?? [];
+    consoles.set(key(taskId, String(runId)), journal);
+    for (const event of events) {
+      const seq = journal.length + 1;
+      journal.push({
+        seq,
+        at: NOW,
+        source: 'runner',
+        runnerSeq: seq,
+        event,
+      });
+    }
+  };
+  for (const [at, events] of Object.entries(options.consoles ?? {})) {
+    const [taskId = '', runId = ''] = at.split('/');
+    writeConsole(taskId, Number(runId), events);
+  }
 
   const versionsOf = (taskId: string): TaskVersion[] => {
     require(taskId);
@@ -639,6 +669,27 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
         emit({ type: 'topic.updated', topic: structuredClone(topic) });
       }),
 
+    getConsole: (taskId, runId, query = {}) =>
+      record('getConsole', (): ConsoleReadResponse => {
+        require(taskId);
+        const journal = consoles.get(key(taskId, String(runId)));
+        if (journal === undefined) {
+          throw new ApiError(409, 'STALE_AI_RUN', 'This run has no console.', { id: taskId });
+        }
+        const { after, before, limit = 200 } = query;
+        const window = journal.filter(
+          (entry) => entry.seq > (after ?? 0) && entry.seq < (before ?? Infinity),
+        );
+        const entries =
+          after === undefined && before !== undefined
+            ? window.slice(-limit)
+            : window.slice(0, limit);
+        return {
+          entries: structuredClone(entries),
+          state: foldConsole(journal) as ConsoleReadResponse['state'],
+        };
+      }),
+
     gitStatus: () => record('gitStatus', () => ({ ...(options.git ?? aGitStatus()) })),
     gitCommits: (_limit, _ref) =>
       record('gitCommits', () => options.commits ?? ([] as GitCommit[])),
@@ -669,6 +720,12 @@ export function fakeBoard(options: FakeBoardOptions = {}): FakeBoard {
     versions,
     checks,
     patches,
+    consoles,
+    appendConsole(taskId, runId, events) {
+      writeConsole(taskId, runId, events);
+      const lastSeq = consoles.get(key(taskId, String(runId)))?.length ?? 0;
+      emit({ type: 'console.appended', taskId, runId, lastSeq });
+    },
     fail: (method, error) => failures.set(method, error),
     hold(method) {
       let release = (): void => undefined;

@@ -37,5 +37,6 @@ export {
   type BoardState,
   type BoardStore,
   type Column,
+  type ConsoleJournal,
   type TaskHistory,
 } from './store';

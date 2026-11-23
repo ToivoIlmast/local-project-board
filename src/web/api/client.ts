@@ -1,5 +1,6 @@
 import {
   API_BASE_PATH,
+  CONSOLE_READ_DEFAULT_LIMIT,
   routes,
   type BodyOf,
   type ParamsOf,
@@ -22,6 +23,7 @@ import {
   type RunTaskRequest,
   type Check,
   type CheckSummary,
+  type ConsoleReadResponse,
   type Decision,
   type DecisionRequest,
   type RestoreVersionResponse,
@@ -166,6 +168,17 @@ export interface BoardClient {
   ): Promise<Topic>;
   /** Refused with `BLOCK_NOT_EMPTY` while a task is in the block. */
   deleteBlock(topicId: string, blockId: string, options?: RequestOptions): Promise<void>;
+
+  /**
+   * A page of the console journal of one run, and the state the board computed from all of it:
+   * `after` the entries with a greater `seq`, `before` the last ones below it (plan C7).
+   */
+  getConsole(
+    taskId: string,
+    runId: number,
+    query?: { after?: number | undefined; before?: number | undefined; limit?: number | undefined },
+    options?: RequestOptions,
+  ): Promise<ConsoleReadResponse>;
 
   gitStatus(options?: RequestOptions): Promise<GitStatus>;
   gitCommits(limit: number, ref?: string, options?: RequestOptions): Promise<GitCommit[]>;
@@ -315,6 +328,20 @@ export function createBoardClient(options: BoardClientOptions = {}): BoardClient
     deleteBlock: async (id, blockId, o) => {
       await call('topics.deleteBlock', { params: { id, blockId } }, o);
     },
+
+    getConsole: (id, runId, q, o) =>
+      call(
+        'ai-run.console.read',
+        {
+          params: { id, runId },
+          query: {
+            limit: q?.limit ?? CONSOLE_READ_DEFAULT_LIMIT,
+            ...(q?.after === undefined ? {} : { after: q.after }),
+            ...(q?.before === undefined ? {} : { before: q.before }),
+          },
+        },
+        o,
+      ),
 
     gitStatus: (o) => call('git.status', {}, o),
     gitCommits: (limit, ref, o) =>
