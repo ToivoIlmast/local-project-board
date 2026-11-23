@@ -20,6 +20,9 @@ const TRIGGER = 'trigger';
 /** Said besides the kinds: this runner carries the comment of a work run into begin (T8). */
 const COMMENT = 'comment';
 
+/** Said besides the kinds: this runner runs work in Console mode (plan C8). */
+const CONSOLE = 'console';
+
 /** What this runner reports to the board (ADR-0029 T94, K11). */
 const SIGNALS = 'run-failure';
 
@@ -29,6 +32,8 @@ export interface WaitEnvironment {
   writeError: (text: string) => void;
   /** Ends the wait as Ctrl+C does; the CLI has the signals of the process for that. */
   signal?: AbortSignal | undefined;
+  /** Run each work session in Console mode (plan C8): `claude -p` with pipes, no terminal. */
+  console?: boolean | undefined;
 }
 
 /**
@@ -48,6 +53,7 @@ export async function waitForRuns(
   environment: WaitEnvironment,
 ): Promise<number> {
   const { env, write, writeError } = environment;
+  const consoleMode = environment.console === true;
   // Checked before it waits, so that the board never promises a start that cannot happen.
   await findClaude(env);
   let running: RuntimeState | undefined = await findRunningBoard(board.root);
@@ -105,14 +111,14 @@ export async function waitForRuns(
       let next = await nextRequest(
         current,
         stop.signal,
-        { comment: true, trigger: true, signals },
+        { comment: true, trigger: true, signals, console: consoleMode },
         onWaiting,
       );
       if (next === 'refused') {
         next = await nextRequest(
           current,
           stop.signal,
-          { comment: false, trigger: true, signals },
+          { comment: false, trigger: true, signals, console: consoleMode },
           onWaiting,
         );
       }
@@ -120,7 +126,7 @@ export async function waitForRuns(
         next = await nextRequest(
           current,
           stop.signal,
-          { comment: false, trigger: false, signals },
+          { comment: false, trigger: false, signals, console: consoleMode },
           onWaiting,
         );
       }
@@ -130,7 +136,7 @@ export async function waitForRuns(
         next = await nextRequest(
           current,
           stop.signal,
-          { comment: false, trigger: false, signals: false },
+          { comment: false, trigger: false, signals: false, console: consoleMode },
           onWaiting,
         );
       }
@@ -191,6 +197,7 @@ export async function waitForRuns(
                   next.model,
                   next.mode ?? 'new',
                   next.comment,
+                  consoleMode,
                 );
         write(`The session on ${next.taskId} ended (exit code ${code}).`);
       } catch (error) {
@@ -225,7 +232,7 @@ export async function waitForRuns(
 async function nextRequest(
   board: RuntimeState,
   signal: AbortSignal,
-  declare: { comment: boolean; trigger: boolean; signals: boolean },
+  declare: { comment: boolean; trigger: boolean; signals: boolean; console: boolean },
   onWaiting: () => void,
 ): Promise<RunRequest | 'lost' | 'stopped' | 'refused'> {
   // A stop that came while the ends were delivered fires no event any more: it is read here.
@@ -239,6 +246,7 @@ async function nextRequest(
       ACCEPTS,
       ...(declare.trigger ? [TRIGGER] : []),
       ...(declare.comment ? [COMMENT] : []),
+      ...(declare.console ? [CONSOLE] : []),
     ].join(',');
     const query = `accepts=${accepts}${declare.signals ? `&signals=${SIGNALS}` : ''}`;
     const response = await fetch(`${board.url}${API_BASE_PATH.slice(1)}/runs?${query}`, {

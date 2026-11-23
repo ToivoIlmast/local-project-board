@@ -78,6 +78,7 @@ export async function runCli(argv: string[], environment: CliEnvironment): Promi
               write: environment.write,
               writeError: environment.writeError,
               signal: environment.signal,
+              console: args.console === true,
             }),
           };
         }

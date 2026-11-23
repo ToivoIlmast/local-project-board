@@ -396,7 +396,8 @@ export const runRequestSchema = z
  * kind: it says that the runner carries the trigger of a check into the begin. `comment` is no
  * kind either: it says that the runner carries the comment of a run of the task into the begin.
  * Without it the runner is one of an earlier version and is handed work only, and no comment;
- * every runner starts work.
+ * every runner starts work. `console` says that the runner can run a work session in Console mode
+ * (plan C8); it changes nothing in what the board hands out.
  *
  * `signals=run-failure` says that it reports a work run that did not begin (ADR-0029 T94, K11).
  * A closed list, parsed as strictly as `accepts`; without it the runner is of an earlier version.
@@ -405,11 +406,14 @@ export const runsQuerySchema = z.strictObject({
   accepts: z
     .string()
     .regex(
-      /^(check|research|trigger|comment)(,(check|research|trigger|comment))*$/,
-      'A list of values: check, research, trigger, comment',
+      /^(check|research|trigger|comment|console)(,(check|research|trigger|comment|console))*$/,
+      'A list of values: check, research, trigger, comment, console',
     )
     .transform(
-      (list) => [...new Set(list.split(','))] as ('check' | 'research' | 'trigger' | 'comment')[],
+      (list) =>
+        [...new Set(list.split(','))] as (
+          'check' | 'research' | 'trigger' | 'comment' | 'console'
+        )[],
     )
     .optional(),
   signals: z

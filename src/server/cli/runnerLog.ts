@@ -25,6 +25,26 @@ export type RunnerLogEntry =
       argv: string[];
     }
   | { event: 'end'; taskId: string; runId: number; delivery: 'delivered' | 'dropped' | 'pending' }
+  /**
+   * Console mode (plan C8): that the board was reached or lost, and the steps of the process.
+   * `detail` is a fixed word, a status or a reason code; never a message of the person or of
+   * Claude, and never the text of stderr.
+   */
+  | {
+      event: 'console';
+      taskId: string;
+      runId: number;
+      what:
+        | 'board-connected'
+        | 'board-lost'
+        | 'board-refused'
+        | 'compat'
+        | 'close'
+        | 'kill'
+        | 'exited'
+        | 'spool-left';
+      detail?: string;
+    }
   | { event: 'warning'; taskId?: string; runId?: number; message: string };
 
 export async function logRunner(root: string, entry: RunnerLogEntry): Promise<void> {
