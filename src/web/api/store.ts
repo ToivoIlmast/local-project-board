@@ -1,8 +1,11 @@
+import { CONSOLE_READ_MAX_LIMIT } from '../../contract/v1/index';
 import type {
   BlockingReason,
   BoardEvent,
   Check,
   CheckSummary,
+  ConsoleEntry,
+  ConsoleReadResponse,
   Decision,
   DecisionRequest,
   DocumentMeta,
@@ -31,6 +34,16 @@ export interface TaskHistory {
   checks: CheckSummary[];
 }
 
+/**
+ * What the page knows of the console of one run (plan C9): the entries it has read, in the order
+ * of their `seq`, and the state the board computed from the whole journal. The page does not
+ * compute that state again: it is `foldConsole`'s, and the server owns it.
+ */
+export interface ConsoleJournal {
+  entries: ConsoleEntry[];
+  state: ConsoleReadResponse['state'];
+}
+
 export interface BoardState {
   phase: 'loading' | 'ready' | 'failed';
   /** Why the board could not be read at all; a failed change does not land here. */
@@ -57,6 +70,8 @@ export interface BoardState {
   snapshots: Record<string, TaskVersion>;
   /** Checks opened, by `<task>/<number>`; read again when the board says one was updated. */
   checks: Record<string, Check>;
+  /** Consoles opened, by `<task>/<run>`; kept current while they are open, dropped when not. */
+  consoles: Record<string, ConsoleJournal>;
   connection: ConnectionStatus;
   /** Tasks with a change in flight. */
   busy: string[];
@@ -78,6 +93,7 @@ export function emptyState(): BoardState {
     history: {},
     snapshots: {},
     checks: {},
+    consoles: {},
     connection: 'connecting',
     busy: [],
   };
@@ -104,6 +120,7 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
         history,
         snapshots: Object.fromEntries(Object.entries(state.snapshots).filter(([k]) => !own(k))),
         checks: Object.fromEntries(Object.entries(state.checks).filter(([k]) => !own(k))),
+        consoles: Object.fromEntries(Object.entries(state.consoles).filter(([k]) => !own(k))),
       };
     }
     case 'document.written': {
@@ -150,7 +167,7 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
       // The history is read again by the store, which knows which tasks have it open.
       return state;
     case 'console.appended':
-      // The journal is not part of the board's state; the console view of C9 reads it itself.
+      // Only the event: what it says is read by the store, and only for a console that is open.
       return state;
     case 'board.changed':
       // Files changed outside the server; the board must be read again, not patched.
@@ -276,6 +293,9 @@ export interface BoardStore {
   loadVersion(taskId: string, number: number): Promise<TaskVersion>;
   /** One check with its report and decisions; kept current once opened. */
   loadCheck(taskId: string, number: number): Promise<Check>;
+  /** Reads the console of a run and keeps it current, until it is released (plan C9). */
+  loadConsole(taskId: string, runId: number): Promise<void>;
+  releaseConsole(taskId: string, runId: number): void;
   restoreVersion(
     taskId: string,
     number: number,
@@ -307,6 +327,8 @@ export function createBoardStore(client: BoardClient): BoardStore {
    * a list that was never read is in no other record, and would otherwise never be tried again.
    */
   const wanted = new Set<string>();
+  /** The consoles that are open (`<task>/<run>`): the only ones a `console.appended` reads. */
+  const wantedConsoles = new Set<string>();
   /** The same for the history of a task, and for the checks that were opened. */
   const wantedHistory = new Set<string>();
   const wantedChecks = new Set<string>();
@@ -323,8 +345,11 @@ export function createBoardStore(client: BoardClient): BoardStore {
     if (event.type === 'task.deleted') {
       wanted.delete(event.taskId);
       wantedHistory.delete(event.taskId);
-      for (const key of [...wantedChecks])
-        if (key.startsWith(`${event.taskId}/`)) wantedChecks.delete(key);
+      for (const key of [...wantedChecks, ...wantedConsoles])
+        if (key.startsWith(`${event.taskId}/`)) {
+          wantedChecks.delete(key);
+          wantedConsoles.delete(key);
+        }
     }
     set((current) => applyEvent(current, event));
   };
@@ -391,6 +416,51 @@ export function createBoardStore(client: BoardClient): BoardStore {
     }
   }
 
+  /** One reader at a time for each console; a call that comes meanwhile asks for one more round. */
+  const consoleReads = new Map<string, Promise<void>>();
+  const consoleAgain = new Set<string>();
+
+  async function readConsoleOnce(taskId: string, runId: number, key: string): Promise<void> {
+    let after = state.consoles[key]?.entries.at(-1)?.seq ?? 0;
+    for (;;) {
+      const page = await client.getConsole(taskId, runId, { after, limit: CONSOLE_READ_MAX_LIMIT });
+      // Closed while it was being read: nothing is kept for a console nobody looks at.
+      if (!wantedConsoles.has(key)) return;
+      set((current) => {
+        const known = current.consoles[key]?.entries ?? [];
+        const last = known.at(-1)?.seq ?? 0;
+        const entries = [...known, ...page.entries.filter((entry) => entry.seq > last)];
+        return {
+          ...current,
+          consoles: { ...current.consoles, [key]: { entries, state: page.state } },
+        };
+      });
+      if (page.entries.length < CONSOLE_READ_MAX_LIMIT) return;
+      after = page.entries[page.entries.length - 1]?.seq ?? after;
+    }
+  }
+
+  function readConsole(taskId: string, runId: number): Promise<void> {
+    const key = `${taskId}/${runId}`;
+    const running = consoleReads.get(key);
+    if (running !== undefined) {
+      consoleAgain.add(key);
+      return running;
+    }
+    const read = (async () => {
+      try {
+        do {
+          consoleAgain.delete(key);
+          await readConsoleOnce(taskId, runId, key);
+        } while (consoleAgain.has(key) && wantedConsoles.has(key));
+      } finally {
+        consoleReads.delete(key);
+      }
+    })();
+    consoleReads.set(key, read);
+    return read;
+  }
+
   const store: BoardStore = {
     getState: () => state,
 
@@ -436,6 +506,12 @@ export function createBoardStore(client: BoardClient): BoardStore {
       // So does the history of what is open: the files may have changed outside the server.
       await Promise.all(
         [...wantedHistory].map((id) => store.loadHistory(id).catch(() => undefined)),
+      );
+      await Promise.all(
+        [...wantedConsoles].map((key) => {
+          const [id, run] = key.split('/');
+          return readConsole(id as string, Number(run)).catch(() => undefined);
+        }),
       );
       await Promise.all(
         [...wantedChecks].map((key) => {
@@ -535,6 +611,20 @@ export function createBoardStore(client: BoardClient): BoardStore {
       return result;
     },
 
+    async loadConsole(taskId, runId) {
+      wantedConsoles.add(`${taskId}/${runId}`);
+      await readConsole(taskId, runId);
+    },
+
+    releaseConsole(taskId, runId) {
+      const key = `${taskId}/${runId}`;
+      wantedConsoles.delete(key);
+      set((current) => {
+        const { [key]: _closed, ...consoles } = current.consoles;
+        return { ...current, consoles };
+      });
+    },
+
     async decide(taskId, number, decision) {
       const made = await client.decide(taskId, number, decision);
       await store.loadCheck(taskId, number);
@@ -605,6 +695,15 @@ export function createBoardStore(client: BoardClient): BoardStore {
       apply(event);
       if (event.type.startsWith('task.') || event.type.startsWith('topic.')) {
         await loadReadiness();
+      }
+      // The console is read for the run that is open, and for no other: an event of another
+      // task or run costs nothing, and one that says nothing new is not asked about.
+      if (event.type === 'console.appended') {
+        const key = `${event.taskId}/${event.runId}`;
+        const known = state.consoles[key]?.entries.at(-1)?.seq ?? 0;
+        if (wantedConsoles.has(key) && event.lastSeq > known) {
+          await readConsole(event.taskId, event.runId).catch(() => undefined);
+        }
       }
       // The history is not part of any event: the page that has it open reads it again.
       if (event.type === 'version.created' || event.type === 'check.updated') {
