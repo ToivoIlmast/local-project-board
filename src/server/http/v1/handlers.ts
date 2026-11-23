@@ -2,6 +2,7 @@ import {
   generateInstructions,
   type BoardFacts,
   type BodyOf,
+  type ConsoleReadResponse,
   type ParamsOf,
   type QueryOf,
   type ResponseOf,
@@ -297,4 +298,12 @@ export const handlers: Handlers = {
 
   'ai-run.report': async (context, { params, body }) =>
     context.aiRun.report(params.id, params.runId, body),
+
+  'ai-run.console.events': async (context, { params, query, body }) =>
+    context.aiRun.appendConsole(params.id, params.runId, query.sessionId, body),
+
+  // The provider keeps the events as they were written, and they were checked against the
+  // contract when they came in (ai-run.console.events, the server's own are built by the model).
+  'ai-run.console.read': async (context, { params, query }) =>
+    (await context.aiRun.readConsole(params.id, params.runId, query)) as ConsoleReadResponse,
 };

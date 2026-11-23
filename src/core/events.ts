@@ -43,6 +43,16 @@ export const boardEventSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('topic.updated'), topic: topicSchema }),
   z.strictObject({ type: z.literal('topic.deleted'), topicId: topicIdSchema }),
   /**
+   * The console journal of a run got entries (Console mode, plan C7). A light signal: the page
+   * reads the journal again from the last `seq` it has. One event for each write of entries.
+   */
+  z.strictObject({
+    type: z.literal('console.appended'),
+    taskId: taskIdSchema,
+    runId: z.int().min(0),
+    lastSeq: z.int().min(1),
+  }),
+  /**
    * Something changed on disk; the client refetches. Mostly an edit made outside the server,
    * but the watcher also echoes the server's own writes (ADR-0019), so it may follow, or come
    * before, the event of a change the server made itself. Never the only sign of such a change.

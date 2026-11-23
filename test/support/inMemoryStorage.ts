@@ -11,7 +11,14 @@ import type {
   Topic,
   WorkflowOverrides,
 } from '../../src/core/model/index.js';
-import type { NewReport, NewTask, NewVersion, Storage, TaskPatch } from '../../src/core/ports.js';
+import type {
+  ConsoleJournalEntry,
+  NewReport,
+  NewTask,
+  NewVersion,
+  Storage,
+  TaskPatch,
+} from '../../src/core/ports.js';
 import {
   assertBlockDeletable,
   assertTopicDeletable,
@@ -44,6 +51,8 @@ export interface MemoryStore {
   reports: Map<string, { report: Report; content: string }>;
   /** The history of each task, as the records the markdown provider keeps in files. */
   history: Map<string, MemoryHistory>;
+  /** The console journals, by `<task id>-<runId>`. */
+  consoleLogs: Map<string, ConsoleJournalEntry[]>;
   workflow: WorkflowOverrides;
   taskSequence: number;
   reportSequence: number;
@@ -71,6 +80,7 @@ export interface MemoryHistory {
 export function createMemoryStore(): MemoryStore {
   return {
     history: new Map(),
+    consoleLogs: new Map(),
     tasks: new Map(),
     documents: new Map(),
     reports: new Map(),
@@ -349,7 +359,25 @@ export function inMemoryStorage(store: MemoryStore, options: { idPrefix?: string
         store.tasks.delete(id);
         store.documents.delete(id);
         store.history.delete(id);
+        for (const key of [...store.consoleLogs.keys()]) {
+          if (/^(.*)-d+$/.exec(key)?.[1] === id) store.consoleLogs.delete(key);
+        }
       }),
+
+    appendConsole: (run, entries) =>
+      exclusive(async () => {
+        requireTask(run.taskId);
+        if (entries.length === 0) return;
+        const key = `${run.taskId}-${run.runId}`;
+        store.consoleLogs.set(key, [
+          ...(store.consoleLogs.get(key) ?? []),
+          ...structuredClone([...entries]),
+        ]);
+      }),
+    readConsole: async (taskId, runId) => {
+      requireTask(taskId);
+      return structuredClone(store.consoleLogs.get(`${taskId}-${runId}`) ?? []);
+    },
 
     // In the queue of the writes, as the markdown provider's is.
     appendVersion: (taskId, input) => exclusive(async () => appendVersion(taskId, input)),

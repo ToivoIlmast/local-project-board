@@ -28,7 +28,9 @@ export interface WatchOptions {
 export function isRuntimeFile(filename: string | null): boolean {
   if (filename === null) return false;
   const parts = filename.split(/[\\/]/);
-  if (parts[0] === 'runner') return true;
+  // The journals of Console mode are runtime files: the server tells the page itself, with
+  // `console.appended`, and a write of each batch must not make every open page reread the board.
+  if (parts[0] === 'runner' || parts[0] === 'console') return true;
   return (
     parts.length === 1 && (parts[0] === 'runtime.json' || /^\.[0-9a-f]{12}\.tmp$/.test(parts[0]!))
   );

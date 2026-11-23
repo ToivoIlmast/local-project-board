@@ -1,8 +1,16 @@
 import type { AiRun, AiRunReport } from '../model/aiRun.js';
-import type { EventSink, Storage } from '../ports.js';
+import type { ConsoleJournalEntry, EventSink, Storage } from '../ports.js';
 import { BoardError } from '../errors.js';
 import type { Launch, LaunchFailureKind } from '../model/launch.js';
 import type { Task } from '../model/task.js';
+import {
+  finalizeMessages,
+  foldConsole,
+  type ConsoleFinalizeCause,
+  type ConsoleFoldEntry,
+  type ConsoleState,
+} from '../rules/console.js';
+import { pageConsole, type ConsolePageQuery } from '../rules/consolePage.js';
 import { isLaunchCurrent } from '../rules/launch.js';
 import { assertNotArchived } from './archive.js';
 import { reasonsOf, taskBlocked } from './readiness.js';
@@ -22,6 +30,8 @@ export interface BeginInput {
   model?: string | undefined;
   /** The comment of the request, as the runner received it; kept in the record of this run only. */
   comment?: string | undefined;
+  /** The run is a Console mode run: it has a journal of the console (plan C7). */
+  console?: true | undefined;
   startedAt?: string | undefined;
 }
 
@@ -38,6 +48,26 @@ export interface AbandonInput {
   sessionId: string;
   /** Why the run is known, or confirmed, to be lost: the evidence, in words. */
   message: string;
+}
+
+/** A batch of the runner's console events: `events[i]` has `runnerSeq = fromRunnerSeq + i`. */
+export interface ConsoleBatch {
+  fromRunnerSeq: number;
+  events: readonly ConsoleJournalEntry['event'][];
+}
+
+/** What the server confirms of a batch (plan §3.3). */
+export interface ConsoleAppendResult {
+  /** The `runnerSeq` of the last runner event in the journal: the runner's new `ackedRunnerSeq`. */
+  lastRunnerSeq: number;
+  /** The messages still `accepted` after the batch. */
+  awaitingDelivery: number;
+}
+
+export interface ConsolePage {
+  entries: ConsoleJournalEntry[];
+  /** Of the whole journal, not of the page. */
+  state: ConsoleState;
 }
 
 /**
@@ -95,6 +125,25 @@ export interface AiRunService {
    * session and `working`; writes `failed{lost}` and keeps runId and sessionId, so Resume works.
    */
   abandon(taskId: string, runId: number, input: AbandonInput): Promise<AiRun>;
+  /**
+   * Console mode (plan C7): writes the events of a batch to the journal of the run. A
+   * compare-and-set on the runId, the session and the run being a console run; `aiRun.state` and
+   * `endedAt` are not read, so the journal goes on after the agent's report and takes the rest of
+   * a spool after the end (§5.3). Events the journal has already are skipped by `runnerSeq`, a
+   * gap is noted once (`events_missing`), and `process.exited` settles the messages (§9.4).
+   * Publishes one `console.appended` when something was written. Refused with `STALE_AI_RUN`.
+   */
+  appendConsole(
+    taskId: string,
+    runId: number,
+    sessionId: string,
+    batch: ConsoleBatch,
+  ): Promise<ConsoleAppendResult>;
+  /**
+   * A page of the journal of a console run, current or earlier, and the state `foldConsole`
+   * computes from all of it. `STALE_AI_RUN` when the task has no such console run.
+   */
+  readConsole(taskId: string, runId: number, query: ConsolePageQuery): Promise<ConsolePage>;
   /** Throws `AI_RUN_IN_PROGRESS` when the task's run works; whatever a run would be (T45). */
   requireIdle(taskId: string): Promise<void>;
   /**
@@ -165,6 +214,61 @@ export function createAiRunService({
     const task = await storage.getTask(id);
     if (!task) throw new BoardError('TASK_NOT_FOUND', `Task "${id}" does not exist.`, { id });
     return task;
+  }
+
+  /** `foldConsole` over what the provider read: the same entries, seen through the model. */
+  function foldOf(entries: readonly ConsoleJournalEntry[], lost: boolean): ConsoleState {
+    return foldConsole(entries as unknown as readonly ConsoleFoldEntry[], { lost });
+  }
+
+  function notConsole(taskId: string, runId: number): BoardError {
+    return new BoardError(
+      'STALE_AI_RUN',
+      `Run ${runId} of task "${taskId}" is not a console run, or is not the current run.`,
+      { id: taskId, runId },
+    );
+  }
+
+  /** Writes entries of the server or the runner, and tells the open pages once (plan C7). */
+  async function appendEntries(
+    taskId: string,
+    run: AiRun,
+    entries: ConsoleJournalEntry[],
+  ): Promise<void> {
+    const last = entries.at(-1);
+    if (last === undefined) return;
+    await storage.appendConsole(
+      { taskId, runId: currentRunId(run), sessionId: run.sessionId ?? '' },
+      entries,
+    );
+    events?.publish({
+      type: 'console.appended',
+      taskId,
+      runId: currentRunId(run),
+      lastSeq: last.seq,
+    });
+  }
+
+  /**
+   * The server's events that settle the messages of a console run whose process is gone (§9.4),
+   * written under the lock of the task. Nothing for a run that is not a console run, nor when
+   * the journal has nothing to settle: the model is idempotent (plan C5).
+   */
+  async function settleMessages(
+    taskId: string,
+    run: AiRun,
+    cause: ConsoleFinalizeCause,
+  ): Promise<void> {
+    if (run.console !== true) return;
+    const entries = await storage.readConsole(taskId, currentRunId(run));
+    const settled = finalizeMessages(foldOf(entries, cause === 'lost'), cause);
+    let seq = entries.reduce((max, entry) => Math.max(max, entry.seq), 0);
+    const at = now();
+    await appendEntries(
+      taskId,
+      run,
+      settled.map((event) => ({ seq: ++seq, at, source: 'server' as const, event: { ...event } })),
+    );
   }
 
   function noSession(taskId: string): BoardError {
@@ -315,6 +419,7 @@ export function createAiRunService({
           mode: input.mode,
           ...(input.model !== undefined ? { model: input.model } : {}),
           ...(input.comment !== undefined ? { comment: input.comment } : {}),
+          ...(input.console === true ? { console: true as const } : {}),
           startedAt: input.startedAt ?? now(),
         };
         // The run begins and the request it answers is gone, in one write, whoever begins (K5).
@@ -371,7 +476,10 @@ export function createAiRunService({
           };
         }
 
-        return (await write(taskId, patch)).aiRun!;
+        const ended = (await write(taskId, patch)).aiRun!;
+        // The runner sends process.exited before the end; when it could not, this settles them.
+        await settleMessages(taskId, ended, 'ended');
+        return ended;
       }),
 
     abandon: (taskId, runId, input) =>
@@ -389,8 +497,74 @@ export function createAiRunService({
           state: 'failed',
           failure: { kind: 'lost', message: input.message },
         };
-        return (await write(taskId, patch)).aiRun!;
+        const lost = (await write(taskId, patch)).aiRun!;
+        await settleMessages(taskId, lost, 'lost');
+        return lost;
       }),
+
+    appendConsole: (taskId, runId, sessionId, batch) =>
+      locks.run(taskId, async () => {
+        const run = await requireCurrent(taskId, runId, sessionId);
+        if (run.console !== true) throw notConsole(taskId, runId);
+
+        const entries = await storage.readConsole(taskId, runId);
+        let seq = entries.reduce((max, entry) => Math.max(max, entry.seq), 0);
+        let cursor = entries.reduce(
+          (max, entry) => (entry.runnerSeq === undefined ? max : Math.max(max, entry.runnerSeq)),
+          0,
+        );
+
+        // Event by event against the cursor (plan §3.3): what is written is skipped, what is
+        // next is written, and the first event after a gap is written behind one notice.
+        const at = now();
+        const fresh: ConsoleJournalEntry[] = [];
+        batch.events.forEach((event, index) => {
+          const runnerSeq = batch.fromRunnerSeq + index;
+          if (runnerSeq <= cursor) return;
+          if (runnerSeq > cursor + 1) {
+            fresh.push({
+              seq: ++seq,
+              at,
+              source: 'server',
+              event: {
+                kind: 'notice',
+                level: 'warning',
+                code: 'events_missing',
+                fromRunnerSeq: cursor + 1,
+                toRunnerSeq: runnerSeq - 1,
+              },
+            });
+          }
+          fresh.push({ seq: ++seq, at, source: 'runner', runnerSeq, event });
+          cursor = runnerSeq;
+        });
+
+        // The process is gone: what it was not told, nor started, is settled in the same write.
+        if (fresh.some((entry) => entry.event.kind === 'process.exited')) {
+          const settled = finalizeMessages(foldOf([...entries, ...fresh], false), 'exited');
+          for (const event of settled) {
+            fresh.push({ seq: ++seq, at, source: 'server', event: { ...event } });
+          }
+        }
+
+        await appendEntries(taskId, run, fresh);
+        const state = foldOf([...entries, ...fresh], false);
+        return { lastRunnerSeq: cursor, awaitingDelivery: state.counters.awaitingDelivery };
+      }),
+
+    readConsole: async (taskId, runId, query) => {
+      const task = await requireTask(taskId);
+      const run =
+        currentRunId(task.aiRun) === runId
+          ? task.aiRun
+          : task.aiRunHistory?.find((earlier) => currentRunId(earlier) === runId);
+      if (run?.console !== true) throw notConsole(taskId, runId);
+      const entries = await storage.readConsole(taskId, runId);
+      return {
+        entries: pageConsole(entries, query),
+        state: foldOf(entries, run.failure?.kind === 'lost'),
+      };
+    },
 
     report: (taskId, runId, input) =>
       locks.run(taskId, async () => {

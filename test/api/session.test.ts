@@ -113,6 +113,15 @@ describe('the token on the wire', () => {
       })
       .expect(200);
 
+    // A console run, so that the journal of the console can be read (plan C7).
+    await board
+      .post(`${API}/tasks/T1/ai-run`, {
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        mode: 'new',
+        console: true,
+      })
+      .expect(200);
+
     const paths: Record<string, string> = {
       'project.get': '/project',
       'tasks.list': '/tasks',
@@ -125,6 +134,7 @@ describe('the token on the wire', () => {
       'checks.get': '/tasks/T1/checks/1',
       'checks.handoff': '/tasks/T1/checks/1/handoff',
       'checks.reportMarkdown': '/tasks/T1/checks/2/report.md',
+      'ai-run.console.read': '/tasks/T1/ai-run/1/console',
       'workflow.get': '/workflow',
       'documents.list': '/tasks/T1/documents',
       'documents.read': '/tasks/T1/documents/plan.md',

@@ -144,12 +144,50 @@ export interface ReadIssue {
   message: string;
 }
 
+/** Which run a console journal belongs to; the provider writes it as the header of the journal. */
+export interface ConsoleRunRef {
+  taskId: string;
+  runId: number;
+  sessionId: string;
+}
+
+/**
+ * One entry of a console journal (plan §9.1). The provider keeps it as it is given and reads it
+ * back whole; the event is the contract's (C3), checked where it comes in, not here (ADR-0016).
+ */
+export interface ConsoleJournalEntry {
+  /** The server's number: 1, 2, 3… without a gap, in the order the entries were written. */
+  seq: number;
+  at: string;
+  source: 'runner' | 'server';
+  /** The runner's number of the event; only on `source: 'runner'`. */
+  runnerSeq?: number | undefined;
+  event: { kind: string; [field: string]: unknown };
+}
+
+/**
+ * The console journal of a run: appended and read, never changed (plan C7). The numbering of
+ * `seq` and the cursor of the runner are the caller's, under the lock of the task.
+ */
+export interface ConsoleLog {
+  /**
+   * Adds the entries at the end of the journal of the run, which is made, with its header, by
+   * the first append. Nothing for an empty list. `TASK_NOT_FOUND` for a task that does not exist.
+   */
+  appendConsole(run: ConsoleRunRef, entries: readonly ConsoleJournalEntry[]): Promise<void>;
+  /**
+   * Every entry of the journal in the order written; none when the run has no journal. A line
+   * that cannot be read as an entry, such as one torn by a crash, is left out.
+   */
+  readConsole(taskId: string, runId: number): Promise<ConsoleJournalEntry[]>;
+}
+
 /**
  * Persistence. Deliberately without queries, transactions, configuration or watching:
  * filtering happens in services, and watching is the Markdown adapter's own business.
  * A provider persists; the rules live in core/rules.
  */
-export interface Storage {
+export interface Storage extends ConsoleLog {
   init(): Promise<void>;
   close(): Promise<void>;
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import * as c from './console.js';
 import * as s from './schemas.js';
 
 export const API_VERSION = 'v1';
@@ -573,6 +574,67 @@ export const routes = {
     },
     // The report route is described in the handoff with the specific runId; agents do not call
     // it without a current run, and the general instructions cannot embed a runId.
+    ai: { include: false },
+  }),
+
+  'ai-run.console.events': route({
+    id: 'ai-run.console.events',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/console/events',
+    summary:
+      'Runner: send a batch of console events; the runId and the session must be the current ones',
+    params: z.strictObject({ id: s.taskIdSchema, runId: z.coerce.number().int().nonnegative() }),
+    query: c.consoleEventsQuery,
+    request: c.consoleEventsBody,
+    response: json(c.consoleEventsResponse),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      query: { sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789' },
+      body: {
+        fromRunnerSeq: 3,
+        events: [{ kind: 'compat.passed' }, { kind: 'process.started', pid: 4242 }],
+      },
+      response: { lastRunnerSeq: 4, awaitingDelivery: 0 },
+    },
+    // Sent by `local-project-board claude --wait --console`, never by an agent at work.
+    ai: { include: false },
+  }),
+
+  'ai-run.console.read': route({
+    id: 'ai-run.console.read',
+    method: 'GET',
+    path: '/tasks/:id/ai-run/:runId/console',
+    summary:
+      'Read the console journal of a console run: a page of its entries and the state of the whole journal',
+    params: z.strictObject({ id: s.taskIdSchema, runId: z.coerce.number().int().nonnegative() }),
+    query: c.consoleReadQuery,
+    response: json(c.consoleReadResponse),
+    example: {
+      params: { id: 'T12', runId: 1 },
+      query: { after: 0, limit: 200 },
+      response: {
+        entries: [
+          {
+            seq: 1,
+            at: '2026-09-21T09:00:01.000Z',
+            source: 'runner',
+            runnerSeq: 1,
+            event: { kind: 'process.started', pid: 4242 },
+          },
+        ],
+        state: {
+          process: { status: 'running', killRequested: false },
+          compat: { status: 'probing' },
+          turn: { status: 'none' },
+          jobs: [],
+          messages: [],
+          counters: { awaitingDelivery: 0, pendingProcessing: 0, inProgress: 0 },
+          phase: 'starting',
+        },
+      },
+    },
+    // For the page of the person, and the runner's tests; not for an agent at work.
     ai: { include: false },
   }),
 

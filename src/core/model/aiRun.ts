@@ -45,6 +45,11 @@ export const aiRunSchema = z.strictObject({
     .max(COMMENT_MAX_LENGTH)
     .refine((text) => !text.includes('\0'), 'Must not contain NUL')
     .optional(),
+  /**
+   * The run is a Console mode run (plan C7): it has a journal of the console. Written by begin,
+   * when the runner asks for it; absent on every other run, never `false`.
+   */
+  console: z.literal(true).optional(),
   checks: z.enum(AI_RUN_CHECKS).optional(),
   /** A commit the agent made, as an abbreviated or full SHA; not looked up in git. */
   commit: z

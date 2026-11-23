@@ -149,6 +149,9 @@ export function applyEvent(state: BoardState, event: BoardEvent): BoardState {
     case 'check.updated':
       // The history is read again by the store, which knows which tasks have it open.
       return state;
+    case 'console.appended':
+      // The journal is not part of the board's state; the console view of C9 reads it itself.
+      return state;
     case 'board.changed':
       // Files changed outside the server; the board must be read again, not patched.
       return state;

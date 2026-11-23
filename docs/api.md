@@ -1655,6 +1655,26 @@ Response — 200, text/markdown:
 
 ## Ai-run
 
+Console mode (plan C7): a run begun with `console: true` has a journal of the console, kept in
+`.board/console/<task id>-<runId>.ndjson`, append only. Its routes are for the runner and
+the page, never for an agent.
+
+- `POST .../console/events?sessionId=` takes a batch: `events[i]` has `runnerSeq = fromRunnerSeq +
+  i`. The run, its session and its being a console run are compared; any other is `409
+  STALE_AI_RUN` and nothing is written. `aiRun.state` and `endedAt` are not read.
+- Events the journal has already are skipped, so a batch sent again writes nothing; the first
+  event after a gap is written behind one `notice` `events_missing`. The answer is the cursor
+  `lastRunnerSeq` and `awaitingDelivery`, the messages still `accepted`. An empty batch is
+  allowed and writes nothing.
+- `process.exited` settles the messages in the same write, and so do `end` (if it was not sent)
+  and `abandon`: `undelivered` for what the process was not given, `interrupted` for what it
+  started, written by the server (`source: server`).
+- `GET .../console?after=&before=&limit=` answers a page of `entries` (`after`: the next `limit`
+  after that `seq`; `before` alone: the last `limit` before it; at most 1000, 200 by default)
+  and the `state` of the whole journal. A run that is not a console run is `409 STALE_AI_RUN`.
+- Every write of entries is published once as `console.appended` over `GET /events`, with
+  `taskId`, `runId` and `lastSeq`; the page reads the journal again after its last `seq`.
+
 ### POST /api/v1/tasks/:id/ai-run
 
 Runner: begin a run on a task; the server assigns a monotonic runId
@@ -1789,6 +1809,91 @@ Response — 200, application/json:
   "branch": "feat/git-adapter",
   "createdAt": "2026-09-21T09:00:00.000Z",
   "updatedAt": "2026-09-21T11:30:00.000Z"
+}
+```
+
+### POST /api/v1/tasks/:id/ai-run/:runId/console/events
+
+Runner: send a batch of console events; the runId and the session must be the current ones
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/console/events
+
+Query: ?sessionId=a1b2c3d4-e5f6-4890-abcd-ef0123456789
+
+Request body:
+
+```json
+{
+  "fromRunnerSeq": 3,
+  "events": [
+    {
+      "kind": "compat.passed"
+    },
+    {
+      "kind": "process.started",
+      "pid": 4242
+    }
+  ]
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "lastRunnerSeq": 4,
+  "awaitingDelivery": 0
+}
+```
+
+### GET /api/v1/tasks/:id/ai-run/:runId/console
+
+Read the console journal of a console run: a page of its entries and the state of the whole journal
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/ai-run/1/console
+
+Query: ?after=0&limit=200
+
+Response — 200, application/json:
+
+```json
+{
+  "entries": [
+    {
+      "seq": 1,
+      "at": "2026-09-21T09:00:01.000Z",
+      "source": "runner",
+      "runnerSeq": 1,
+      "event": {
+        "kind": "process.started",
+        "pid": 4242
+      }
+    }
+  ],
+  "state": {
+    "process": {
+      "status": "running",
+      "killRequested": false
+    },
+    "compat": {
+      "status": "probing"
+    },
+    "turn": {
+      "status": "none"
+    },
+    "jobs": [],
+    "messages": [],
+    "counters": {
+      "awaitingDelivery": 0,
+      "pendingProcessing": 0,
+      "inProgress": 0
+    },
+    "phase": "starting"
+  }
 }
 ```
 
