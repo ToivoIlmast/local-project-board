@@ -1675,6 +1675,27 @@ the page, never for an agent.
 - Every write of entries is published once as `console.appended` over `GET /events`, with
   `taskId`, `runId` and `lastSeq`; the page reads the journal again after its last `seq`.
 
+Console mode, Board to runner (plan C10): the page writes, the runner only reads its inbox.
+
+- `POST .../console/messages` `{sessionId, messageId, text}`: text 1..4000 characters, not blank,
+  no NUL. Under the lock of the task the run, its session and `endedAt` are compared (`409
+  STALE_AI_RUN`), then the state of the journal: `409 CONSOLE_NOT_READY` while it probes, `409
+  CONSOLE_UNAVAILABLE` when it is incompatible, closing, exited, lost, not a console run or
+  ended. `aiRun.state` is not read. One `user.message` (`origin: board`) is written and `201
+  {messageId, seq}` answered; the same `messageId` with the same text is `200` and writes
+  nothing, with another text `409 MESSAGE_ID_CONFLICT`. A refusal leaves the journal as it was.
+- `POST .../console/close` `{sessionId}` writes `close.requested` (once) and sends the frame
+  `close` to the inbox; after `process.exited` or the end of the run it is `409
+  CONSOLE_UNAVAILABLE`.
+- `POST .../console/kill` `{sessionId}` is taken only while the session is closing, otherwise
+  `409 CONSOLE_UNAVAILABLE`; it sends the frame `kill` and writes nothing.
+- `GET .../console/inbox?sessionId=` (SSE, with the token) is the runner's: the frames `message
+  {messageId, text}`, `close`, `kill` and `agent-final {state}`. On connect it sends the messages
+  still `accepted` in the order of `seq`; one that is `queued` is not sent again. A second
+  connection to the run replaces the first. `agent-final` follows a change of `aiRun.state` and
+  the inbox stays open; it ends with `process.exited`, with `endedAt` and when another run
+  replaces the run.
+
 ### POST /api/v1/tasks/:id/ai-run
 
 Runner: begin a run on a task; the server assigns a monotonic runId
@@ -1897,6 +1918,101 @@ Response — 200, application/json:
 }
 ```
 
+### POST /api/v1/tasks/:id/ai-run/:runId/console/messages
+
+Page: send a message to the console of the run; 201 when written, 200 for a repeat of the same messageId
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/console/messages
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789",
+  "messageId": "11111111-1111-4111-8111-111111111111",
+  "text": "Please also update the docs."
+}
+```
+
+Response — 201, application/json:
+
+```json
+{
+  "messageId": "11111111-1111-4111-8111-111111111111",
+  "seq": 7
+}
+```
+
+### POST /api/v1/tasks/:id/ai-run/:runId/console/close
+
+Page: ask the console session to end after its current work
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/console/close
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "requested": true
+}
+```
+
+### POST /api/v1/tasks/:id/ai-run/:runId/console/kill
+
+Page: stop the console process now; only while the session is closing
+
+Not given to AI agents in the generated instructions.
+
+Example: POST /api/v1/tasks/T12/ai-run/1/console/kill
+
+Request body:
+
+```json
+{
+  "sessionId": "a1b2c3d4-e5f6-4890-abcd-ef0123456789"
+}
+```
+
+Response — 200, application/json:
+
+```json
+{
+  "requested": true
+}
+```
+
+### GET /api/v1/tasks/:id/ai-run/:runId/console/inbox
+
+Runner: the inbox of a console run (SSE, with the token): messages, close, kill and agent-final
+
+Not given to AI agents in the generated instructions.
+
+Example: GET /api/v1/tasks/T12/ai-run/1/console/inbox
+
+Query: ?sessionId=a1b2c3d4-e5f6-4890-abcd-ef0123456789
+
+Response — 200, text/event-stream:
+
+```
+{
+  "type": "message",
+  "messageId": "11111111-1111-4111-8111-111111111111",
+  "text": "Please also update the docs."
+}
+```
+
 ## Runs
 
 ### GET /api/v1/runs
@@ -1962,6 +2078,9 @@ nothing else. The code is one of:
 - TASK_NOT_ARCHIVED
 - CHECK_IN_PROGRESS
 - INVALID_CHECK_REPORT
+- CONSOLE_NOT_READY
+- CONSOLE_UNAVAILABLE
+- MESSAGE_ID_CONFLICT
 - INVALID_JSON
 - UNAUTHORIZED
 - FORBIDDEN_HOST

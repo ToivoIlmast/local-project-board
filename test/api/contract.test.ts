@@ -116,6 +116,12 @@ const calls: Record<RouteId, Call | NotCalled> = {
   // Console mode (plan C7); test/api/console.test.ts sets up the console run they need.
   'ai-run.console.events': 'needs a runner',
   'ai-run.console.read': 'needs a runner',
+  // The page's and the runner's side of it (C10); test/api/consoleMessages.test.ts and
+  // test/server/inbox.test.ts set up the console run they need.
+  'ai-run.console.messages': 'needs a runner',
+  'ai-run.console.close': 'needs a runner',
+  'ai-run.console.kill': 'needs a runner',
+  'ai-run.console.inbox': 'streamed',
   // Recovery of a lost run (T45); test/api/aiRunRecovery.test.ts sets up the run it needs.
   'ai-run.abandon': 'needs a runner',
   'ai-run.report': 'needs a runner',
@@ -182,7 +188,7 @@ function send(route: Route, call: Call) {
 
 describe('every route in the contract', () => {
   it('is served: the only routes without a handler are the streams (INVARIANT)', () => {
-    expect(notCalled('streamed')).toEqual(['events.stream', 'runs.stream']);
+    expect(notCalled('streamed')).toEqual(['ai-run.console.inbox', 'events.stream', 'runs.stream']);
     expect(notCalled('needs a runner')).toEqual([
       'tasks.run',
       'tasks.runFailure',
@@ -190,6 +196,9 @@ describe('every route in the contract', () => {
       'ai-run.end',
       'ai-run.console.events',
       'ai-run.console.read',
+      'ai-run.console.messages',
+      'ai-run.console.close',
+      'ai-run.console.kill',
       'ai-run.abandon',
       'ai-run.report',
     ]);

@@ -87,7 +87,11 @@ describe('renderApiDoc', () => {
     expect(hidden.sort()).toEqual([
       'ai-run.abandon',
       'ai-run.begin',
+      'ai-run.console.close',
       'ai-run.console.events',
+      'ai-run.console.inbox',
+      'ai-run.console.kill',
+      'ai-run.console.messages',
       'ai-run.console.read',
       'ai-run.end',
       'ai-run.report',

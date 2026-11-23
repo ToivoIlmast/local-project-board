@@ -327,3 +327,17 @@ export const inboxFrameSchema = z.discriminatedUnion('type', [
   }),
 ]);
 export type InboxFrame = z.infer<typeof inboxFrameSchema>;
+
+/** The inbox is read for the same run and session a batch is written for (§9.3). */
+export const consoleInboxQuery = consoleEventsQuery;
+
+/** The answer to a message: its id and the `seq` of its entry. 201 when written, 200 for a repeat. */
+export const consoleMessageResponse = z.strictObject({
+  messageId: z.uuid(),
+  seq: z.number().int().min(1),
+});
+export type ConsoleMessageResponse = z.infer<typeof consoleMessageResponse>;
+
+/** The answer to close and kill: the request is taken (C10, §8.2, §8.3). */
+export const consoleSignalResponse = z.strictObject({ requested: z.literal(true) });
+export type ConsoleSignalResponse = z.infer<typeof consoleSignalResponse>;
