@@ -26,6 +26,24 @@ export function isTextBody(value: unknown): value is TextBody {
   return typeof value === 'object' && value !== null && 'text' in value && 'media' in value;
 }
 
+/** A symbol, because a task has a `status` and a `body` of its own. */
+const STATUS_BODY = Symbol('statusBody');
+
+/** A JSON answer with a status of its own, for a route whose success is 201 or 200 by case. */
+export interface StatusBody<T = unknown> {
+  [STATUS_BODY]: true;
+  status: 200 | 201;
+  body: T;
+}
+
+export function withStatus<T>(status: 200 | 201, body: T): StatusBody<T> {
+  return { [STATUS_BODY]: true, status, body };
+}
+
+export function isStatusBody(value: unknown): value is StatusBody {
+  return typeof value === 'object' && value !== null && STATUS_BODY in value;
+}
+
 export interface RouteInput<K extends RouteId> {
   params: ParamsOf<K>;
   query: QueryOf<K>;
@@ -40,7 +58,7 @@ export interface RouteInput<K extends RouteId> {
 export type RouteHandler<K extends RouteId> = (
   context: RouteContext,
   input: RouteInput<K>,
-) => Promise<ResponseOf<K> | TextBody>;
+) => Promise<ResponseOf<K> | TextBody | StatusBody<ResponseOf<K>>>;
 
 /**
  * Every route but the stream has a handler, and the type says so: a route added to the
@@ -48,7 +66,9 @@ export type RouteHandler<K extends RouteId> = (
  * connection, so the router hands it to the SSE serializer instead (§14).
  */
 export type Handlers = {
-  [K in Exclude<RouteId, 'events.stream' | 'runs.stream'>]: RouteHandler<K>;
+  [
+    K in Exclude<RouteId, 'events.stream' | 'runs.stream' | 'ai-run.console.inbox'>
+  ]: RouteHandler<K>;
 };
 
 const deleted = { deleted: true } as const;
@@ -301,6 +321,33 @@ export const handlers: Handlers = {
 
   'ai-run.console.events': async (context, { params, query, body }) =>
     context.aiRun.appendConsole(params.id, params.runId, query.sessionId, body),
+
+  // The page's side (C10): the journal is written by the service, the inbox is told after.
+  'ai-run.console.messages': async (context, { params, body }) => {
+    const { sessionId, messageId, text } = body;
+    const result = await context.aiRun.sendConsoleMessage(params.id, params.runId, {
+      sessionId,
+      messageId,
+      text,
+    });
+    if (result.created) context.inbox.notify(params.id, params.runId);
+    return withStatus(result.created ? 201 : 200, {
+      messageId: result.messageId,
+      seq: result.seq,
+    });
+  },
+
+  'ai-run.console.close': async (context, { params, body }) => {
+    await context.aiRun.requestConsoleClose(params.id, params.runId, body.sessionId);
+    context.inbox.send(params.id, params.runId, { type: 'close' });
+    return { requested: true };
+  },
+
+  'ai-run.console.kill': async (context, { params, body }) => {
+    await context.aiRun.requestConsoleKill(params.id, params.runId, body.sessionId);
+    context.inbox.send(params.id, params.runId, { type: 'kill' });
+    return { requested: true };
+  },
 
   // The provider keeps the events as they were written, and they were checked against the
   // contract when they came in (ai-run.console.events, the server's own are built by the model).

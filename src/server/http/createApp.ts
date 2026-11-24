@@ -10,6 +10,7 @@ import {
   createTokenGuard,
   securityHeaders,
 } from './security.js';
+import { createInbox } from './inbox.js';
 import { createRunDispatch } from './runs.js';
 import { createV1Router } from './v1/router.js';
 
@@ -37,6 +38,7 @@ export function createApp(options: AppOptions): Express {
   // quote and what the Host check allows, so the session knows it and the services do not.
   const routeContext: RouteContext = {
     ...context,
+    inbox: createInbox(context),
     session: {
       baseUrl: `http://127.0.0.1${options.port === undefined ? '' : `:${options.port}`}`,
       token,

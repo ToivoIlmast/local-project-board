@@ -4,6 +4,7 @@ import { BoardError } from '../errors.js';
 import type { Launch, LaunchFailureKind } from '../model/launch.js';
 import type { Task } from '../model/task.js';
 import {
+  acceptsMessages,
   finalizeMessages,
   foldConsole,
   type ConsoleFinalizeCause,
@@ -62,6 +63,21 @@ export interface ConsoleAppendResult {
   lastRunnerSeq: number;
   /** The messages still `accepted` after the batch. */
   awaitingDelivery: number;
+}
+
+/** The page's message to a console run (plan §3.4). */
+export interface ConsoleMessageInput {
+  sessionId: string;
+  messageId: string;
+  text: string;
+}
+
+export interface ConsoleMessageResult {
+  messageId: string;
+  /** The `seq` of its `user.message` in the journal. */
+  seq: number;
+  /** False for a repeat of a message the journal has: nothing was written. */
+  created: boolean;
 }
 
 export interface ConsolePage {
@@ -144,6 +160,29 @@ export interface AiRunService {
    * computes from all of it. `STALE_AI_RUN` when the task has no such console run.
    */
   readConsole(taskId: string, runId: number, query: ConsolePageQuery): Promise<ConsolePage>;
+  /**
+   * The page's message into the journal (Console mode, plan §3.4, C10), under the lock of the
+   * task: the run is the current one with this session and is a console run, `endedAt` is not
+   * written, and `acceptsMessages` says the session takes it; `aiRun.state` is not read. A repeat
+   * of a `messageId` with the same text writes nothing (`created: false`); with another text it
+   * is `MESSAGE_ID_CONFLICT`. Otherwise one `user.message` (`origin: board`) and one
+   * `console.appended`. Refused with `STALE_AI_RUN`, `CONSOLE_NOT_READY` or `CONSOLE_UNAVAILABLE`.
+   */
+  sendConsoleMessage(
+    taskId: string,
+    runId: number,
+    input: ConsoleMessageInput,
+  ): Promise<ConsoleMessageResult>;
+  /**
+   * The page asks the session to end (§8.2): one `close.requested` (`reason: board`), unless the
+   * session is closing already. `CONSOLE_UNAVAILABLE` once the process is gone or the run is over.
+   */
+  requestConsoleClose(taskId: string, runId: number, sessionId: string): Promise<void>;
+  /**
+   * The page asks to stop the process now (§8.3): only while the session is `closing`, otherwise
+   * `CONSOLE_UNAVAILABLE`. Writes nothing: the runner writes `kill.requested` when it kills.
+   */
+  requestConsoleKill(taskId: string, runId: number, sessionId: string): Promise<void>;
   /** Throws `AI_RUN_IN_PROGRESS` when the task's run works; whatever a run would be (T45). */
   requireIdle(taskId: string): Promise<void>;
   /**
@@ -247,6 +286,49 @@ export function createAiRunService({
       runId: currentRunId(run),
       lastSeq: last.seq,
     });
+  }
+
+  function unavailable(taskId: string, runId: number): BoardError {
+    return new BoardError(
+      'CONSOLE_UNAVAILABLE',
+      `The console of run ${runId} of task "${taskId}" does not take this now.`,
+      { id: taskId, runId },
+    );
+  }
+
+  /**
+   * What the page's calls look at, under the lock of the task: the run if it is the current one
+   * with this session (`STALE_AI_RUN` otherwise) and a console run (`CONSOLE_UNAVAILABLE`), its
+   * journal and the state of it.
+   */
+  async function consoleSession(taskId: string, runId: number, sessionId: string) {
+    const run = await requireCurrent(taskId, runId, sessionId);
+    if (run.console !== true) throw unavailable(taskId, runId);
+    const entries = await storage.readConsole(taskId, runId);
+    const lost = run.failure?.kind === 'lost';
+    return { run, entries, state: foldOf(entries, lost) };
+  }
+
+  /** Whether the process is gone or the run is over: nothing can be asked of the session now. */
+  function isOver(run: AiRun, state: ConsoleState): boolean {
+    return (
+      run.endedAt !== undefined ||
+      run.failure?.kind === 'lost' ||
+      state.process.status === 'exited' ||
+      state.process.status === 'lost'
+    );
+  }
+
+  /** One entry of the server, numbered after the journal, written and told to the pages. */
+  async function appendServerEvent(
+    taskId: string,
+    run: AiRun,
+    entries: readonly ConsoleJournalEntry[],
+    event: ConsoleJournalEntry['event'],
+  ): Promise<number> {
+    const seq = entries.reduce((max, entry) => Math.max(max, entry.seq), 0) + 1;
+    await appendEntries(taskId, run, [{ seq, at: now(), source: 'server', event }]);
+    return seq;
   }
 
   /**
@@ -550,6 +632,62 @@ export function createAiRunService({
         await appendEntries(taskId, run, fresh);
         const state = foldOf([...entries, ...fresh], false);
         return { lastRunnerSeq: cursor, awaitingDelivery: state.counters.awaitingDelivery };
+      }),
+
+    sendConsoleMessage: (taskId, runId, input) =>
+      locks.run(taskId, async () => {
+        const { run, entries, state } = await consoleSession(taskId, runId, input.sessionId);
+        const verdict = acceptsMessages(
+          state,
+          { ...run, runId: currentRunId(run) },
+          { runId, sessionId: input.sessionId },
+        );
+        if (!verdict.ok) {
+          if (verdict.reason === 'STALE_AI_RUN') throw stale(taskId, runId);
+          throw verdict.reason === 'CONSOLE_NOT_READY'
+            ? new BoardError(
+                'CONSOLE_NOT_READY',
+                `The console of run ${runId} of task "${taskId}" is not ready yet.`,
+                { id: taskId, runId },
+              )
+            : unavailable(taskId, runId);
+        }
+
+        const known = state.messages.find((message) => message.messageId === input.messageId);
+        if (known !== undefined) {
+          if (known.text !== input.text) {
+            throw new BoardError(
+              'MESSAGE_ID_CONFLICT',
+              `Message ${input.messageId} is in the console of task "${taskId}" with another text.`,
+              { id: taskId, runId, messageId: input.messageId },
+            );
+          }
+          return { messageId: input.messageId, seq: known.acceptedSeq, created: false };
+        }
+
+        const seq = await appendServerEvent(taskId, run, entries, {
+          kind: 'user.message',
+          origin: 'board',
+          messageId: input.messageId,
+          text: input.text,
+        });
+        return { messageId: input.messageId, seq, created: true };
+      }),
+
+    requestConsoleClose: (taskId, runId, sessionId) =>
+      locks.run(taskId, async () => {
+        const { run, entries, state } = await consoleSession(taskId, runId, sessionId);
+        if (isOver(run, state)) throw unavailable(taskId, runId);
+        if (state.process.status === 'closing') return;
+        await appendServerEvent(taskId, run, entries, { kind: 'close.requested', reason: 'board' });
+      }),
+
+    requestConsoleKill: (taskId, runId, sessionId) =>
+      locks.run(taskId, async () => {
+        const { run, state } = await consoleSession(taskId, runId, sessionId);
+        if (isOver(run, state) || state.process.status !== 'closing') {
+          throw unavailable(taskId, runId);
+        }
       }),
 
     readConsole: async (taskId, runId, query) => {

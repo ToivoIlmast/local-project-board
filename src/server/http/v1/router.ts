@@ -11,7 +11,7 @@ import type { RouteContext } from '../context.js';
 import { HttpError, invalidRequest } from '../errors.js';
 import { EMBEDDED_HTML_CSP } from '../security.js';
 import { createEventStreamHandler } from '../sse.js';
-import { handlers, isTextBody, type TextBody } from './handlers.js';
+import { handlers, isStatusBody, isTextBody, type TextBody } from './handlers.js';
 
 /** Above the largest document the contract allows, so the schema reports the real reason. */
 export const JSON_BODY_LIMIT = '2mb';
@@ -46,7 +46,9 @@ export function createV1Router(context: RouteContext, options: RouterOptions = {
         route.path,
         route.id === 'runs.stream'
           ? context.runs.handler(context.session.token, heartbeat)
-          : createEventStreamHandler(context.events, heartbeat),
+          : route.id === 'ai-run.console.inbox'
+            ? context.inbox.handler(context.session.token, heartbeat)
+            : createEventStreamHandler(context.events, heartbeat),
       );
       remember(route);
       continue;
@@ -100,7 +102,8 @@ function serve(context: RouteContext, route: Route, handler: Serve) {
 function respond(response: Response, route: Route, result: unknown): void {
   const status = route.successStatus ?? 200;
   if (route.response.media === 'application/json') {
-    response.status(status).json(result);
+    if (isStatusBody(result)) response.status(result.status).json(result.body);
+    else response.status(status).json(result);
     return;
   }
   const body: TextBody = isTextBody(result)

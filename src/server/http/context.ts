@@ -9,6 +9,7 @@ import type {
 } from '../../core/index.js';
 import type { AiRunService } from '../../core/services/aiRunService.js';
 import type { GitReader } from '../../core/ports.js';
+import type { Inbox } from './inbox.js';
 import type { RunDispatch } from './runs.js';
 import type { EventStream } from './sse.js';
 
@@ -52,4 +53,6 @@ export interface RouteContext extends BoardContext {
   session: SessionInfo;
   /** The runners waiting for Send to AI; state of this server, never of the board (T27). */
   runs: RunDispatch;
+  /** The runners reading the inbox of a console run; state of this server too (C10). */
+  inbox: Inbox;
 }

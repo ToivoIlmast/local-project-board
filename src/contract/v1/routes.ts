@@ -214,6 +214,11 @@ function route<
   return definition;
 }
 
+const consoleParams = z.strictObject({
+  id: s.taskIdSchema,
+  runId: z.coerce.number().int().nonnegative(),
+});
+
 /** The single source for validation, frontend types and the AI instructions (ADR-0005). */
 export const routes = {
   'project.get': route({
@@ -635,6 +640,84 @@ export const routes = {
       },
     },
     // For the page of the person, and the runner's tests; not for an agent at work.
+    ai: { include: false },
+  }),
+
+  'ai-run.console.messages': route({
+    id: 'ai-run.console.messages',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/console/messages',
+    summary:
+      'Page: send a message to the run console; 201 when written, 200 for a repeat of the same messageId',
+    params: consoleParams,
+    request: c.consoleMessageBody,
+    response: json(c.consoleMessageResponse),
+    successStatus: 201,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: {
+        sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789',
+        messageId: '11111111-1111-4111-8111-111111111111',
+        text: 'Please also update the docs.',
+      },
+      response: { messageId: '11111111-1111-4111-8111-111111111111', seq: 7 },
+    },
+    // For the page of the person; not for an agent at work.
+    ai: { include: false },
+  }),
+
+  'ai-run.console.close': route({
+    id: 'ai-run.console.close',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/console/close',
+    summary: 'Page: ask the console session to end after its current work',
+    params: consoleParams,
+    request: c.consoleCloseBody,
+    response: json(c.consoleSignalResponse),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: { sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789' },
+      response: { requested: true },
+    },
+    ai: { include: false },
+  }),
+
+  'ai-run.console.kill': route({
+    id: 'ai-run.console.kill',
+    method: 'POST',
+    path: '/tasks/:id/ai-run/:runId/console/kill',
+    summary: 'Page: stop the console process now; only while the session is closing',
+    params: consoleParams,
+    request: c.consoleKillBody,
+    response: json(c.consoleSignalResponse),
+    successStatus: 200,
+    example: {
+      params: { id: 'T12', runId: 1 },
+      body: { sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789' },
+      response: { requested: true },
+    },
+    ai: { include: false },
+  }),
+
+  'ai-run.console.inbox': route({
+    id: 'ai-run.console.inbox',
+    method: 'GET',
+    path: '/tasks/:id/ai-run/:runId/console/inbox',
+    summary:
+      'Runner: the inbox of a console run (SSE, with the token): messages, close, kill and agent-final',
+    params: consoleParams,
+    query: c.consoleInboxQuery,
+    response: { schema: c.inboxFrameSchema, media: 'text/event-stream' },
+    example: {
+      params: { id: 'T12', runId: 1 },
+      query: { sessionId: 'a1b2c3d4-e5f6-4890-abcd-ef0123456789' },
+      response: {
+        type: 'message',
+        messageId: '11111111-1111-4111-8111-111111111111',
+        text: 'Please also update the docs.',
+      },
+    },
     ai: { include: false },
   }),
 

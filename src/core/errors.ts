@@ -85,6 +85,12 @@ export const BOARD_ERROR_CODES = [
   'CHECK_IN_PROGRESS',
   /** A check report that does not hold against the version it was made on (ADR-0030 §6). */
   'INVALID_CHECK_REPORT',
+  /** The console is still starting: the process or its compatibility check is not ready (C10). */
+  'CONSOLE_NOT_READY',
+  /** The console does not take this now: closing, over, incompatible, not a console run (C10). */
+  'CONSOLE_UNAVAILABLE',
+  /** A message id the journal has already, with another text (C10, plan §3.3). */
+  'MESSAGE_ID_CONFLICT',
 ] as const;
 
 export type BoardErrorCode = (typeof BOARD_ERROR_CODES)[number];

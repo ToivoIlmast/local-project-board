@@ -58,7 +58,12 @@ describe('generated AI instructions', () => {
       // Runner lifecycle routes: not for agents, only for the runner process (T31).
       'ai-run.abandon',
       'ai-run.begin',
+      // Console routes: for the page and the console runner, not for an agent at work (T27).
+      'ai-run.console.close',
       'ai-run.console.events',
+      'ai-run.console.inbox',
+      'ai-run.console.kill',
+      'ai-run.console.messages',
       'ai-run.console.read',
       'ai-run.end',
       'ai-run.report',
